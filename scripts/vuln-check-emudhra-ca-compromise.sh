@@ -5,7 +5,7 @@
 # compromised certificates, matching on a slice of each certificate's key so comment-less bundles are
 # covered, and compares runtimes, language packages, OS packages and (opt-in) local Podman images with
 # the fixed versions in this repository's guide. Prints one PASS/FAIL/WARN/INFO/SKIP line per finding.
-# Source and fixed-version references: https://github.com/fieldse/emudhra-ca-check
+# Source and fixed-version references: https://github.com/fieldse/emudhra-ca-compromise-check
 set -euo pipefail
 
 # Fixed releases as "branch=first-fixed-version", from the guide.

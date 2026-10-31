@@ -3,7 +3,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-LAB_IMAGE="emudhra-ca-check-lab:latest"
+LAB_IMAGE="emudhra-ca-compromise-check-lab:latest"
 JAVA_IMAGE="docker.io/library/eclipse-temurin:21-jre"
 # A JDK released before the fix, whose cacerts still holds emSign ECC Root CA - G3.
 JAVA_OLD_IMAGE="docker.io/library/eclipse-temurin:21.0.8_9-jre"

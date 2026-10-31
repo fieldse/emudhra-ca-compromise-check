@@ -6,9 +6,9 @@ description: |
   certificate store other than Disallowed. Anyone can issue certificates under the intermediates since October 2026,
   so a host that trusts one accepts forged TLS and code-signing certificates.
 references:
-  - https://github.com/fieldse/emudhra-ca-check
+  - https://github.com/fieldse/emudhra-ca-compromise-check
   - https://bugzilla.mozilla.org/show_bug.cgi?id=2083449
-author: emudhra-ca-check
+author: emudhra-ca-compromise-check
 date: 2026-10-31
 tags:
   - attack.defense-evasion

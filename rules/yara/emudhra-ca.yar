@@ -2,7 +2,7 @@
   emudhra-ca.yar - YARA rules for files that still carry eMudhra G3 certificates (October 2026 compromise).
   Matches DER (keystores, compiled-in root stores) and PEM (CA bundles) on public-key bytes, so names and comments don't matter.
   Each key has three windows. PEM line breaks can split at most two, so one always matches.
-  Source: https://github.com/fieldse/emudhra-ca-check  Revised 2026-10-31.
+  Source: https://github.com/fieldse/emudhra-ca-compromise-check  Revised 2026-10-31.
 */
 
 rule eMudhra_G3_compromised_intermediate
@@ -10,7 +10,7 @@ rule eMudhra_G3_compromised_intermediate
   meta:
     description = "Contains one of the eight eMudhra G3 intermediates whose private keys are below 256"
     severity = "critical"
-    reference = "https://github.com/fieldse/emudhra-ca-check"
+    reference = "https://github.com/fieldse/emudhra-ca-compromise-check"
     date = "2026-10-31"
   strings:
     $k_dv_tls_b_0 = { E7 9E D9 C0 4A 97 73 C4 73 5E 51 11 1D A8 5A C2 BD 5E }
@@ -70,7 +70,7 @@ rule eMudhra_G3_root
   meta:
     description = "Contains emSign ECC Root CA - G3 (removed from trust stores) or a G3 issuing root"
     severity = "high"
-    reference = "https://github.com/fieldse/emudhra-ca-check"
+    reference = "https://github.com/fieldse/emudhra-ca-compromise-check"
     date = "2026-10-31"
   strings:
     $r_ecc_root_0 = { 23 A5 0C B8 2D 12 F5 28 F3 B1 B2 DD E2 02 12 80 9E 39 }
