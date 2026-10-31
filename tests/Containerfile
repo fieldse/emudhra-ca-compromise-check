@@ -1,5 +1,4 @@
 FROM docker.io/library/debian:trixie
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      suricata yara shellcheck openssl tcpdump python3 python3-cryptography python3-yaml ca-certificates procps \
-    && (apt-get install -y --no-install-recommends zeek || apt-get install -y --no-install-recommends zeek-6.0 || true) \
+      yara shellcheck openssl python3 python3-yaml ca-certificates \
     && rm -rf /var/lib/apt/lists/*
