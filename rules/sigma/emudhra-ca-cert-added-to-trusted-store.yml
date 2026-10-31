@@ -1,0 +1,48 @@
+title: eMudhra G3 Compromised or Removed Certificate Added to a Trusted Windows Store
+id: 3024161f-c27d-445c-8a18-eed782f67dbd
+status: experimental
+description: |
+  A compromised eMudhra G3 intermediate, or emSign ECC Root CA - G3 or a G3 issuing root, was written to a Windows
+  certificate store other than Disallowed. Anyone can issue certificates under the intermediates since October 2026,
+  so a host that trusts one accepts forged TLS and code-signing certificates.
+references:
+  - https://github.com/fieldse/emudhra-ca-check
+  - https://bugzilla.mozilla.org/show_bug.cgi?id=2083449
+author: emudhra-ca-check
+date: 2026-10-31
+tags:
+  - attack.defense-evasion
+  - attack.t1553.004
+logsource:
+  product: windows
+  category: registry_set
+detection:
+  selection_store:
+    TargetObject|contains: '\SystemCertificates\'
+  selection_thumbprint:
+    TargetObject|contains:
+      - '\Certificates\A99B289464F3B44343270A7A1E910F02370483FE'
+      - '\Certificates\1396BE1372BC93DFA2A433CA964DBA91548A6E57'
+      - '\Certificates\5F014E0DB3BB8F950E0598AB280846D383FC57BE'
+      - '\Certificates\5DFA19197D1C1CF629AF7C0CD865543C5050227C'
+      - '\Certificates\F33ACD1F5D31AA81AC18C72C928446226D3D5914'
+      - '\Certificates\19069BD6533BFF93FB67C71FB3376B4EA7402C3B'
+      - '\Certificates\8AD23BC78845D6FAAE1D534BAC89F0E36BA55A11'
+      - '\Certificates\4B0944C14F8C2CCBA4E4F32104AD920FA15EE331'
+      - '\Certificates\7FCC31AAB874CE6C8EE8584F54CFD08646B54117'
+      - '\Certificates\305FC1E253DCAB71B95D4995DAE3CB09D562F22A'
+      - '\Certificates\C988F3D0CC1629FFC43165D6464C9B6EF73D6E48'
+      - '\Certificates\8588708E875A1F8AA83524F3559080F7E17068C7'
+      - '\Certificates\D33195A244046A3263FB5E0E83C6803A5B2E7BC3'
+      - '\Certificates\EE26D7AE3CC71718F6E07D7D0095076F0C158F63'
+      - '\Certificates\1F4A5D178F8B6A8EF0F6784155BD5FEA91158B12'
+      - '\Certificates\7FDE64753A957B98F172FD2AB0D922551909C7BA'
+      - '\Certificates\3043FA4FF257DCA0C380EE2E58EA78B23FE6BBC1'
+      - '\Certificates\39D3236E4A609AB6190CBFA1AD02B3CC61DFC2C3'
+      - '\Certificates\1F74B6010A219FD9CA058D07AA053D15EFD9300D'
+  filter_disallowed:
+    TargetObject|contains: '\Disallowed\'
+  condition: selection_store and selection_thumbprint and not filter_disallowed
+falsepositives:
+  - Hosts that already trusted emSign ECC Root CA - G3 before Microsoft's 2026-10-26 removal, when a store resync rewrites it
+level: high
