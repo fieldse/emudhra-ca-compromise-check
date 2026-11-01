@@ -274,3 +274,86 @@ def pipfile_versions(text: str, name: str) -> Optional[list[str]]:
             if isinstance(version, str) and version.startswith("=="):
                 versions.append(version[2:].lstrip("="))
     return versions
+
+
+def composer_versions(text: str, name: str) -> Optional[list[str]]:
+    """Return the versions of name in a composer.lock, without a leading v, or None when it is not readable JSON."""
+    data = bounded_json(text)
+    if not isinstance(data, dict):
+        return None
+    versions = []
+    for section in ("packages", "packages-dev"):
+        packages = data.get(section)
+        if not isinstance(packages, list):
+            continue
+        for package in packages:
+            if not isinstance(package, dict) or package.get("name") != name:
+                continue
+            version = package.get("version")
+            if isinstance(version, str):
+                versions.append(version[1:] if version.startswith("v") else version)
+    return versions
+
+
+GEM_SPEC = re.compile(r" {2,8}([A-Za-z0-9_.-]{1,64}) \(([0-9][0-9A-Za-z.]{0,63})\)")
+
+
+def gem_versions(text: str, name: str) -> list[str]:
+    """Return the locked versions of a gem in a Gemfile.lock, read line by line."""
+    versions = []
+    for line in text.splitlines():
+        match = GEM_SPEC.fullmatch(line)
+        if match and match.group(1) == name:
+            versions.append(match.group(2))
+    return versions
+
+
+MIX_ENTRY = re.compile(
+    r'"(castore|certifi)": \{:hex, :(castore|certifi), "([0-9][0-9.]{0,63})"'
+)
+
+
+def mix_versions(text: str) -> list[tuple[str, str]]:
+    """Return (package, version) for each castore and certifi entry in a mix.lock."""
+    return [
+        (match.group(1), match.group(3))
+        for match in MIX_ENTRY.finditer(text)
+        if match.group(1) == match.group(2)
+    ]
+
+
+NPM_VERSION = re.compile(
+    r"v?([0-9]{1,10})(?:\.([0-9]{1,10}|[xX*]))?(?:\.([0-9]{1,10}|[xX*]))?(-[0-9A-Za-z.]{1,64})?"
+)
+NPM_NOT_A_RANGE = (
+    "workspace:",
+    "file:",
+    "link:",
+    "git",
+    "http:",
+    "https:",
+    "npm:",
+    "github:",
+    "portal:",
+)
+
+
+def npm_range_lower_bound(spec: str) -> Optional[tuple[str, bool]]:
+    """Return the lowest version an npm range allows and whether the range stays inside one major.
+
+    None for a spec that names no registry version (workspace:, file:, git URLs and the like).
+    """
+    spec = spec.strip()
+    if spec.startswith(NPM_NOT_A_RANGE) or "/" in spec:
+        return None
+    if spec in ("", "*", "x", "X", "latest", "next") or spec.startswith("<"):
+        return "", False
+    unbounded = "||" in spec or " - " in spec or spec.startswith(">")
+    first = spec.split("||", 1)[0].strip().lstrip("^~=>< ")
+    match = NPM_VERSION.match(first)
+    if match is None:
+        return "", False
+    major, minor, patch, pre = match.groups()
+    parts = [major, minor or "0", patch or "0"]
+    lower = ".".join("0" if p in ("x", "X", "*") else p for p in parts) + (pre or "")
+    return lower, not unbounded

@@ -14,10 +14,16 @@ from pathlib import Path
 from emudhra_check.certificates import G3_ECC_ROOT
 from emudhra_check.detections.language_packages import (
     CHILD_SCRIPT,
+    CargoLocks,
+    ComposerLocks,
+    ElectronPackages,
+    GemfileLocks,
     HostPythonPackages,
+    MixLocks,
     PythonDistInfo,
     PythonPins,
     UvHost,
+    electron_range_finding,
     python_package_finding,
 )
 from emudhra_check.report import Level, Subject
@@ -276,6 +282,183 @@ class UvTest(unittest.TestCase):
         ctx = make_context(FakeFiles(), FakeCommands({"uv": uv}))
         ctx.ledger.claim(uv.file_id)
         self.assertEqual(lines(UvHost(), ctx), [])
+
+
+def run_files(detection, files: dict) -> list:
+    fake = FakeFiles(files)
+    return lines(detection, make_context(fake, indexed=fake.indexed(*files)))
+
+
+class ElectronTest(unittest.TestCase):
+    def test_installed_and_declared(self) -> None:
+        got = run_files(
+            ElectronPackages(),
+            {
+                "/f/old/node_modules/electron/package.json": b'{"name": "electron", "version": "43.8.0"}',
+                "/f/new/node_modules/electron/package.json": b'{"name": "electron", "version": "44.9.1"}',
+                "/f/new/node_modules/other/package.json": b'{"dependencies": {"electron": "^41.0.0"}}',
+                "/f/range/package.json": b'{"devDependencies": {"electron": "^43.8.0"}}',
+                "/f/eol/package.json": b'{"dependencies": {"electron": "^41.2.0"}}',
+                "/f/open/package.json": b'{"dependencies": {"electron": ">=43.0.0"}}',
+                "/f/ws/package.json": b'{"dependencies": {"electron": "workspace:*"}}',
+                "/f/num/package.json": b'{"dependencies": {"electron": 44}}',
+            },
+        )
+        by_path = {line.split("]")[0].split("[")[1]: line for line in got}
+        self.assertTrue(
+            by_path["/f/eol/package.json declared range starts at"].startswith("FAIL")
+        )
+        self.assertIn(
+            "can only install affected versions",
+            by_path["/f/eol/package.json declared range starts at"],
+        )
+        self.assertTrue(
+            by_path["/f/range/package.json declared range starts at"].startswith("WARN")
+        )
+        self.assertIn(
+            "a range may resolve higher",
+            by_path["/f/range/package.json declared range starts at"],
+        )
+        self.assertTrue(
+            by_path["/f/open/package.json declared range starts at"].startswith("WARN")
+        )
+        self.assertIn(
+            "unbounded range", by_path["/f/open/package.json declared range starts at"]
+        )
+        self.assertTrue(
+            by_path["/f/old/node_modules/electron/package.json"].startswith("FAIL")
+        )
+        self.assertTrue(
+            by_path["/f/new/node_modules/electron/package.json"].startswith("PASS")
+        )
+        self.assertEqual(len(got), 5)
+
+    def test_unreadable_package_json(self) -> None:
+        deep = b"[" * 1000 + b"]" * 1000
+        digits = b'{"version": 1' + b"0" * (8 << 20) + b"}"
+        for data in (b"{", deep, digits[:-1]):
+            got = run_files(ElectronPackages(), {"/f/package.json": data})
+            self.assertEqual(
+                got,
+                ["INFO  electron [/f/package.json] package.json unreadable, skipped"],
+            )
+        self.assertEqual(run_files(ElectronPackages(), {"/f/package.json": digits}), [])
+
+    def test_range_on_a_branch_without_a_fix_fails(self) -> None:
+        subject = Subject("electron", "x")
+        self.assertIs(electron_range_finding(subject, "^41.2.0").level, Level.FAIL)
+        self.assertIs(electron_range_finding(subject, "~44.9.0").level, Level.WARN)
+        self.assertIs(electron_range_finding(subject, "^46.0.0").level, Level.PASS)
+        self.assertIs(
+            electron_range_finding(subject, "^45.0.0-beta.6").level, Level.PASS
+        )
+        self.assertIsNone(electron_range_finding(subject, "file:../e"))
+
+
+CARGO_WRAPPER = """\
+[[package]]
+name = "webpki-roots"
+version = "0.26.11"
+dependencies = [
+ "webpki-roots {}",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "{}"
+"""
+
+
+class CargoTest(unittest.TestCase):
+    def test_wrapper_resolution(self) -> None:
+        for wrapped, level in (("1.0.9", "FAIL"), ("1.0.10", "PASS")):
+            got = run_files(
+                CargoLocks(),
+                {"/f/Cargo.lock": CARGO_WRAPPER.format(wrapped, wrapped).encode()},
+            )
+            self.assertEqual(
+                got[0],
+                f"{level}  webpki-roots [/f/Cargo.lock] found 0.26.11, wraps {wrapped}, fixed 1.0.10",
+            )
+
+    def test_wrapper_without_dependencies_warns(self) -> None:
+        text = b'[[package]]\nname = "webpki-roots"\nversion = "0.26.11"\n'
+        got = run_files(CargoLocks(), {"/f/Cargo.lock": text})
+        self.assertTrue(
+            got[0].startswith("WARN  webpki-roots [/f/Cargo.lock] found 0.26.11,")
+        )
+
+    def test_versions(self) -> None:
+        def level(crate: str, version: str) -> str:
+            text = f'[[package]]\nname = "{crate}"\nversion = "{version}"\n'.encode()
+            return run_files(CargoLocks(), {"/f/Cargo.lock": text})[0].split()[0]
+
+        for crate, version, want in (
+            ("webpki-roots", "0.25.4", "FAIL"),
+            ("webpki-roots", "0.26.0", "FAIL"),
+            ("webpki-roots", "0.26.10", "FAIL"),
+            ("webpki-roots", "1.0.9", "FAIL"),
+            ("webpki-roots", "1.0.10", "PASS"),
+            ("webpki-root-certs", "1.0.9", "FAIL"),
+            ("webpki-root-certs", "1.0.10", "PASS"),
+            ("rustls-webpki", "0.102.8", "FAIL"),
+            ("rustls-webpki", "0.103.15", "FAIL"),
+            ("rustls-webpki", "0.103.16", "PASS"),
+            ("rustls-webpki", "0.104.0-alpha.7", "FAIL"),
+            ("rustls-webpki", "0.104.0-alpha.8", "PASS"),
+            ("webpki-roots", "9" * (1 << 20), "WARN"),
+        ):
+            with self.subTest(crate=crate, version=version[:20]):
+                self.assertEqual(level(crate, version), want)
+
+    def test_partly_unreadable(self) -> None:
+        text = b'[[package]]\nname = "webpki-roots"\nversion = "0.25.4"\ndescription = \'\'\'\n'
+        got = run_files(CargoLocks(), {"/f/Cargo.lock": text})
+        self.assertEqual(
+            got[-1],
+            "INFO  Cargo.lock [/f/Cargo.lock] partly unreadable, 1 packages read",
+        )
+
+
+class OtherLocksTest(unittest.TestCase):
+    def test_composer(self) -> None:
+        def level(version: str) -> str:
+            text = f'{{"packages": [{{"name": "composer/ca-bundle", "version": "{version}"}}]}}'.encode()
+            return run_files(ComposerLocks(), {"/f/composer.lock": text})[0].split()[0]
+
+        for version, want in (
+            ("1.4.15", "FAIL"),
+            ("1.4.16", "PASS"),
+            ("1.5.14", "FAIL"),
+            ("1.6.0", "PASS"),
+        ):
+            with self.subTest(version=version):
+                self.assertEqual(level(version), want)
+        self.assertEqual(
+            run_files(ComposerLocks(), {"/f/composer.lock": b"{"}),
+            ["INFO  composer.lock [/f/composer.lock] unreadable, skipped"],
+        )
+
+    def test_gemfile_crlf(self) -> None:
+        text = b"GEM\r\n  specs:\r\n    excon (1.7.3)\r\n"
+        self.assertEqual(
+            run_files(GemfileLocks(), {"/f/Gemfile.lock": text}),
+            ["FAIL  excon [/f/Gemfile.lock] found 1.7.3, fixed 1.8.0"],
+        )
+
+    def test_mix(self) -> None:
+        text = (
+            b'%{\n  "castore": {:hex, :castore, "1.0.22", "e4", [:mix], [], "hexpm", "e4"},\n'
+            b'  "castore_fork": {:hex, :castore_fork, "1.0.1", "e4", [:mix], [], "hexpm", "e4"},\n'
+            b'  "certifi": {:hex, :certifi, "2.17.0", "81", [:rebar3], [], "hexpm", "81"},\n}\n'
+        )
+        self.assertEqual(
+            run_files(MixLocks(), {"/f/mix.lock": text}),
+            [
+                "PASS  castore [/f/mix.lock] found 1.0.22, fixed 1.0.22",
+                "FAIL  hex certifi [/f/mix.lock] found 2.17.0, fixed 2.18.0",
+            ],
+        )
 
 
 if __name__ == "__main__":

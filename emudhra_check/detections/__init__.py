@@ -6,7 +6,12 @@ REGISTRY lists one instance of every detection class. Its order is the output or
 from __future__ import annotations
 
 from emudhra_check.detections.language_packages import (
+    CargoLocks,
+    ComposerLocks,
+    ElectronPackages,
+    GemfileLocks,
     HostPythonPackages,
+    MixLocks,
     PythonDistInfo,
     PythonPins,
     UvHost,
@@ -38,5 +43,10 @@ REGISTRY: tuple[Detection, ...] = (
     PythonPins(),
     HostPythonPackages(),
     UvHost(),
+    ElectronPackages(),
+    CargoLocks(),
+    ComposerLocks(),
+    GemfileLocks(),
+    MixLocks(),
     PemBundles(),
 )

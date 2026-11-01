@@ -1,10 +1,12 @@
-"""language_packages.py: detections of language packages that vendor a CA bundle.
+"""language_packages.py: detections of language packages that vendor a CA bundle or a root list.
 
 PythonDistInfo judges certifi, pip and uv from installed dist-info directories, PythonPins the certifi
 pins in requirements files and locks, HostPythonPackages the certifi and pip the host python3 sees
 (read from metadata in a child python3 -I -S that imports no package), and UvHost the uv on PATH by
 version and by the roots its binary holds. A package installed by a distribution is judged by the
-bundle it resolves to.
+bundle it resolves to. ElectronPackages judges installed and declared Electron versions, and
+CargoLocks, ComposerLocks, GemfileLocks and MixLocks the Rust, PHP, Ruby and Elixir packages that
+carry their own roots.
 """
 
 from __future__ import annotations
@@ -20,26 +22,52 @@ from emudhra_check.detections.shared import (
     release,
     run_tool,
 )
-from emudhra_check.fixes import CERTIFI_FIXED, CERTIFI_RECOMMENDED, PIP_FIXED, UV_FIXED
+from emudhra_check.fixes import (
+    CASTORE_FIXED,
+    CERTIFI_FIXED,
+    CERTIFI_RECOMMENDED,
+    COMPOSER_CA_BUNDLE_FIXED,
+    ELECTRON_FIXED,
+    EXCON_FIXED,
+    HEX_CERTIFI_FIXED,
+    PIP_FIXED,
+    RUSTLS_WEBPKI_FIXED,
+    UV_FIXED,
+    WEBPKI_ROOTS_FIXED,
+    WEBPKI_WRAPPER,
+)
 from emudhra_check.hostenv import is_macos_stub
 from emudhra_check.limits import MAX_BINARY_BYTES, MAX_FIELD_CHARS, MAX_TEXT_BYTES
 from emudhra_check.lockfiles import (
+    LockPackage,
+    bounded_json,
+    composer_versions,
+    gem_versions,
+    mix_versions,
     normalise,
+    npm_range_lower_bound,
     package_count,
     pipfile_versions,
     requirement_pins,
     toml_package_versions,
 )
 from emudhra_check.report import Finding, Level, Subject
-from emudhra_check.scope import FileId, FileInterests
-from emudhra_check.versions import judge
+from emudhra_check.scope import FileId, FileInterests, IndexedFile
+from emudhra_check.versions import judge, judge_branched, parse_version
 
 __all__ = [
+    "CargoLocks",
+    "ComposerLocks",
+    "ElectronPackages",
+    "GemfileLocks",
     "HostPythonPackages",
+    "MixLocks",
     "PythonDistInfo",
     "PythonPins",
     "UvHost",
+    "electron_range_finding",
     "python_package_finding",
+    "webpki_findings",
 ]
 
 RULES = {"certifi": CERTIFI_FIXED, "pip": PIP_FIXED, "uv": UV_FIXED}
@@ -275,3 +303,253 @@ class UvHost:
             tool.file_id,
             MAX_BINARY_BYTES,
         )
+
+
+def electron_range_finding(subject: Subject, spec: str) -> Optional[Finding]:
+    """Judge a declared Electron range by its lowest version, or None for a spec that names no release."""
+    bound = npm_range_lower_bound(spec)
+    if bound is None:
+        return None
+    lower, bounded_major = bound
+    found = lower or spec
+    if not bounded_major or parse_version(lower) is None:
+        return Finding(
+            Level.WARN,
+            subject,
+            f"found {found}, unbounded range, check the installed version",
+        )
+    verdict = judge_branched(subject, lower, ELECTRON_FIXED)
+    if verdict.level is Level.PASS:
+        return verdict
+    fixed = dict(ELECTRON_FIXED.fixes).get(lower.split(".")[0])
+    if fixed is None:
+        detail = f"found {lower}, this range can only install affected versions (no fix on its branch)"
+        return Finding(Level.FAIL, subject, detail)
+    detail = f"found {lower}, fixed {fixed}: a range may resolve higher, check the installed version"
+    return Finding(Level.WARN, subject, detail)
+
+
+def json_object(
+    ctx: Context, subject: Subject, indexed: IndexedFile
+) -> Union[dict[str, object], list[Finding]]:
+    """Read a JSON object file, or return the lines for one that could not be read or is not an object."""
+    text = text_of(ctx, subject, indexed.real, indexed.file_id)
+    if isinstance(text, list):
+        return text
+    data = bounded_json(text)
+    if not isinstance(data, dict):
+        return [
+            Finding(Level.INFO, subject, f"{indexed.path.name} unreadable, skipped")
+        ]
+    return data
+
+
+class ElectronPackages:
+    """Electron installed in node_modules, and the Electron ranges package.json files declare."""
+
+    name: ClassVar[str] = "electron-packages"
+    interests: ClassVar[FileInterests] = FileInterests(
+        name_globs=frozenset({"package.json"})
+    )
+
+    def run(self, ctx: Context) -> Iterator[Finding]:
+        for indexed in ctx.index.files_for(self.interests):
+            parts = indexed.path.parts
+            installed = parts[-3:] == ("node_modules", "electron", "package.json")
+            if "node_modules" in parts and not installed:
+                continue
+            subject = Subject("electron", str(indexed.path))
+            data = json_object(ctx, subject, indexed)
+            if isinstance(data, list):
+                yield from data
+                continue
+            if installed:
+                version = data.get("version")
+                if isinstance(version, str):
+                    yield judge_branched(subject, version, ELECTRON_FIXED)
+                continue
+            declared = Subject("electron", f"{indexed.path} declared range starts at")
+            for section in ("dependencies", "devDependencies", "optionalDependencies"):
+                entries = data.get(section)
+                spec = entries.get("electron") if isinstance(entries, dict) else None
+                if isinstance(spec, str):
+                    finding = electron_range_finding(declared, spec)
+                    if finding is not None:
+                        yield finding
+
+
+def wrapped_version(
+    package: LockPackage, crate: str, packages: list[LockPackage]
+) -> Optional[str]:
+    """Return the 1.x version a 0.26 wrapper depends on, from its dependency entry or the lock's only 1.x."""
+    for entry in package.dependencies:
+        words = entry.split()
+        if words and words[0] == crate:
+            if len(words) >= 2:
+                return words[1]
+            majors = [p.version for p in packages if not p.version.startswith("0.")]
+            return majors[0] if len(majors) == 1 else None
+    return None
+
+
+def webpki_findings(subject: Subject, packages: list[LockPackage]) -> list[Finding]:
+    """Judge each webpki-roots or webpki-root-certs entry, resolving a 0.26.11 wrapper through its dependency."""
+    findings = []
+    first_wrapper = parse_version(WEBPKI_WRAPPER)
+    for package in packages:
+        version = parse_version(package.version)
+        found = package.version
+        if version is None or first_wrapper is None:
+            findings.append(judge(subject, found, WEBPKI_ROOTS_FIXED))
+        elif version.release[:2] < (0, 26):
+            findings.append(
+                Finding(
+                    Level.FAIL,
+                    subject,
+                    f"found {found}, no fix, move to 1.0.10 or later",
+                )
+            )
+        elif version.release[:2] == (0, 26) and version < first_wrapper:
+            findings.append(
+                Finding(
+                    Level.FAIL,
+                    subject,
+                    f"found {found}, carries its own list with the G3 root",
+                )
+            )
+        elif version.release[:2] == (0, 26):
+            wrapped = wrapped_version(package, subject.name, packages)
+            if wrapped is None:
+                detail = f"found {found}, 0.26.11 wraps 1.x, fixed only if that dependency is 1.0.10 or later"
+                findings.append(Finding(Level.WARN, subject, detail))
+            else:
+                verdict = judge(subject, wrapped, WEBPKI_ROOTS_FIXED)
+                detail = f"found {found}, wraps {verdict.detail[len('found '):]}"
+                findings.append(Finding(verdict.level, subject, detail))
+        else:
+            findings.append(judge(subject, found, WEBPKI_ROOTS_FIXED))
+    return findings
+
+
+def rustls_webpki_finding(subject: Subject, version: str) -> Finding:
+    parsed = parse_version(version)
+    if parsed is not None and parsed.release[:2] < (0, 103):
+        return Finding(
+            Level.FAIL, subject, f"found {version}, 0.102 and older lines have no fix"
+        )
+    return judge_branched(subject, version, RUSTLS_WEBPKI_FIXED)
+
+
+class LockDetection:
+    """A detection that reads each indexed lock file of one name as text."""
+
+    def texts(
+        self, ctx: Context, interests: FileInterests
+    ) -> Iterator[Union[Finding, tuple[IndexedFile, str]]]:
+        for indexed in ctx.index.files_for(interests):
+            text = text_of(
+                ctx,
+                Subject(indexed.path.name, str(indexed.path)),
+                indexed.real,
+                indexed.file_id,
+            )
+            if isinstance(text, list):
+                yield from text
+            else:
+                yield indexed, text
+
+
+class CargoLocks(LockDetection):
+    """webpki-roots, webpki-root-certs and rustls-webpki in Cargo.lock files."""
+
+    name: ClassVar[str] = "cargo-locks"
+    interests: ClassVar[FileInterests] = FileInterests(
+        name_globs=frozenset({"Cargo.lock"})
+    )
+
+    def run(self, ctx: Context) -> Iterator[Finding]:
+        for item in self.texts(ctx, self.interests):
+            if isinstance(item, Finding):
+                yield item
+                continue
+            indexed, text = item
+            where = str(indexed.path)
+            complete = True
+            for crate in ("webpki-roots", "webpki-root-certs"):
+                packages, complete = toml_package_versions(text, crate)
+                yield from webpki_findings(Subject(crate, where), packages)
+            for package in toml_package_versions(text, "rustls-webpki")[0]:
+                yield rustls_webpki_finding(
+                    Subject("rustls-webpki", where), package.version
+                )
+            if not complete:
+                detail = f"partly unreadable, {package_count(text)} packages read"
+                yield Finding(Level.INFO, Subject("Cargo.lock", where), detail)
+
+
+class ComposerLocks(LockDetection):
+    """composer/ca-bundle in composer.lock files."""
+
+    name: ClassVar[str] = "composer-locks"
+    interests: ClassVar[FileInterests] = FileInterests(
+        name_globs=frozenset({"composer.lock"})
+    )
+
+    def run(self, ctx: Context) -> Iterator[Finding]:
+        for item in self.texts(ctx, self.interests):
+            if isinstance(item, Finding):
+                yield item
+                continue
+            indexed, text = item
+            versions = composer_versions(text, "composer/ca-bundle")
+            if versions is None:
+                yield Finding(
+                    Level.INFO,
+                    Subject("composer.lock", str(indexed.path)),
+                    "unreadable, skipped",
+                )
+                continue
+            for version in versions:
+                subject = Subject("composer/ca-bundle", str(indexed.path))
+                yield judge_branched(subject, version, COMPOSER_CA_BUNDLE_FIXED)
+
+
+class GemfileLocks(LockDetection):
+    """excon in Gemfile.lock files."""
+
+    name: ClassVar[str] = "gemfile-locks"
+    interests: ClassVar[FileInterests] = FileInterests(
+        name_globs=frozenset({"Gemfile.lock"})
+    )
+
+    def run(self, ctx: Context) -> Iterator[Finding]:
+        for item in self.texts(ctx, self.interests):
+            if isinstance(item, Finding):
+                yield item
+                continue
+            indexed, text = item
+            for version in gem_versions(text, "excon"):
+                yield judge(Subject("excon", str(indexed.path)), version, EXCON_FIXED)
+
+
+class MixLocks(LockDetection):
+    """castore and Hex certifi in mix.lock files."""
+
+    name: ClassVar[str] = "mix-locks"
+    interests: ClassVar[FileInterests] = FileInterests(
+        name_globs=frozenset({"mix.lock"})
+    )
+
+    def run(self, ctx: Context) -> Iterator[Finding]:
+        rules = {
+            "castore": ("castore", CASTORE_FIXED),
+            "certifi": ("hex certifi", HEX_CERTIFI_FIXED),
+        }
+        for item in self.texts(ctx, self.interests):
+            if isinstance(item, Finding):
+                yield item
+                continue
+            indexed, text = item
+            for package, version in mix_versions(text):
+                label, rule = rules[package]
+                yield judge(Subject(label, str(indexed.path)), version, rule)

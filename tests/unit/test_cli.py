@@ -280,6 +280,11 @@ class RunTest(unittest.TestCase):
                 "python-pins",
                 "host-python-packages",
                 "uv-host",
+                "electron-packages",
+                "cargo-locks",
+                "composer-locks",
+                "gemfile-locks",
+                "mix-locks",
                 "pem-bundles",
             ),
         )

@@ -14,6 +14,10 @@ import unittest
 from emudhra_check.lockfiles import (
     LockPackage,
     bounded_json,
+    composer_versions,
+    gem_versions,
+    mix_versions,
+    npm_range_lower_bound,
     package_count,
     pipfile_versions,
     requirement_pins,
@@ -275,6 +279,105 @@ class PipfileTest(unittest.TestCase):
         self.assertIsNone(pipfile_versions("not json", "certifi"))
         self.assertIsNone(pipfile_versions("[1]", "certifi"))
         self.assertEqual(pipfile_versions('{"default": []}', "certifi"), [])
+
+
+class ComposerTest(unittest.TestCase):
+    def test_versions(self) -> None:
+        text = json.dumps(
+            {
+                "packages": [
+                    {"name": "composer/ca-bundle", "version": "1.4.15"},
+                    {"name": "x/y", "version": "1"},
+                ],
+                "packages-dev": [{"name": "composer/ca-bundle", "version": "v1.6.0"}],
+            }
+        )
+        self.assertEqual(
+            composer_versions(text, "composer/ca-bundle"), ["1.4.15", "1.6.0"]
+        )
+
+    def test_malformed_deep_and_digits(self) -> None:
+        start = time.monotonic()
+        self.assertIsNone(composer_versions("{", "composer/ca-bundle"))
+        self.assertIsNone(
+            composer_versions("[" * 1000 + "]" * 1000, "composer/ca-bundle")
+        )
+        digits = (
+            '{"packages": [{"name": "composer/ca-bundle", "version": 1'
+            + "0" * (8 << 20)
+            + "}]}"
+        )
+        self.assertEqual(composer_versions(digits, "composer/ca-bundle"), [])
+        self.assertLess(time.monotonic() - start, WATCHDOG)
+
+
+class GemTest(unittest.TestCase):
+    LOCK = (
+        "GEM\n  remote: https://rubygems.org/\n  specs:\n    excon (1.7.3)\n      logger\n    logger (1.7.0)\n\n"
+        "DEPENDENCIES\n  excon (~> 1.7)\n"
+    )
+
+    def test_lf_and_crlf(self) -> None:
+        self.assertEqual(gem_versions(self.LOCK, "excon"), ["1.7.3"])
+        self.assertEqual(
+            gem_versions(self.LOCK.replace("\n", "\r\n"), "excon"), ["1.7.3"]
+        )
+
+    def test_near_miss_line(self) -> None:
+        start = time.monotonic()
+        self.assertEqual(gem_versions("excon (" * (4 << 20), "excon"), [])
+        self.assertLess(time.monotonic() - start, WATCHDOG)
+
+
+class MixTest(unittest.TestCase):
+    def test_entries(self) -> None:
+        text = (
+            '%{\n  "castore": {:hex, :castore, "1.0.21", "e4", [:mix], [], "hexpm", "e4"},\r\n'
+            '  "castore_fork": {:hex, :castore_fork, "1.0.1", "aa", [:mix], [], "hexpm", "aa"},\n'
+            '  "certifi": {:hex, :certifi, "2.17.0", "81", [:rebar3], [], "hexpm", "81"},\n}\n'
+        )
+        self.assertEqual(
+            mix_versions(text), [("castore", "1.0.21"), ("certifi", "2.17.0")]
+        )
+
+    def test_mismatched_and_near_miss(self) -> None:
+        self.assertEqual(mix_versions('"castore": {:hex, :certifi, "1.0.0"'), [])
+        start = time.monotonic()
+        self.assertEqual(mix_versions('"castore": {:hex, :castore, "' * (1 << 20)), [])
+        self.assertLess(time.monotonic() - start, WATCHDOG)
+
+
+class NpmRangeTest(unittest.TestCase):
+    def test_table(self) -> None:
+        for spec, want in (
+            ("^43.8.0", ("43.8.0", True)),
+            ("~44.9.0", ("44.9.0", True)),
+            ("44.9.1", ("44.9.1", True)),
+            ("=44.9.1", ("44.9.1", True)),
+            ("v44.9.1", ("44.9.1", True)),
+            ("41.x", ("41.0.0", True)),
+            ("41", ("41.0.0", True)),
+            ("^45.0.0-beta.5", ("45.0.0-beta.5", True)),
+            (">=43.0.0", ("43.0.0", False)),
+            ("43.0.0 - 44.0.0", ("43.0.0", False)),
+            ("^42.0.0 || ^43.0.0", ("42.0.0", False)),
+            ("*", ("", False)),
+            ("latest", ("", False)),
+            ("<45", ("", False)),
+            ("workspace:*", None),
+            ("file:../electron", None),
+            ("git+https://example.invalid/electron.git", None),
+            ("github:electron/electron", None),
+        ):
+            with self.subTest(spec=spec):
+                self.assertEqual(npm_range_lower_bound(spec), want)
+
+    def test_near_miss(self) -> None:
+        start = time.monotonic()
+        self.assertEqual(
+            npm_range_lower_bound('"electron": "' * (1 << 20)), ("", False)
+        )
+        self.assertLess(time.monotonic() - start, WATCHDOG)
 
 
 if __name__ == "__main__":

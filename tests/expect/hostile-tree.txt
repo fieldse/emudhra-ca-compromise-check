@@ -15,6 +15,12 @@ INFO  ca-bundle [/tmp/hostile/m000/cacert.pem] unreadable, skipped
 INFO  ca-bundle [/tmp/hostile/sparse.crt] too large to scan, skipped
 INFO  scan [/tmp/hostile/a0444/cacert.pem] not readable, skipped
 ~deeper than 128 levels, not entered
+~WARN  webpki-roots [/tmp/hostile/digits/Cargo.lock] found 99999
+~WARN  certifi [/tmp/hostile/digits/requirements.txt] found 99999
+~WARN  certifi [/tmp/hostile/near/requirements.txt] found certifi==certifi==
+INFO  electron [/tmp/hostile/near/package.json] package.json unreadable, skipped
+![/tmp/hostile/near/Gemfile.lock]
+![/tmp/hostile/near/mix.lock]
 !^PASS  ca-bundle [/etc/ssl/cert.pem] clean
 !ERROR
 !Traceback
