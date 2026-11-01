@@ -61,7 +61,7 @@ It never runs a binary it judges. Electron 44.9.1 counts as fixed, as Electron's
 
 For version answers the check runs `node`, `bun`, `deno`, `go`, `python3`, `uv` and `perl` from `PATH`, and `podman` from `PATH` with `-c`. On macOS it runs `/usr/bin/security`, `/usr/bin/xcode-select` and `/usr/libexec/java_home` by absolute path. A tool in an excluded directory is skipped.
 
-Run as root, the check also skips a tool whose file, or any directory above it, is not owned by root or is group- or world-writable, and prints `INFO  TOOL [host] not run: TOOL is writable by a non-root user`. With `-c`, such a `podman` stops the run with exit 2. On a machine whose `PATH` tools you don't trust, scan from a clean account or pass `-x` for those directories.
+Run as root, the check does not run a tool whose file, or any directory above it, is not owned by root or is group- or world-writable. A sticky directory such as `/nix/store` counts as safe when the entries below it are owned by root. For such a tool it prints `WARN  TOOL [host] not run: TOOL is writable by a non-root user`, still reads the tool's binary for the compromised certificates, and takes Node's version from the binary. With `-c`, such a `podman` stops the run with exit 2. On a machine whose `PATH` tools you don't trust, scan from a clean account or pass `-x` for those directories.
 
 ## Verdicts and exit codes
 
@@ -78,6 +78,7 @@ A stock Mac fails `--strict` on the `AAA Certificate Services` line for `/etc/ss
 
 - An exclude matches the excluded directory itself. A subdirectory of it that is bind-mounted at another path under a scan root is walked at that path. Exclude the mount point as well.
 - A file above 32 MiB is read through `mmap`. If another process truncates it during the read, the run ends with `SIGBUS`.
+- Run as root, the tool ownership check reads owner and mode bits only. An ACL that lets a non-root user change a tool or a directory above it is not seen.
 
 ## Changes from the Bash script
 
