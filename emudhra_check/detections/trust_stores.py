@@ -1,9 +1,11 @@
 """trust_stores.py: detections of the compromised certificates in trust store files.
 
 OsTrustStore reads the fixed OS bundle paths, HomebrewTrustStore the Homebrew bundles, the
-ca-certificates formula version and the macOS system roots keychain, and PemBundles every PEM bundle
-the walk indexed under the scan roots. Each reports every certificate or key found and claims each
-file in the ledger, so a file reached by two paths or two detections is reported once.
+ca-certificates formula version and the macOS system roots keychain, PemBundles every PEM bundle the
+walk indexed under the scan roots, JavaKeystores the cacerts keystores of the Java homes and under the
+roots without running keytool, and PerlMozillaCa the Mozilla::CA module perl loads. Each reports
+every certificate or key found and claims each file in the ledger, so a file reached by two paths or
+two detections is reported once.
 """
 
 from __future__ import annotations
@@ -13,25 +15,37 @@ from typing import ClassVar, Iterator, Optional
 
 from emudhra_check.certificates import (
     PEM_BEGIN,
+    Buffer,
     CertificateMatch,
+    KeystoreKind,
     MatchKind,
     Role,
     bundle_findings,
+    keystore_kind,
 )
 from emudhra_check.detections.ports import Context
 from emudhra_check.detections.shared import (
     MATCHER,
     content_findings,
+    find_tool,
     read_or_skip,
     release,
+    run_tool,
 )
-from emudhra_check.fixes import HOMEBREW_CA_FIXED
-from emudhra_check.limits import MAX_BUNDLE_BYTES
+from emudhra_check.fixes import HOMEBREW_CA_FIXED, MOZILLA_CA_FIXED
+from emudhra_check.limits import MAX_BUNDLE_BYTES, MAX_FIELD_CHARS
 from emudhra_check.report import Finding, Level, Subject
-from emudhra_check.scope import FileInterests
-from emudhra_check.versions import brew_formula_version
+from emudhra_check.scope import FileId, FileInterests
+from emudhra_check.versions import brew_formula_version, judge
 
-__all__ = ["HomebrewTrustStore", "OsTrustStore", "PemBundles"]
+__all__ = [
+    "HomebrewTrustStore",
+    "JavaKeystores",
+    "OsTrustStore",
+    "PemBundles",
+    "PerlMozillaCa",
+    "keystore_findings",
+]
 
 OS_BUNDLES = (
     Path("/etc/ssl/certs/ca-certificates.crt"),
@@ -212,3 +226,116 @@ class PemBundles:
             Subject("ca-bundle", "scan roots"),
             f"checked {checked} PEM files; only files containing an affected certificate are listed",
         )
+
+
+JAVA_HOME_KEYSTORES = ("lib/security/cacerts", "jre/lib/security/cacerts")
+ENCRYPTED_DETAIL = (
+    "password-protected keystore, no compromised certificate found as plain bytes,"
+    " check it with keytool"
+)
+
+
+def keystore_findings(
+    subject: Subject, data: Buffer, matches: tuple[CertificateMatch, ...]
+) -> list[Finding]:
+    """Judge a Java keystore: plain stores by their content, an encrypted PKCS12 with no FAIL as WARN."""
+    kind = keystore_kind(data)
+    if kind is KeystoreKind.UNKNOWN:
+        return []
+    findings = bundle_findings(subject, matches)
+    if kind is KeystoreKind.PKCS12_ENCRYPTED and not any(
+        f.level is Level.FAIL for f in findings
+    ):
+        findings = [f for f in findings if f.level is not Level.PASS]
+        findings.append(Finding(Level.WARN, subject, ENCRYPTED_DETAIL))
+    return findings
+
+
+def judge_keystore(
+    ctx: Context, subject: Subject, path: Path, file_id: FileId
+) -> list[Finding]:
+    """Read one keystore and judge its bytes, or return the line for one that could not be read."""
+    data = read_or_skip(ctx, subject, path, MAX_BUNDLE_BYTES, file_id)
+    if isinstance(data, list):
+        return data
+    try:
+        return keystore_findings(subject, data, MATCHER.scan(data))
+    finally:
+        release(data)
+
+
+class JavaKeystores:
+    """The cacerts keystores of each Java home and every cacerts file under the scan roots."""
+
+    name: ClassVar[str] = "java-keystores"
+    interests: ClassVar[FileInterests] = FileInterests(
+        name_globs=frozenset({"cacerts"})
+    )
+
+    def run(self, ctx: Context) -> Iterator[Finding]:
+        for home in ctx.host.java_homes():
+            for relative in JAVA_HOME_KEYSTORES:
+                path = home / relative
+                file_id = ctx.files.file_id(path)
+                if file_id is None or not ctx.ledger.claim(file_id):
+                    continue
+                yield from judge_keystore(
+                    ctx, Subject("jdk cacerts", str(path)), path, file_id
+                )
+        for indexed in ctx.index.files_for(self.interests):
+            if not ctx.ledger.claim(indexed.file_id):
+                continue
+            subject = Subject("java keystore", str(indexed.path))
+            yield from judge_keystore(ctx, subject, indexed.real, indexed.file_id)
+
+
+PERL_VERSION_ARGS = ("-MMozilla::CA", "-e", "print $Mozilla::CA::VERSION")
+PERL_BUNDLE_ARGS = ("-MMozilla::CA", "-e", "print Mozilla::CA::SSL_ca_file()")
+MODULE_BUNDLE_SUFFIX = "/Mozilla/CA/cacert.pem"
+
+
+def first_field(output: str) -> str:
+    """Return the first line of a tool's output, or an empty string when it is blank or too long."""
+    lines = output.strip().splitlines()
+    return lines[0].strip() if lines and len(lines[0]) <= MAX_FIELD_CHARS else ""
+
+
+def mozilla_ca_finding(subject: Subject, version: str, bundle: str) -> Finding:
+    """Judge Mozilla::CA by version when it reads its own bundle, else report the bundle it was patched to use."""
+    if not bundle or bundle.endswith(MODULE_BUNDLE_SUFFIX):
+        return judge(subject, version, MOZILLA_CA_FIXED)
+    return Finding(Level.INFO, subject, f"{version} is patched to use {bundle}")
+
+
+class PerlMozillaCa:
+    """The Mozilla::CA module of the perl on PATH: its version and the bundle it hands out."""
+
+    name: ClassVar[str] = "perl-mozilla-ca"
+    interests: ClassVar[FileInterests] = FileInterests()
+
+    def run(self, ctx: Context) -> Iterator[Finding]:
+        tool = find_tool(ctx, "perl")
+        if isinstance(tool, list):
+            yield from tool
+            return
+        result = run_tool(ctx, tool, "perl", PERL_VERSION_ARGS)
+        if isinstance(result, list):
+            yield from result
+            return
+        version = first_field(result.stdout) if result.returncode == 0 else ""
+        if not version:
+            return
+        result = run_tool(ctx, tool, "perl", PERL_BUNDLE_ARGS)
+        if isinstance(result, list):
+            yield from result
+            return
+        bundle = first_field(result.stdout) if result.returncode == 0 else ""
+        yield mozilla_ca_finding(Subject("Mozilla::CA", "host"), version, bundle)
+        if not bundle.startswith("/"):
+            return
+        path = Path(bundle)
+        file_id = ctx.files.file_id(path)
+        if file_id is not None and ctx.ledger.claim(file_id):
+            yield from content_findings(
+                ctx, Subject("Mozilla::CA bundle", bundle), path, file_id
+            )

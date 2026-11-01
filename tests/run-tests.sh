@@ -251,6 +251,18 @@ function make_java_fixtures() {
       keytool -list -cacerts -storepass changeit 2>/dev/null | grep -ciE 'emsign_?ecc_?root_?ca_*g3|emsigneccrootcag3' || true" \
       >"$OUT/jdk-$tag-g3-aliases.txt"
   done
+  # One keystore of each kind holding cert00, each named cacerts in its own directory, written by keytool
+  # in the pre-fix JDK image, with the count of entries keytool lists in each.
+  run_in "$JAVA_OLD_IMAGE" sh -c 'set -e
+    k() { d=/out/java/$1; shift; mkdir -p "$d"
+      keytool -importcert "$@" -noprompt -alias cert00 -file /out/yara/cert00-w64.pem -keystore "$d/cacerts" \
+        -storepass changeit >/dev/null 2>&1
+      keytool -list -keystore "$d/cacerts" -storepass changeit 2>/dev/null | grep -c trustedCertEntry >"$d.entries"; }
+    k jks -storetype JKS; k jceks -storetype JCEKS; k p12; k p12-plain -J-Dkeystore.pkcs12.certProtectionAlgorithm=NONE'
+  for tag in old fixed; do
+    mkdir -p "$OUT/java/jdk-$tag"
+    cp "$OUT/jdk-$tag-cacerts" "$OUT/java/jdk-$tag/cacerts"
+  done
 }
 
 # Run YARA over the fixtures, a JKS keystore, the JDK cacerts and the test image's system files
@@ -268,6 +280,8 @@ function test_yara() {
   done
   check "pre-fix JDK still carries the G3 root" "hit" \
     "$([[ "$(tr -d '[:space:]' <"$OUT/jdk-old-g3-aliases.txt")" -gt 0 ]] && echo hit || echo 'no hit')"
+  got=$(cd "$OUT/java" && for k in jks jceks p12 p12-plain; do printf '%s=%s ' "$k" "$(tr -d '[:space:]' <"$k.entries")"; done)
+  check "keytool lists cert00 in each fixture keystore" "jks=1 jceks=1 p12=1 p12-plain=1" "${got% }"
 
   for tag in "$CERTIFI_OLD|hit" "$CERTIFI_FIXED|no hit"; do
     got=$(run_in "$LAB_IMAGE" sh -c "yara $rules /out/certifi/cacert-${tag%%|*}.pem | grep -q eMudhra_G3_root && echo hit || echo 'no hit'")

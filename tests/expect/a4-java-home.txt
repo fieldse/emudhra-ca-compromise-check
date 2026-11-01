@@ -1,0 +1,6 @@
+# A Java home named by JAVA_HOME, holding the pre-fix JDK's cacerts, is read without keytool.
+# setup: mkdir -p /tmp/jdk/lib/security /tmp/r && cp /out/java/jdk-old/cacerts /tmp/jdk/lib/security/ && export JAVA_HOME=/tmp/jdk
+# args: -r /tmp/r
+# exit: 1
+FAIL  jdk cacerts [/tmp/jdk/lib/security/cacerts] contains emSign ECC Root CA - G3 (removed root)
+!Traceback

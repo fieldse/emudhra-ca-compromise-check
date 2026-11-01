@@ -341,6 +341,9 @@ class KeystoreKindTest(unittest.TestCase):
                 bytes.fromhex("30821000") + bytes.fromhex("06092a864886f70d010706"),
                 KeystoreKind.PKCS12_ENCRYPTED,
             ),
+            (bytes.fromhex("308302d5020103"), KeystoreKind.PKCS12_PLAIN),
+            (bytes.fromhex("3084000102d5020103"), KeystoreKind.PKCS12_PLAIN),
+            (bytes.fromhex("3081ff020103"), KeystoreKind.UNKNOWN),
             (b"", KeystoreKind.UNKNOWN),
             (b"-----BEGIN", KeystoreKind.UNKNOWN),
         ]

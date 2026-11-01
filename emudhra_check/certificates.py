@@ -185,7 +185,12 @@ class KeystoreKind(Enum):
 
 JKS_MAGIC = bytes.fromhex("feedfeed")
 JCEKS_MAGIC = bytes.fromhex("cececece")
-DER_SEQUENCE_LONG = bytes.fromhex("3082")
+# A PKCS12 file opens with a DER SEQUENCE whose length takes two, three or four bytes.
+DER_SEQUENCE_LONG = (
+    bytes.fromhex("3082"),
+    bytes.fromhex("3083"),
+    bytes.fromhex("3084"),
+)
 ENCRYPTED_DATA_OID = bytes.fromhex("06092a864886f70d010706")
 
 
@@ -196,7 +201,7 @@ def keystore_kind(data: Buffer) -> KeystoreKind:
         return KeystoreKind.JKS
     if head == JCEKS_MAGIC:
         return KeystoreKind.JCEKS
-    if head[:2] == DER_SEQUENCE_LONG:
+    if head[:2] in DER_SEQUENCE_LONG:
         if data.find(ENCRYPTED_DATA_OID) >= 0:
             return KeystoreKind.PKCS12_ENCRYPTED
         return KeystoreKind.PKCS12_PLAIN

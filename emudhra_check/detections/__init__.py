@@ -28,8 +28,10 @@ from emudhra_check.detections.runtimes import (
 from emudhra_check.detections.ports import Detection
 from emudhra_check.detections.trust_stores import (
     HomebrewTrustStore,
+    JavaKeystores,
     OsTrustStore,
     PemBundles,
+    PerlMozillaCa,
 )
 
 __all__ = ["REGISTRY", "Detection"]
@@ -54,4 +56,6 @@ REGISTRY: tuple[Detection, ...] = (
     GemfileLocks(),
     MixLocks(),
     PemBundles(),
+    JavaKeystores(),
+    PerlMozillaCa(),
 )

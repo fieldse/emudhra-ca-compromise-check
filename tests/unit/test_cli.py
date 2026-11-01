@@ -287,6 +287,8 @@ class RunTest(unittest.TestCase):
                 "gemfile-locks",
                 "mix-locks",
                 "pem-bundles",
+                "java-keystores",
+                "perl-mozilla-ca",
             ),
         )
 
