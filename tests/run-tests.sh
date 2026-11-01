@@ -169,15 +169,18 @@ function test_yara() {
 function test_sigma() {
   local got
   got=$(run_in "$LAB_IMAGE" python3 -I -c "
-import glob, hashlib, ssl, yaml
+import csv, glob, hashlib, ssl, yaml
 r = yaml.safe_load(open(glob.glob('/repo/rules/sigma/*.yml')[0]))
 assert {'title', 'id', 'logsource', 'detection', 'level'} <= set(r), 'missing keys'
 listed = {t.rsplit(chr(92), 1)[1] for t in r['detection']['selection_thumbprint']['TargetObject|contains']}
-want = set()
+blocks = set()
 for f in glob.glob('/repo/rules/certs/*.pem'):
     for blk in open(f).read().split('-----END CERTIFICATE-----')[:-1]:
         pem = blk[blk.index('-----BEGIN'):] + '-----END CERTIFICATE-----'
-        want.add(hashlib.sha1(ssl.PEM_cert_to_DER_cert(pem)).hexdigest().upper())
+        blocks.add(hashlib.sha1(ssl.PEM_cert_to_DER_cert(pem)).hexdigest().upper())
+rows = list(csv.DictReader(open('/repo/rules/iocs.csv')))
+want = {row['sha1'] for row in rows if row['role'] != 'cross-sign issuer root'}
+assert want <= blocks, 'an iocs.csv row has no certificate block'
 print('ok' if listed == want and len(want) == 19 else f'mismatch {len(listed)} {len(want)}')
 " 2>&1 | tail -1)
   check "sigma rule structure and thumbprints (not converted to a SIEM query)" "ok" "$got"
