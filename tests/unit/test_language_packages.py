@@ -28,6 +28,7 @@ from emudhra_check.detections.language_packages import (
     python_package_finding,
 )
 from emudhra_check.detections.ports import UNREADABLE, Skipped
+from emudhra_check.detections.runtimes import CPythonHost
 from emudhra_check.report import Level, Subject
 from emudhra_check.scope import FileId, IndexedDir
 from tests.unit.fakes import (
@@ -39,6 +40,7 @@ from tests.unit.fakes import (
     located,
     make_context,
     result,
+    run_all,
 )
 
 SITE = "/r/lib/python3.13/site-packages"
@@ -381,11 +383,12 @@ class HostPythonTest(unittest.TestCase):
             ],
         )
 
-    def test_tool_a_non_root_user_can_change_is_not_run(self) -> None:
+    def test_tool_a_non_root_user_can_change_is_reported_once(self) -> None:
         commands = FakeCommands({"python3": located(PY, writable=True)})
         ctx = make_context(FakeFiles(), commands)
+        got = [f.line() for f in run_all([CPythonHost(), HostPythonPackages()], ctx)]
         self.assertEqual(
-            lines(HostPythonPackages(), ctx),
+            [line for line in got if "not run" in line],
             ["WARN  python3 [host] not run: python3 is writable by a non-root user"],
         )
         self.assertEqual(commands.calls, [])

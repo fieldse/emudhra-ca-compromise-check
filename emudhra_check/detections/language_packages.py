@@ -280,6 +280,9 @@ class HostPythonPackages:
         if isinstance(tool, list):
             yield from tool
             return
+        if tool.writable:
+            # CPythonHost prints the not-run WARN for this python3.
+            return
         system = ctx.hostenv.system
         if system == "Darwin" and is_macos_stub(
             tool.path, system, ctx.host.developer_tools_installed()
