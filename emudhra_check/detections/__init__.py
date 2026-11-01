@@ -26,13 +26,18 @@ from emudhra_check.detections.runtimes import (
     NodeVersionDirs,
 )
 from emudhra_check.detections.ports import Detection
-from emudhra_check.detections.trust_stores import OsTrustStore, PemBundles
+from emudhra_check.detections.trust_stores import (
+    HomebrewTrustStore,
+    OsTrustStore,
+    PemBundles,
+)
 
 __all__ = ["REGISTRY", "Detection"]
 
 REGISTRY: tuple[Detection, ...] = (
     OsTrustStore(),
     CaCertificatesPackage(),
+    HomebrewTrustStore(),
     BunHost(),
     NodeHost(),
     DenoHost(),

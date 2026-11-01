@@ -270,6 +270,7 @@ class RunTest(unittest.TestCase):
             (
                 "os-trust-store",
                 "ca-certificates-package",
+                "homebrew-trust-store",
                 "bun-host",
                 "node-host",
                 "deno-host",

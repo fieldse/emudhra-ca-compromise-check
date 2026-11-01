@@ -174,13 +174,14 @@ def hostenv(
     home: str = "/home/u",
     path_dirs: Sequence[str] = ("/usr/bin",),
     running: str = "3.13.5",
+    brew_prefix: Optional[str] = None,
 ) -> HostEnvironment:
     numbers = tuple(int(n) for n in running.split("."))
     return HostEnvironment(
         system,
         Path(home),
         tuple(Path(p) for p in path_dirs),
-        None,
+        Path(brew_prefix) if brew_prefix else None,
         None,
         None,
         None,
