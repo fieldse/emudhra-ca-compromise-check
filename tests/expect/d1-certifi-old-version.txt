@@ -1,0 +1,5 @@
+# setup: mkdir -p /tmp/d/certifi-2026.7.22.dist-info && echo pip >/tmp/d/certifi-2026.7.22.dist-info/INSTALLER
+# args: -r /tmp/d
+# exit: 1
+FAIL  certifi [/tmp/d/certifi-2026.7.22.dist-info] found 2026.7.22, fixed 2026.10.18 (vendors its own CA bundle)
+!Traceback

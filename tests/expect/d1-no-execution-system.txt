@@ -1,0 +1,7 @@
+# setup: P=$(python3 -I -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])') && mkdir -p $P/certifi $P/certifi-2026.7.22.dist-info /certifi /tmp/e && echo 'open("/tmp/EXECUTED-purelib", "w")' >$P/certifi/__init__.py && printf 'Metadata-Version: 2.1\nName: certifi\nVersion: 2026.7.22\n' >$P/certifi-2026.7.22.dist-info/METADATA && echo pip >$P/certifi-2026.7.22.dist-info/INSTALLER && echo 'open("/tmp/EXECUTED-cwd", "w")' >/site.py && echo 'open("/tmp/EXECUTED-cwd-certifi", "w")' >/certifi/__init__.py
+# caps: default
+# args: -r /tmp/e
+# exit: 1
+FAIL  certifi [host python] found 2026.7.22, fixed 2026.10.18 (vendors its own CA bundle)
+!MARKER
+!Traceback

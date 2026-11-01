@@ -1,0 +1,6 @@
+# setup: mkdir -p /tmp/g/site/certifi-2026.10.18.dist-info /tmp/g/site/certifi /tmp/brew && echo brew >/tmp/g/site/certifi-2026.10.18.dist-info/INSTALLER && cp /out/certifi/cacert-2026.10.19.pem /tmp/brew/cert.pem && ln -s /tmp/brew/cert.pem /tmp/g/site/certifi/cacert.pem
+# args: -r /tmp/g
+# exit: 0
+PASS  certifi bundle [/tmp/g/site/certifi/cacert.pem] contains no compromised eMudhra certificate
+!FAIL
+!Traceback

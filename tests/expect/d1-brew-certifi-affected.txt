@@ -1,0 +1,7 @@
+# setup: mkdir -p /tmp/g/site/certifi-2026.10.18.dist-info /tmp/g/site/certifi /tmp/brew && echo brew >/tmp/g/site/certifi-2026.10.18.dist-info/INSTALLER && cp /out/certifi/cacert-2026.7.22.pem /tmp/brew/cert.pem && ln -s /tmp/brew/cert.pem /tmp/g/site/certifi/cacert.pem
+# args: -r /tmp/g
+# exit: 1
+INFO  certifi [/tmp/g/site/certifi-2026.10.18.dist-info] found 2026.10.18, installed by brew, judged by the bundle it resolves to
+FAIL  certifi bundle [/tmp/g/site/certifi/cacert.pem] contains emSign ECC Root CA - G3 (removed root)
+!ca-bundle [/tmp/g/site/certifi/cacert.pem]
+!Traceback

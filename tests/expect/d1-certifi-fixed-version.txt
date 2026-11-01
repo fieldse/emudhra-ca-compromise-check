@@ -1,0 +1,7 @@
+# setup: mkdir -p /tmp/d/certifi-2026.10.18.dist-info && echo pip >/tmp/d/certifi-2026.10.18.dist-info/INSTALLER
+# args: -r /tmp/d
+# exit: 0
+PASS  certifi [/tmp/d/certifi-2026.10.18.dist-info] found 2026.10.18, fixed 2026.10.18
+INFO  certifi [/tmp/d/certifi-2026.10.18.dist-info] 2026.10.19 or later restores unaffected emSign roots
+!FAIL
+!Traceback

@@ -217,6 +217,11 @@ write('commentless.pem', wrap(ders, 64, '\n'))
 write('comments100k.pem', '# padding comment line before the first certificate\n' * 2000 + text)
 aaa = open('/repo/rules/certs/sectigo-aaa-certificate-services.pem').read()
 write('aaa.pem', aaa[aaa.index('-----BEGIN'):])
+roots = open('/repo/rules/certs/emudhra-g3-roots.pem').read()
+for blk in roots.split('-----END CERTIFICATE-----')[:-1]:
+    if next(l[2:].strip() for l in blk.split('\n') if l.startswith('# ')) == 'emSign ECC Root CA - G3':
+        der = ssl.PEM_cert_to_DER_cert(blk[blk.index('-----BEGIN'):] + '-----END CERTIFICATE-----')
+        open('/out/bundles/g3-ecc-root.der', 'wb').write(der)
 "
 }
 
@@ -377,13 +382,14 @@ print('clean' if bad == [] else ' '.join(bad))
   check "archive re-executes once through a wrapper that drops -I -S" "exit=2 notes=1 " "$got"
 }
 
-# Run one tests/expect case. "# args:", "# setup:", "# cwd:", "# timeout:", "# user: nobody", "# exit:" and
-# "# summaries:" set the run. A "!" line is a forbidden substring, a "!^" line a forbidden line start, a "~" line a
-# required substring, and every other line must appear as an exact output line. A /tmp/EXECUTED-* file left by a
-# marker tool prints a "MARKER" line. Setup may set PY to the interpreter's absolute path before changing PATH.
+# Run one tests/expect case. "# args:", "# setup:", "# cwd:", "# timeout:", "# user: nobody", "# caps: default",
+# "# exit:" and "# summaries:" set the run. Cases run without capabilities unless "# caps: default" is given.
+# A "!" line is a forbidden substring, a "!^" line a forbidden line start, a "~" line a required substring, and
+# every other line must appear as an exact output line. A /tmp/EXECUTED-* file left by a marker tool prints a
+# "MARKER" line. Setup may set PY to the interpreter's absolute path before changing PATH.
 function check_case() {
   local label="$1" image="$2" file="$3" name args setup cwd secs want_exit summaries out got_exit count line problems=""
-  local -a engine_args=(--rm --network=none --cap-drop=all)
+  local -a engine_args=(--rm --network=none)
   name="$(basename "$file" .txt)"
   args=$(sed -n 's/^# args: //p' "$file")
   setup=$(sed -n 's/^# setup: //p' "$file")
@@ -391,7 +397,10 @@ function check_case() {
   secs=$(sed -n 's/^# timeout: //p' "$file")
   want_exit=$(sed -n 's/^# exit: //p' "$file")
   summaries=$(sed -n 's/^# summaries: //p' "$file")
-  if [[ "$(sed -n 's/^# user: //p' "$file")" == "nobody" ]]; then
+  if [[ "$(sed -n "s/^# caps: //p" "$file")" != "default" ]]; then
+    engine_args+=(--cap-drop=all)
+  fi
+  if [[ "$(sed -n "s/^# user: //p" "$file")" == "nobody" ]]; then
     engine_args+=(--user 65534:65534)
   fi
   out=$("$ENGINE" run "${engine_args[@]}" -v "$REPO":/repo:ro -v "$OUT":/out "$image" sh -c \

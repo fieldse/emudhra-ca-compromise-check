@@ -270,6 +270,10 @@ class RunTest(unittest.TestCase):
             (
                 "os-trust-store",
                 "ca-certificates-package",
+                "python-dist-info",
+                "python-pins",
+                "host-python-packages",
+                "uv-host",
                 "pem-bundles",
             ),
         )
