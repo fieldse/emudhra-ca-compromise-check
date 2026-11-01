@@ -25,6 +25,21 @@ CERTIFI_FIXED="2026.10.18"
 CERTIFI_FIXED_SHA256="73191c47aaa79da394e8fee2dbc2ec827432cab56311122c9e47abf79e390f62"
 CERTIFI_RECOMMENDED="2026.10.19"
 CERTIFI_RECOMMENDED_SHA256="42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b"
+# The archive run without -I -S, with a json.py on PYTHONPATH that leaves a marker if imported
+PYTHONPATH_CASE='mkdir -p /tmp/evil && echo "open(\"/tmp/EXECUTED-json\", \"w\").close()" >/tmp/evil/json.py
+PYTHONPATH=/tmp/evil python3 /out/check.pyz 2>/tmp/err; echo "exit=$?"
+if test -e /tmp/EXECUTED-json; then echo EXECUTED; fi
+cat /tmp/err'
+# A python3 wrapper first on PATH that drops -I and -S and keeps argv[0], so sys.executable is the wrapper
+WRAPPER_CASE='mkdir -p /tmp/wrap && cat >/tmp/wrap/python3 <<"W"
+#!/bin/bash
+args=()
+for a in "$@"; do case "$a" in -I|-S) ;; *) args+=("$a") ;; esac; done
+exec -a "$0" /usr/bin/python3.13 "${args[@]}"
+W
+chmod +x /tmp/wrap/python3
+PATH=/tmp/wrap:$PATH timeout 30 python3 /out/check.pyz 2>/tmp/err; echo "exit=$?"
+echo "notes=$(grep -c "python3 -I -S" /tmp/err)"'
 ENGINE=""
 OUT=""
 N_PASS=0
@@ -96,6 +111,7 @@ function make_fixtures() {
   for image in "$JAVA_IMAGE" "$JAVA_OLD_IMAGE" "$PY_IMAGE" "$PY39_IMAGE" "$PY38_IMAGE" "$ALPINE_IMAGE"; do
     "$ENGINE" pull -q "$image" >/dev/null
   done
+  run_in "$LAB_IMAGE" python3 -I /repo/tools/build_pyz.py --out /out/check.pyz
   write_cert_fixtures
   fetch_certifi
 }
@@ -206,14 +222,37 @@ print('ok' if listed == want and len(want) == 19 else f'mismatch {len(listed)} {
   check "sigma rule structure and thumbprints (not converted to a SIEM query)" "ok" "$got"
 }
 
-# Check the Python lint tools in the test image
+# Run the unit suite, the lint tools, the version gate and the archive's isolation cases
 function test_python() {
-  local got
+  local got unit="cd /repo && python3 -I -m unittest discover -q -s /repo/tests/unit -t /repo >/tmp/log 2>&1 && echo ok || cat /tmp/log"
   got=$(run_in "$LAB_IMAGE" sh -c "flake8 --version >/dev/null && black --version >/dev/null && mypy --version >/dev/null && echo ok")
   check "flake8, black and mypy run in the test image" "ok" "$got"
   got=$(run_in "$LAB_IMAGE" sh -c "cd /tmp && : >empty.py && out=\$(mypy --cache-dir=/dev/null --python-version 3.9 empty.py 2>&1) \
     && ! printf '%s' \"\$out\" | grep -qi 'warning\|error' && echo ok")
   check "mypy accepts a Python 3.9 target" "ok" "$got"
+  got=$(run_in "$LAB_IMAGE" sh -c "$unit")
+  check "unit tests on Python 3.13" "ok" "$got"
+  got=$(run_in "$PY39_IMAGE" sh -c "$unit")
+  check "unit tests on Python 3.9" "ok" "$got"
+  got=$(run_in "$PY38_IMAGE" sh -c "python3 -I -S /out/check.pyz 2>&1; echo \"exit=\$?\"" | tr '\n' ' ')
+  check "archive refuses Python 3.8" "check.pyz: needs Python 3.9 or later, found 3.8 exit=2 " "$got"
+  got=$(run_in "$LAB_IMAGE" sh -c "cd /repo && black --check --quiet --extend-exclude 'emudhra_check/certdata\.py' . 2>&1 && echo ok")
+  check "black --check" "ok" "$got"
+  got=$(run_in "$LAB_IMAGE" sh -c "cd /repo && flake8 . 2>&1 && echo ok")
+  check "flake8" "ok" "$got"
+  got=$(run_in "$LAB_IMAGE" sh -c "cd /repo && mypy --cache-dir=/dev/null 2>&1 | grep -v '^Success' ; echo ok")
+  check "mypy" "ok" "$got"
+  got=$(run_in "$LAB_IMAGE" python3 -I -c "
+import zipfile
+z = zipfile.ZipFile('/out/check.pyz')
+bad = [n for n in z.namelist() if any(s in z.read(n) for s in (b'/Users/', b'/home/'))]
+print('clean' if bad == [] else ' '.join(bad))
+")
+  check "archive holds no home paths" "clean" "$got"
+  got=$(run_in "$LAB_IMAGE" sh -c "$PYTHONPATH_CASE" | tr '\n' ' ')
+  check "archive ignores a planted json.py on PYTHONPATH" "exit=2 not implemented " "$got"
+  got=$(run_in "$LAB_IMAGE" bash -c "$WRAPPER_CASE" | tr '\n' ' ')
+  check "archive re-executes once through a wrapper that drops -I -S" "exit=2 notes=1 " "$got"
 }
 
 # Lint the shell scripts and check the exposure script against the test image's bundle
