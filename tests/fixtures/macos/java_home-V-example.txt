@@ -1,0 +1,3 @@
+Matching Java Virtual Machines (2):
+    21.0.8 (arm64) "Eclipse Adoptium" - "OpenJDK 21.0.8" /Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
+    17.0.12 (x86_64) "Oracle Corporation" - "Java SE 17.0.12" /Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home

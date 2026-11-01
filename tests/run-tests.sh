@@ -116,7 +116,7 @@ function make_fixtures() {
   "$ENGINE" build -q -t "$LAB_IMAGE" -f "$REPO/tests/Containerfile" "$REPO/tests" >/dev/null
   local image
   for image in "$JAVA_IMAGE" "$JAVA_OLD_IMAGE" "$PY_IMAGE" "$PY39_IMAGE" "$PY38_IMAGE" "$ALPINE_IMAGE"; do
-    "$ENGINE" pull -q "$image" >/dev/null
+    "$ENGINE" image inspect "$image" >/dev/null 2>&1 || "$ENGINE" pull -q "$image" >/dev/null
   done
   run_in "$LAB_IMAGE" python3 -I /repo/tools/build_pyz.py --out /out/check.pyz
   write_cert_fixtures
