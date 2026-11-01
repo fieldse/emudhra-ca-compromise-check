@@ -3,8 +3,9 @@
 PythonDistInfo judges certifi, pip and uv from installed dist-info directories, PythonPins the certifi
 pins in requirements files and locks, HostPythonPackages the certifi and pip the host python3 sees
 (read from metadata in a child python3 -I -S that imports no package), and UvHost the uv on PATH by
-version and by the roots its binary holds. A package installed by a distribution is judged by the
-bundle it resolves to. ElectronPackages judges installed and declared Electron versions, and
+version and by the roots its binary holds. A certifi or pip without its own cacert.pem is patched to
+use the system store and is INFO. A package installed by a distribution is judged by the bundle it
+resolves to. ElectronPackages judges installed and declared Electron versions, and
 CargoLocks, ComposerLocks, GemfileLocks and MixLocks the Rust, PHP, Ruby and Elixir packages that
 carry their own roots.
 """
@@ -74,7 +75,7 @@ __all__ = [
 
 RULES = {"certifi": CERTIFI_FIXED, "pip": PIP_FIXED, "uv": UV_FIXED}
 BUNDLES = {"certifi": "certifi/cacert.pem", "pip": "pip/_vendor/certifi/cacert.pem"}
-DISTRO_INSTALLERS = frozenset({"dpkg", "rpm", "apk", "brew"})
+DISTRO_INSTALLERS = frozenset({"dpkg", "rpm", "apk", "brew", "debian"})
 TOML_LOCKS = frozenset({"poetry.lock", "uv.lock"})
 NO_BUNDLE = "no bundled cacert.pem, patched to use the system store"
 CHILD_SCRIPT = """\
@@ -113,9 +114,12 @@ for dist in metadata.distributions(path=paths):
 
 
 def python_package_finding(
-    subject: Subject, version: str, *, installer: str
+    subject: Subject, version: str, *, installer: str, bundled: bool = True
 ) -> list[Finding]:
-    """Judge certifi, pip or uv: by version when it vendors its bundle, else defer to the bundle it resolves to."""
+    """Judge certifi, pip or uv: INFO when its own bundle is absent, deferred to the bundle for a distro
+    install, else by version."""
+    if not bundled:
+        return [Finding(Level.INFO, subject, f"found {version}, {NO_BUNDLE}")]
     if installer in DISTRO_INSTALLERS:
         detail = f"found {version}, installed by {installer}, judged by the bundle it resolves to"
         return [Finding(Level.INFO, subject, detail)]
@@ -139,17 +143,25 @@ def text_of(
         release(data)
 
 
+def package_bundle(
+    ctx: Context, name: str, location: Path
+) -> tuple[Optional[Path], Optional[FileId]]:
+    """Return the path and file id of a package's own cacert.pem, the id None when it is absent."""
+    if name not in BUNDLES:
+        return None, None
+    bundle = location / BUNDLES[name]
+    return bundle, ctx.files.file_id(bundle)
+
+
 def bundle_findings_once(
-    ctx: Context, name: str, bundle: Path, *, distro: bool
+    ctx: Context, name: str, bundle: Path, file_id: FileId
 ) -> list[Finding]:
-    """Return the content verdict of a package's own bundle, once per file, and the line for a missing one."""
-    subject = Subject(f"{name} bundle", str(bundle))
-    file_id = ctx.files.file_id(bundle)
-    if file_id is None:
-        return [Finding(Level.INFO, subject, NO_BUNDLE)] if distro else []
+    """Return the content verdict of a package's own bundle, once per file."""
     if not ctx.ledger.claim(file_id):
         return []
-    return content_findings(ctx, subject, bundle, file_id)
+    return content_findings(
+        ctx, Subject(f"{name} bundle", str(bundle)), bundle, file_id
+    )
 
 
 class PythonDistInfo:
@@ -171,10 +183,16 @@ class PythonDistInfo:
             text = text_of(ctx, subject, indexed.path / "INSTALLER")
             lines = text.strip().splitlines() if isinstance(text, str) else []
             installer = lines[0].strip()[:MAX_FIELD_CHARS] if lines else "unknown"
-            yield from python_package_finding(subject, version, installer=installer)
-            if installer in DISTRO_INSTALLERS and name in BUNDLES:
-                bundle = indexed.path.parent / BUNDLES[name]
-                yield from bundle_findings_once(ctx, name, bundle, distro=True)
+            bundle, file_id = package_bundle(ctx, name, indexed.path.parent)
+            yield from python_package_finding(
+                subject,
+                version,
+                installer=installer,
+                bundled=bundle is None or file_id is not None,
+            )
+            distro = installer in DISTRO_INSTALLERS
+            if distro and bundle is not None and file_id is not None:
+                yield from bundle_findings_once(ctx, name, bundle, file_id)
 
 
 class PythonPins:
@@ -249,10 +267,12 @@ class HostPythonPackages:
             return
         for name, version, installer, location in records:
             subject = Subject(name, "host python")
-            yield from python_package_finding(subject, version, installer=installer)
-            bundle = Path(location) / BUNDLES[name]
-            distro = installer in DISTRO_INSTALLERS
-            yield from bundle_findings_once(ctx, name, bundle, distro=distro)
+            bundle, file_id = package_bundle(ctx, name, Path(location))
+            yield from python_package_finding(
+                subject, version, installer=installer, bundled=file_id is not None
+            )
+            if bundle is not None and file_id is not None:
+                yield from bundle_findings_once(ctx, name, bundle, file_id)
 
     @staticmethod
     def not_inspected(version: str) -> Finding:

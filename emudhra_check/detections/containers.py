@@ -2,8 +2,9 @@
 
 PodmanImages probes each image the preflight listed and judges what the probe reports with the
 host's own verdict functions: Node, Bun, Deno and Go by version, certifi, pip and uv by version or
-bundle, the ca-certificates package by its family, and every bundle and keystore by its bytes. An
-image whose probe did not finish is a WARN and nothing from it is judged.
+bundle (INFO when the package has no cacert.pem of its own), the ca-certificates package by its
+family, and every bundle and keystore by its bytes. An image whose probe did not finish is a WARN
+and nothing from it is judged.
 """
 
 from __future__ import annotations
@@ -91,7 +92,10 @@ def image_findings(name: str, report: ProbeReport) -> list[Finding]:
         if python.name in PYTHON_PACKAGES:
             subject = Subject(python.name, where)
             found += python_package_finding(
-                subject, python.version, installer=python.installer
+                subject,
+                python.version,
+                installer=python.installer,
+                bundled=python.bundled != "0",
             )
     for version in report.old_pythons:
         detail = f"{version} predates importlib.metadata, certifi and pip not inspected"

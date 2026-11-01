@@ -51,11 +51,16 @@ if home:
 else:
     paths = list(site.getsitepackages())
 paths.append(site.getusersitepackages())
+bundles = {"certifi": "certifi/cacert.pem", "pip": "pip/_vendor/certifi/cacert.pem"}
 for dist in metadata.distributions(path=paths):
     name = (dist.metadata["Name"] or "").lower()
     if name in ("certifi", "pip", "uv"):
         installer = (dist.read_text("INSTALLER") or "").strip().splitlines()
-        fields = (name, dist.version, installer[0] if installer else "unknown", str(dist.locate_file("")))
+        location = str(dist.locate_file(""))
+        bundled = "-"
+        if name in bundles:
+            bundled = "1" if os.path.isfile(os.path.join(location, bundles[name])) else "0"
+        fields = (name, dist.version, installer[0] if installer else "unknown", bundled, location)
         sys.stdout.write("PY " + " ".join(fields) + "\n")
 ' "$(command -v python3)" 2>/dev/null
 fi

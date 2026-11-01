@@ -66,9 +66,12 @@ class ProbeRuntime:
 
 @dataclass(frozen=True)
 class ProbePython:
+    """A PY record. bundled is 1 when the package's own cacert.pem exists, 0 when not, - for uv."""
+
     name: str
     version: str
     installer: str
+    bundled: str
     location: str
 
 
@@ -242,8 +245,10 @@ def parse_record(kind: bytes, line: bytes) -> Optional[object]:
         fields = words(line, 2)
         return ProbeRuntime(fields[0], fields[1]) if fields else None
     if kind == b"PY":
-        fields = words(line, 4)
-        return ProbePython(*fields) if fields else None
+        fields = words(line, 5)
+        if fields is None or fields[3] not in ("0", "1", "-"):
+            return None
+        return ProbePython(*fields)
     if kind == b"OS":
         return text(line[3:].strip())
     if kind == b"NOPY":

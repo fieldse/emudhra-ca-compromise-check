@@ -1,4 +1,4 @@
-# setup: PY=$(command -v python3) && $PY -I -m venv --without-pip /tmp/v/venv && S=$(echo /tmp/v/venv/lib/python3*/site-packages) && echo 'import os; open("/tmp/EXECUTED-pth", "w")' >$S/evil.pth && mkdir -p $S/certifi-2026.7.22.dist-info && printf 'Metadata-Version: 2.1\nName: certifi\nVersion: 2026.7.22\n' >$S/certifi-2026.7.22.dist-info/METADATA && echo pip >$S/certifi-2026.7.22.dist-info/INSTALLER && PATH=/tmp/v/venv/bin:$PATH && export PATH
+# setup: PY=$(command -v python3) && $PY -I -m venv --without-pip /tmp/v/venv && S=$(echo /tmp/v/venv/lib/python3*/site-packages) && echo 'import os; open("/tmp/EXECUTED-pth", "w")' >$S/evil.pth && mkdir -p $S/certifi-2026.7.22.dist-info $S/certifi && cp /out/certifi/cacert-2026.7.22.pem $S/certifi/cacert.pem && printf 'Metadata-Version: 2.1\nName: certifi\nVersion: 2026.7.22\n' >$S/certifi-2026.7.22.dist-info/METADATA && echo pip >$S/certifi-2026.7.22.dist-info/INSTALLER && PATH=/tmp/v/venv/bin:$PATH && export PATH
 # args: -r /tmp/v
 # exit: 1
 FAIL  certifi [host python] found 2026.7.22, fixed 2026.10.18 (vendors its own CA bundle)

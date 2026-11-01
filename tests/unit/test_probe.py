@@ -131,14 +131,22 @@ class HostileStreamTest(unittest.TestCase):
 
     def test_python_records(self) -> None:
         report = parse_probe_output(
-            b"PY certifi 2026.7.22 pip /usr/lib/python3/dist packages\nNOPY 3.7.17\n"
+            b"PY certifi 2026.7.22 pip 0 /usr/lib/python3/dist packages\nNOPY 3.7.17\n"
+            b"PY pip 26.2.2 pip yes /x\nPY pip 26.2.2 pip /x\n"
         )
-        python = report.pythons[0]
+        (python,) = report.pythons
         self.assertEqual(
-            (python.name, python.version, python.installer, python.location),
-            ("certifi", "2026.7.22", "pip", "/usr/lib/python3/dist packages"),
+            (
+                python.name,
+                python.version,
+                python.installer,
+                python.bundled,
+                python.location,
+            ),
+            ("certifi", "2026.7.22", "pip", "0", "/usr/lib/python3/dist packages"),
         )
         self.assertEqual(report.old_pythons, ("3.7.17",))
+        self.assertEqual(report.dropped, 2)
 
     def test_duplicate_files_are_kept_once(self) -> None:
         stream = GOOD + file_record(

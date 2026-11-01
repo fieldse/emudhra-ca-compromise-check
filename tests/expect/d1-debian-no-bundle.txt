@@ -1,0 +1,8 @@
+# setup: P=$(python3 -I -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])') && mkdir -p $P/certifi-2025.1.31.dist-info $P/pip-23.0.1.egg-info /tmp/e && printf 'Metadata-Version: 2.1\nName: certifi\nVersion: 2025.1.31\n' >$P/certifi-2025.1.31.dist-info/METADATA && echo debian >$P/certifi-2025.1.31.dist-info/INSTALLER && printf 'Metadata-Version: 1.1\nName: pip\nVersion: 23.0.1\n' >$P/pip-23.0.1.egg-info/PKG-INFO
+# caps: default
+# args: -r /tmp/e
+INFO  certifi [host python] found 2025.1.31, no bundled cacert.pem, patched to use the system store
+INFO  pip [host python] found 23.0.1, no bundled cacert.pem, patched to use the system store
+!FAIL  certifi [host python]
+!FAIL  pip [host python]
+!Traceback

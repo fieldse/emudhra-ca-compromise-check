@@ -56,8 +56,8 @@ class PodmanImagesTest(unittest.TestCase):
     def test_runtime_and_package_records(self) -> None:
         stream = (
             b"NODE 1 1 v24.22.0\nRT bun 1.4.3\nRT deno deno 2.9.8 (stable, release, x86_64)\n"
-            b"RT go go version go1.27.2 linux/amd64\nPY certifi 2026.7.22 pip /usr/lib/python3/site-packages\n"
-            b"PY pip 26.2.2 dpkg /usr/lib/python3/dist-packages\nNOPY 3.7.17\nOS alpine\n"
+            b"RT go go version go1.27.2 linux/amd64\nPY certifi 2026.7.22 pip 1 /usr/lib/python3/site-packages\n"
+            b"PY pip 26.2.2 dpkg 1 /usr/lib/python3/dist-packages\nNOPY 3.7.17\nOS alpine\n"
             b"PKG apk ca-certificates-bundle 20260413-r0\n"
         )
         got = image_lines(stream)
@@ -75,6 +75,23 @@ class PodmanImagesTest(unittest.TestCase):
         self.assertEqual(len(got), len(expected_starts), got)
         for line, start in zip(got, expected_starts):
             self.assertTrue(line.startswith(start), (line, start))
+
+    def test_python_packages_without_their_own_bundle(self) -> None:
+        stream = (
+            b"PY certifi 2025.1.31 debian 0 /usr/lib/python3/dist-packages\n"
+            b"PY pip 23.0.1 unknown 0 /usr/lib/python3/dist-packages\n"
+            b"PY certifi 2026.7.22 unknown 1 /usr/local/lib/python3.13/site-packages\n"
+            b"PY uv 0.13.3 unknown - /usr/local/lib/python3.13/site-packages\n"
+        )
+        self.assertEqual(
+            image_lines(stream),
+            [
+                f"INFO  certifi [{WHERE}] found 2025.1.31, no bundled cacert.pem, patched to use the system store",
+                f"INFO  pip [{WHERE}] found 23.0.1, no bundled cacert.pem, patched to use the system store",
+                f"FAIL  certifi [{WHERE}] found 2026.7.22, fixed 2026.10.18 (vendors its own CA bundle)",
+                f"FAIL  uv [{WHERE}] found 0.13.3, fixed 0.13.4 (vendors its own CA bundle)",
+            ],
+        )
 
     def test_suse_records_only_on_suse(self) -> None:
         stream = b"OS opensuse-leap\nPKG rpm ca-certificates 2.0-1\nPKG suse ca-certificates-mozilla 2.92\n"
