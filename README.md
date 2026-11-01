@@ -11,6 +11,7 @@ To check by hand, [read the guide](https://fieldse.github.io/emudhra-ca-compromi
 - [What the check reads](#what-the-check-reads)
 - [What the check runs](#what-the-check-runs)
 - [Verdicts and exit codes](#verdicts-and-exit-codes)
+- [Limitations](#limitations)
 - [Changes from the Bash script](#changes-from-the-bash-script)
 - [Verify and rebuild](#verify-and-rebuild)
 - [The AAA cross-sign path](#the-aaa-cross-sign-path)
@@ -31,7 +32,7 @@ python3 -I -S vuln-check-emudhra-ca-compromise.pyz --root=/opt --containers     
 python3 -I -S vuln-check-emudhra-ca-compromise.pyz --help                       # all options
 ```
 
-`-I -S` keeps the scanned machine's Python settings and site-packages hooks out of the check. Always pass them. Without them the interpreter has already loaded those hooks before the check starts, and the archive then re-executes itself with `-I -S` and prints a note.
+The supported run line is `python3 -I -S vuln-check-emudhra-ca-compromise.pyz`. `-I -S` keeps the scanned machine's Python settings, `site` and `.pth` files out of the check. Run any other way, such as `./vuln-check-emudhra-ca-compromise.pyz` through its shebang or `python3` without the flags, Python imports `site` and runs the machine's `.pth` files before the check starts. The archive then re-executes itself under `-I -S` and prints a note, but only after that startup.
 
 ## Options
 
@@ -50,7 +51,7 @@ python3 -I -S vuln-check-emudhra-ca-compromise.pyz --help                       
 - **Trust stores.** The OS bundle files, Homebrew's bundle and its `ca-certificates` formula version, notes on the macOS system roots keychain, and the `cacerts` of each Java home (`JAVA_HOME`, the `java` on `PATH`, and `java_home` on macOS).
 - **OS packages.** `ca-certificates` through dpkg, apk, rpm and pacman.
 - **Runtimes.** Node.js (including nvm, volta, asdf, fnm and mise installs and Node binaries that apps ship), Bun, Deno, Go and CPython.
-- **Language packages.** certifi, pip and uv, certifi pins in requirements files, `poetry.lock`, `uv.lock` and `Pipfile.lock`, Electron in `package.json` and `node_modules`, Rust `webpki-roots`, `webpki-root-certs` and `rustls-webpki` in `Cargo.lock` and in binaries, `composer/ca-bundle`, `excon`, `castore`, Hex `certifi` and Perl `Mozilla::CA`.
+- **Language packages.** certifi, pip and uv, certifi pins in requirements files, `poetry.lock`, `uv.lock` and `Pipfile.lock`, Electron in `package.json` and `node_modules`, Rust `webpki-roots`, `webpki-root-certs` and `rustls-webpki` in `Cargo.lock` and in binaries, `composer/ca-bundle`, `excon`, `castore`, Hex `certifi` and Perl `Mozilla::CA`. A certifi or pip with no `cacert.pem` of its own, as Debian ships them, uses the system store and is `INFO`.
 - **Binaries and apps.** Go binaries (toolchain and the `x509roots/fallback` module), Rust binaries, Electron apps on macOS and Linux judged by their Electron version, and apps left in ShipIt updater caches. Programs are read in `GOBIN`, each `GOPATH/bin`, `~/.cargo/bin`, `~/.local/bin`, `/usr/local/bin`, Homebrew's `bin` and the scan roots.
 - **Container images**, when you opt in with `-c` or `-i`: runtimes, Python packages, the `ca-certificates` package, CA bundles and Java keystores inside each image.
 
@@ -58,7 +59,9 @@ It never runs a binary it judges. Electron 44.9.1 counts as fixed, as Electron's
 
 ## What the check runs
 
-For version answers the check runs `node`, `bun`, `deno`, `go`, `python3`, `uv` and `perl`, and on macOS `security`, `xcode-select` and `java_home`, plus `podman` with `-c`. Each comes from `PATH` and is skipped when it sits in an excluded directory. On a machine whose `PATH` tools you don't trust, scan from a clean account or pass `-x` for those directories.
+For version answers the check runs `node`, `bun`, `deno`, `go`, `python3`, `uv` and `perl` from `PATH`, and `podman` from `PATH` with `-c`. On macOS it runs `/usr/bin/security`, `/usr/bin/xcode-select` and `/usr/libexec/java_home` by absolute path. A tool in an excluded directory is skipped.
+
+Run as root, the check also skips a tool whose file, or any directory above it, is not owned by root or is group- or world-writable, and prints `INFO  TOOL [host] not run: TOOL is writable by a non-root user`. With `-c`, such a `podman` stops the run with exit 2. On a machine whose `PATH` tools you don't trust, scan from a clean account or pass `-x` for those directories.
 
 ## Verdicts and exit codes
 
@@ -67,9 +70,14 @@ For version answers the check runs `node`, `bun`, `deno`, `go`, `python3`, `uv` 
 - `INFO`: context, such as a compromised key held as a blocklist entry.
 - `ERROR`: a check that failed to run. The rest of the run continues.
 
-The check exits 0 when nothing fails, 1 on any `FAIL` (or any `WARN` or `ERROR` with `--strict`) and 2 on a usage or environment error, so it can gate CI. The last line is `SUMMARY pass=N fail=N warn=N info=N skip=N error=N`.
+The check exits 1 on any `FAIL`, 2 on a usage or environment error, and 0 otherwise. A `WARN` or `ERROR` alone leaves the exit code at 0, so a check that failed to run does not fail the run. Pass `--strict` to exit 1 on `WARN` and `ERROR` as well, for a CI gate that must notice them. The last line is `SUMMARY pass=N fail=N warn=N info=N skip=N error=N`.
 
 A stock Mac fails `--strict` on the `AAA Certificate Services` line for `/etc/ssl/cert.pem` until Apple updates that file. Apple has said only that a future macOS update will fix it.
+
+## Limitations
+
+- An exclude matches the excluded directory itself. A subdirectory of it that is bind-mounted at another path under a scan root is walked at that path. Exclude the mount point as well.
+- A file above 32 MiB is read through `mmap`. If another process truncates it during the read, the run ends with `SIGBUS`.
 
 ## Changes from the Bash script
 

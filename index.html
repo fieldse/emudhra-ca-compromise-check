@@ -403,7 +403,7 @@ python3 -I -S vuln-check-emudhra-ca-compromise.pyz -r ~/src -x ~/src/vendor -q  
 python3 -I -S vuln-check-emudhra-ca-compromise.pyz --root=/opt --containers     # also probe local Podman images
 python3 -I -S vuln-check-emudhra-ca-compromise.pyz -i registry/app:tag          # probe one local image
 python3 -I -S vuln-check-emudhra-ca-compromise.pyz --help</pre></div>
-    <p><code>-I -S</code> keeps the scanned machine’s Python settings and site-packages hooks out of the check, so always pass them. The archive is reproducible: the README shows how to rebuild it in a container under Python 3.9 or 3.13 and compare it byte for byte.</p>
+    <p><code>-I -S</code> keeps the scanned machine’s Python settings, <code>site</code> and <code>.pth</code> files out of the check, so always run it as <code>python3 -I -S FILE</code>. Run through its shebang, Python runs those hooks before the archive re-executes itself under <code>-I -S</code>. The archive is reproducible: the README shows how to rebuild it in a container under Python 3.9 or 3.13 and compare it byte for byte.</p>
     <h3>What it checks</h3>
     <ul class="notes">
       <li><strong>Certificates and keys inside files.</strong> It looks in CA bundles, Java keystores (read directly, without <code>keytool</code>), and Node.js, Bun, Deno, Go and Rust binaries and Electron apps for <code>emSign ECC Root CA - G3</code> and the compromised certificates. It matches each certificate and its public key in PEM or DER, so bundles without comments or labels are covered. It never runs a binary it judges.</li>
@@ -418,7 +418,7 @@ python3 -I -S vuln-check-emudhra-ca-compromise.pyz --help</pre></div>
       <dt>INFO</dt><dd>Context, such as a compromised key held as a blocklist entry.</dd>
       <dt>ERROR</dt><dd>A check that failed to run. The rest of the run continues.</dd>
     </dl>
-    <p>The check exits 0 when nothing fails, 1 on any <code>FAIL</code> (or any <code>WARN</code> or <code>ERROR</code> with <code>--strict</code>) and 2 on a usage or environment error, so it can gate CI. A stock Mac fails <code>--strict</code> on the AAA line for <code>/etc/ssl/cert.pem</code> until Apple updates that file&nbsp;<span class="rl">[<a href="references.html#r099">R099</a>, <a href="references.html#r044">R044</a>]</span>.</p>
+    <p>The check exits 1 on any <code>FAIL</code>, 2 on a usage or environment error, and 0 otherwise. A <code>WARN</code> or <code>ERROR</code> alone exits 0. Pass <code>--strict</code> to exit 1 on those too when it gates CI. A stock Mac fails <code>--strict</code> on the AAA line for <code>/etc/ssl/cert.pem</code> until Apple updates that file&nbsp;<span class="rl">[<a href="references.html#r099">R099</a>, <a href="references.html#r044">R044</a>]</span>.</p>
     <h3>Changes from the Bash script</h3>
     <p>The zipapp replaces the earlier Bash script. Its lines keep the same format, with these changes:</p>
     <ul class="notes">

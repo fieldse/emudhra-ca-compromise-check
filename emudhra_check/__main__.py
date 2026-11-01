@@ -1,9 +1,11 @@
 """__main__.py: entry point of the emudhra_check package and of the archive.
 
 Refuses interpreters older than 3.9, re-executes the archive under python3 -I -S when the
-interpreter was started without those flags, then runs the check. It imports only os and sys
-before the re-exec, so nothing on the scanned machine's module path loads first. It is written
-in syntax that Python 3.8 parses so the version message reaches the user.
+interpreter was started without those flags, then runs the check. The supported run line is
+python3 -I -S FILE. Run any other way, such as through the shebang, the interpreter has already
+imported site and processed .pth files before this module runs, and the re-exec happens only after
+that startup. This module imports only os and sys before the re-exec. It is written in syntax that
+Python 3.8 parses so the version message reaches the user.
 """
 
 import os

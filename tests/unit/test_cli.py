@@ -143,7 +143,7 @@ class ParseArgsTest(unittest.TestCase):
             out.startswith("Usage: check.pyz [-r|--root ROOT]... [-x|--exclude DIR]...")
         )
         self.assertIn("AAA Certificate Services is reported as WARN.", out)
-        self.assertIn("1 any FAIL (or WARN or ERROR with --strict)", out)
+        self.assertIn("A WARN or ERROR alone exits 0\nunless --strict is given", out)
         self.assertEqual(err, "")
 
     def test_main_bad_option(self) -> None:

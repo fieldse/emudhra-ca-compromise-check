@@ -65,14 +65,15 @@ Options:
   -x, --exclude DIR Never enter this directory (repeatable). Also accepts --exclude=DIR
   -c, --containers  Also probe local Podman images (runs a probe with --network=none)
   -i, --image IMAGE Probe only this local image (repeatable, implies -c)
-  -q, --quiet       Print only FAIL and WARN lines plus the summary
-  -s, --strict      Exit 1 on WARN as well as FAIL
+  -q, --quiet       Print only FAIL, WARN and ERROR lines plus the summary
+  -s, --strict      Exit 1 on WARN and ERROR as well as FAIL
   -h, --help        Show this help
 
 A FAIL on a bundle, keystore or binary means it still contains emSign ECC Root CA - G3 or a
 compromised certificate, so software using it trusts certificates anyone can now issue.
 Version FAILs mean a release older than the fix. AAA Certificate Services is reported as WARN.
-Exit codes: 0 no FAIL, 1 any FAIL (or WARN or ERROR with --strict), 2 usage or environment error.
+Exit codes: 0 no FAIL, 1 any FAIL, 2 usage or environment error. A WARN or ERROR alone exits 0
+unless --strict is given, which makes it exit 1.
 
 Examples:
   python3 -I -S {prog} -r ~ -q
