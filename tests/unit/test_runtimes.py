@@ -192,6 +192,43 @@ class VersionVerdictTest(unittest.TestCase):
 SUBJECT = Subject("node", "host")
 
 
+class RefusedToolTest(unittest.TestCase):
+    """A root run does not execute a tool a non-root user can change, but still claims and reads it."""
+
+    def context(self, name: str, binary: bytes) -> tuple:
+        tool = located(
+            f"/usr/local/bin/{name}", real=f"/opt/{name}", ino=21, writable=True
+        )
+        files = FakeFiles({f"/opt/{name}": binary}, ids={f"/opt/{name}": FileId(2, 21)})
+        commands = FakeCommands({name: tool})
+        return make_context(files, commands), commands
+
+    def test_bun_binary_with_the_g3_root_still_fails(self) -> None:
+        ctx, commands = self.context("bun", b"\x7fELF" + G3_ECC_ROOT.der)
+        self.assertEqual(
+            lines(BunHost(), ctx),
+            [
+                "WARN  bun [host] not run: bun is writable by a non-root user",
+                f"FAIL  bun [/opt/bun] contains {G3_ECC_ROOT.label}",
+            ],
+        )
+        self.assertEqual(commands.calls, [])
+        self.assertFalse(ctx.ledger.claim(FileId(2, 21)))
+
+    def test_node_version_comes_from_the_binary(self) -> None:
+        url = b"nodejs.org/download/release/v24.22.0/node-v24.22.0-headers.tar.gz"
+        ctx, commands = self.context("node", b"\x7fELF" + url + G3_ECC_ROOT.pem_line)
+        got = lines(NodeHost(), ctx)
+        self.assertEqual(
+            got[0], "WARN  node [host] not run: node is writable by a non-root user"
+        )
+        self.assertTrue(
+            got[1].startswith("FAIL  node [host] found 24.22.0, fixed 24.22.1"), got
+        )
+        self.assertEqual(commands.calls, [])
+        self.assertFalse(ctx.ledger.claim(FileId(2, 21)))
+
+
 class NodeStoreTest(unittest.TestCase):
     def levels(self, data: bytes) -> list:
         files = FakeFiles({"/fx/bin/node": data}, ids={"/fx/bin/node": FileId(2, 1000)})

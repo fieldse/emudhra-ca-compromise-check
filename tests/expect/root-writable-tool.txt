@@ -1,7 +1,9 @@
-# Run as root, a uv on PATH under /tmp, which every user can write, is not run.
-# setup: mkdir -p /tmp/u/bin /tmp/r && printf '#!/bin/sh\n: >/tmp/EXECUTED-uv\necho "uv 0.13.3 (fixture)"\n' >/tmp/u/bin/uv && chmod 755 /tmp/u/bin/uv && PY=$(command -v python3) && PATH=/tmp/u/bin:$PATH && export PATH
-# args: -r /tmp/r
-INFO  uv [host] not run: uv is writable by a non-root user
+# Run as root, a uv in a directory every user can write is not run, but its binary is still read.
+# setup: mkdir -p /tmp/u/bin /tmp/r && chmod 777 /tmp/u/bin && printf '#!/bin/sh\n: >/tmp/EXECUTED-uv\necho "uv 0.13.3 (fixture)"\nexit 0\n' >/tmp/u/bin/uv && cat /out/bundles/g3-ecc-root.der >>/tmp/u/bin/uv && chmod 755 /tmp/u/bin/uv && PY=$(command -v python3) && PATH=/tmp/u/bin:$PATH && export PATH
+# args: -q -r /tmp/r
+# exit: 1
+WARN  uv [host] not run: uv is writable by a non-root user
+FAIL  uv [/tmp/u/bin/uv] contains emSign ECC Root CA - G3 (removed root)
 !MARKER
 !uv [host uv]
 !Traceback

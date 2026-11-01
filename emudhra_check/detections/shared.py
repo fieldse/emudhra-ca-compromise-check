@@ -29,6 +29,7 @@ __all__ = [
     "MATCHER",
     "content_findings",
     "find_tool",
+    "not_run_finding",
     "read_or_skip",
     "release",
     "run_tool",
@@ -87,7 +88,10 @@ def content_findings(
 
 
 def find_tool(ctx: Context, name: str) -> Union[Located, list[Finding]]:
-    """Return the tool on the filtered PATH, or the lines for a tool that is absent or excluded."""
+    """Return the tool on the filtered PATH, or the lines for a tool that is absent or excluded.
+
+    A tool a root run may not execute is still returned, so its binary can be claimed and read.
+    """
     tool = ctx.commands.which(name)
     if tool is None:
         return []
@@ -99,21 +103,21 @@ def find_tool(ctx: Context, name: str) -> Union[Located, list[Finding]]:
                 "found on PATH inside an excluded directory, not run",
             )
         ]
-    if tool.writable:
-        return [
-            Finding(
-                Level.INFO,
-                Subject(name, "host"),
-                f"not run: {name} is writable by a non-root user",
-            )
-        ]
     return tool
+
+
+def not_run_finding(name: str) -> Finding:
+    """Return the WARN for a tool a root run refuses to execute."""
+    detail = f"not run: {name} is writable by a non-root user"
+    return Finding(Level.WARN, Subject(name, "host"), detail)
 
 
 def run_tool(
     ctx: Context, tool: Located, name: str, args: Sequence[str]
 ) -> Union[CommandResult, list[Finding]]:
-    """Run a permitted tool, or return the WARN line when it timed out."""
+    """Run a permitted tool, or return the WARN line when it may not run or timed out."""
+    if tool.writable:
+        return [not_run_finding(name)]
     result = ctx.commands.run(tool, args)
     if result.timed_out:
         return [

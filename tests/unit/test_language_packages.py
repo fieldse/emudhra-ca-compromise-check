@@ -323,7 +323,7 @@ class HostPythonTest(unittest.TestCase):
         ctx = make_context(FakeFiles(), commands)
         self.assertEqual(
             lines(HostPythonPackages(), ctx),
-            ["INFO  python3 [host] not run: python3 is writable by a non-root user"],
+            ["WARN  python3 [host] not run: python3 is writable by a non-root user"],
         )
         self.assertEqual(commands.calls, [])
 

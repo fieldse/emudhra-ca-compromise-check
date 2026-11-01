@@ -14,6 +14,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable, ClassVar, Iterator, Optional, Sequence
 
+from emudhra_check.buildinfo import node_release_version
 from emudhra_check.certificates import (
     G3_ECC_ROOT,
     ISRG_ROOT_X1_LINE,
@@ -26,6 +27,7 @@ from emudhra_check.detections.shared import (
     MATCHER,
     content_findings,
     find_tool,
+    not_run_finding,
     read_or_skip,
     release,
     run_tool,
@@ -163,15 +165,25 @@ def node_store_findings(
 
 
 def scan_node_binary(
-    ctx: Context, subject: Subject, version: str, path: Path, file_id: Optional[FileId]
+    ctx: Context,
+    subject: Subject,
+    version: Optional[str],
+    path: Path,
+    file_id: Optional[FileId],
 ) -> list[Finding]:
-    """Read a Node binary and judge it, or judge the version alone when it cannot be read."""
+    """Read a Node binary and judge it, or judge the version alone when it cannot be read.
+
+    A version of None is read from the release URL the binary names.
+    """
     data = read_or_skip(
         ctx, Subject(subject.name, str(path)), path, MAX_BINARY_BYTES, file_id
     )
     if isinstance(data, list):
+        if version is None:
+            return data
         return data + node_store_findings(subject, version, (), StoreKind.BUNDLED)
     try:
+        version = version or node_release_version(data) or "unknown"
         matches = MATCHER.scan(data)
         has_store = data.find(ISRG_ROOT_X1_LINE) >= 0
     finally:
@@ -243,6 +255,12 @@ class NodeHost:
             ]
             return
         if not claimed(ctx, tool):
+            return
+        if tool.writable:
+            yield not_run_finding("node")
+            yield from scan_node_binary(
+                ctx, Subject("node", "host"), None, tool.real, tool.file_id
+            )
             return
         lines, version = version_of(ctx, tool, "node", ["--version"], node_version)
         yield from lines
