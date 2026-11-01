@@ -282,6 +282,8 @@ class RunTest(unittest.TestCase):
                 "host-python-packages",
                 "uv-host",
                 "electron-packages",
+                "go-binaries",
+                "rust-binaries",
                 "cargo-locks",
                 "composer-locks",
                 "gemfile-locks",

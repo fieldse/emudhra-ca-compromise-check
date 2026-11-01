@@ -1,6 +1,7 @@
 """test_hostenv.py: unit tests of emudhra_check/hostenv.py.
 
-Filters PATH, finds the Homebrew prefix and decides macOS stubs against a dictionary-backed oracle.
+Filters PATH, finds the Homebrew prefix, lists the fixed binary directories and decides macOS stubs
+against a dictionary-backed oracle.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from emudhra_check.hostenv import (
     child_environment,
     filter_path,
     find_brew_prefix,
+    fixed_binary_dirs,
     is_macos_stub,
 )
 from emudhra_check.scope import ExcludeSet, PathFacts, resolve_excludes
@@ -137,6 +139,50 @@ class ChildEnvironmentTest(unittest.TestCase):
             },
         )
         self.assertNotIn("TMPDIR", child_environment(hostenv, {}))
+
+
+def env_with(
+    gobin: Optional[str] = None,
+    gopath: Optional[str] = None,
+    brew: Optional[str] = None,
+) -> HostEnvironment:
+    return HostEnvironment(
+        "Darwin",
+        HOME,
+        (),
+        Path(brew) if brew else None,
+        gobin,
+        gopath,
+        None,
+        Version("3.9.6", (3, 9, 6)),
+    )
+
+
+class FixedBinaryDirsTest(unittest.TestCase):
+    def test_defaults(self) -> None:
+        self.assertEqual(
+            fixed_binary_dirs(env_with()),
+            tuple(
+                Path(p)
+                for p in (
+                    "/home/u/go/bin",
+                    "/home/u/.cargo/bin",
+                    "/home/u/.local/bin",
+                    "/usr/local/bin",
+                )
+            ),
+        )
+
+    def test_gobin_gopath_entries_and_homebrew(self) -> None:
+        got = fixed_binary_dirs(
+            env_with("/g/bin", "/p1:relative::/p2", "/opt/homebrew")
+        )
+        self.assertEqual(got[:3], (Path("/g/bin"), Path("/p1/bin"), Path("/p2/bin")))
+        self.assertEqual(got[-1], Path("/opt/homebrew/bin"))
+        self.assertNotIn(Path("/home/u/go/bin"), got)
+
+    def test_relative_gobin_is_ignored(self) -> None:
+        self.assertEqual(fixed_binary_dirs(env_with("bin"))[0], Path("/home/u/go/bin"))
 
 
 if __name__ == "__main__":

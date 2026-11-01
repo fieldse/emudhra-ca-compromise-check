@@ -1,0 +1,12 @@
+# Three programs with hand-built Go build information: go1.27.2 with the fallback roots module from before
+# the fix and the G3 root as DER, go1.27.3 with the fixed module, and a header from before Go 1.18.
+# setup: python3 -I /repo/tests/fixtures/make_binaries.py go
+# args: -r /tmp/fx
+# exit: 1
+FAIL  go binary [/tmp/fx/bin/go-old] found 1.27.2, fixed 1.27.3 (built with an affected toolchain, rebuild)
+FAIL  go fallback roots [/tmp/fx/bin/go-old] found v0.0.0-20260916154351-b853e4b620cd, fixed v0.0.0-20261020153306-9f2b28d4331a (embeds emSign ECC Root CA - G3, update the module and rebuild)
+FAIL  go binary [/tmp/fx/bin/go-old] contains emSign ECC Root CA - G3 (removed root)
+PASS  go binary [/tmp/fx/bin/go-new] found 1.27.3, fixed 1.27.3
+!FAIL  go fallback roots [/tmp/fx/bin/go-new]
+FAIL  go binary [/tmp/fx/bin/go-legacy] found a toolchain older than Go 1.18, no fix for that branch, rebuild
+!Traceback

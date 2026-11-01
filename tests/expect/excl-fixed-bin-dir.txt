@@ -1,0 +1,7 @@
+# A Go program built with an affected toolchain in ~/.cargo/bin, a fixed binary directory, with that folder excluded.
+# setup: python3 -I /repo/tests/fixtures/make_trees.py exclude && python3 -I /repo/tests/fixtures/make_binaries.py cargo-home && export HOME=/tmp/t/home
+# args: -r /tmp/t/open -x /tmp/t/home/.cargo
+# exit: 0
+INFO  go [binaries] no Go binaries found in the binary directories or under the scan roots
+![/tmp/t/home/.cargo
+!Traceback

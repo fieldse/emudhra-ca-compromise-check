@@ -67,6 +67,7 @@ __all__ = [
     "UvHost",
     "electron_range_finding",
     "python_package_finding",
+    "rustls_webpki_finding",
     "webpki_findings",
 ]
 

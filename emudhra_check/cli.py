@@ -28,6 +28,7 @@ from emudhra_check.hostenv import (
     child_environment,
     filter_path,
     find_brew_prefix,
+    fixed_binary_dirs,
 )
 from emudhra_check.limits import MAX_ERROR_CHARS
 from emudhra_check.report import (
@@ -147,6 +148,15 @@ def all_interests(registry: Sequence[Detection]) -> FileInterests:
     return union
 
 
+def executable_globs(registry: Sequence[Detection]) -> frozenset[str]:
+    """Return the dir_globs of the detections that want program candidates."""
+    globs: frozenset[str] = frozenset()
+    for detection in registry:
+        if detection.interests.executables:
+            globs = globs | detection.interests.dir_globs
+    return globs
+
+
 def build_context(
     options: Options,
     environ: Mapping[str, str],
@@ -186,7 +196,12 @@ def build_context(
         hostenv, result.scope, child_environment(hostenv, environ), oracle
     )
     host = LocalHost(commands, system, hostenv.java_home_env)
-    index = files.walk(all_interests(registry), (), buildinfo.classify)
+    index = files.walk(
+        all_interests(registry),
+        fixed_binary_dirs(hostenv),
+        buildinfo.classify,
+        executable_globs(registry),
+    )
     return Context(
         result.scope,
         hostenv,

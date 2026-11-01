@@ -16,6 +16,7 @@ CHAIN_DEPTH = 2000
 SPARSE_BYTES = 100 * 1024 * 1024
 LINE_BYTES = 32 * 1024 * 1024
 DIGITS = 1024 * 1024
+BIG_BINARY = 64 * 1024 * 1024
 
 
 def write(path: str, data: bytes, mode: int = 0o644) -> None:
@@ -128,6 +129,8 @@ def hostile_tree(base: str) -> None:
     write(f"{base}/a0444/cacert.pem", AFFECTED)
     os.chmod(f"{base}/a0444", 0o444)
     write(f"{base}/a0111/bin/tool", b"\x7fELF" + b"\0" * 64, 0o111)
+    near_rust = b"\x7fELF" + b"/webpki-roots-" * (BIG_BINARY // 14 + 1)
+    write(f"{base}/bigbin/bin/tool", near_rust[:BIG_BINARY], 0o755)
 
 
 def main() -> None:

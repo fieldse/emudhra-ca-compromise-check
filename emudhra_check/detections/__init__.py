@@ -5,6 +5,7 @@ REGISTRY lists one instance of every detection class. Its order is the output or
 
 from __future__ import annotations
 
+from emudhra_check.detections.binaries import GoBinaries, RustBinaries
 from emudhra_check.detections.language_packages import (
     CargoLocks,
     ComposerLocks,
@@ -51,6 +52,8 @@ REGISTRY: tuple[Detection, ...] = (
     HostPythonPackages(),
     UvHost(),
     ElectronPackages(),
+    GoBinaries(),
+    RustBinaries(),
     CargoLocks(),
     ComposerLocks(),
     GemfileLocks(),

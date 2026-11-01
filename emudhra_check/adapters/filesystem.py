@@ -84,12 +84,13 @@ class Walk:
         interests: FileInterests,
         fixed_dirs: tuple[Path, ...],
         classify: Classifier,
+        executable_globs: frozenset[str],
     ) -> None:
         self.owner = files
         self.interests = interests
         self.fixed_dirs = frozenset(fixed_dirs)
         self.classify = classify
-        self.globs = interests.dir_globs if interests.executables else frozenset()
+        self.globs = executable_globs
         self.files: list[IndexedFile] = []
         self.dirs: list[IndexedDir] = []
         self.executables: list[Executable] = []
@@ -288,9 +289,14 @@ class LocalFiles:
         interests: FileInterests,
         fixed_dirs: tuple[Path, ...],
         classify: Classifier,
+        executable_globs: frozenset[str] = frozenset(),
     ) -> Index:
-        """Walk every root once and return what the interests asked for."""
-        return Walk(self, interests, fixed_dirs, classify).run()
+        """Walk every root once and return what the interests asked for.
+
+        executable_globs are the dir_globs of the detections that want executables, whose matching
+        files become program candidates beside those of the bin and app rules.
+        """
+        return Walk(self, interests, fixed_dirs, classify, executable_globs).run()
 
     def resolve(self, path: Path) -> Optional[Path]:
         """Return the real path when the scope permits it, else count the refusal and return None."""

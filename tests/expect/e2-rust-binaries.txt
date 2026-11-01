@@ -1,0 +1,16 @@
+# Three programs with cargo source paths. rust-old holds rustls-webpki 0.103.13 and the G3 root's public key as a
+# trust anchor, rust-fixed rustls-webpki 0.103.16 and the eight intermediate keys as its blocklist, and
+# rust-wrapper webpki-roots 0.26.11 beside 1.0.9. The keys are openssl's.
+# setup: python3 -I /repo/tests/fixtures/make_binaries.py rust
+# args: -r /tmp/fx
+# exit: 1
+~FAIL  rustls-webpki [/tmp/fx/bin/rust-old] found 0.103.13
+FAIL  rust binary [/tmp/fx/bin/rust-old] contains the public key of emSign ECC Root CA - G3 (removed root) as a trust anchor
+~PASS  rustls-webpki [/tmp/fx/bin/rust-fixed] found 0.103.16
+~INFO  rust binary [/tmp/fx/bin/rust-fixed] holds the public key of EM DV TLS CA - G3B (compromised key) as a blocklist entry
+PASS  rust binary [/tmp/fx/bin/rust-fixed] contains no compromised eMudhra certificate
+!FAIL  rust binary [/tmp/fx/bin/rust-fixed]
+!FAIL  rustls-webpki [/tmp/fx/bin/rust-fixed]
+~FAIL  webpki-roots [/tmp/fx/bin/rust-wrapper] found 0.26.11, wraps 1.0.9
+~FAIL  webpki-roots [/tmp/fx/bin/rust-wrapper] found 1.0.9, fixed 1.0.10
+!Traceback

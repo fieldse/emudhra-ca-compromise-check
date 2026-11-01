@@ -2,7 +2,8 @@
 
 Filters PATH to absolute directories outside every excluded directory, finds the Homebrew prefix
 from the PATH directory holding brew without running it, builds the child processes' allowlisted
-environment, and decides whether a macOS /usr/bin tool is a stub. Pure over the PathOracle.
+environment, lists the fixed binary directories, and decides whether a macOS /usr/bin tool is a stub.
+Pure over the PathOracle.
 """
 
 from __future__ import annotations
@@ -92,3 +93,18 @@ def child_environment(
 def is_macos_stub(path: Path, system: str, developer_tools_installed: bool) -> bool:
     """Return whether path is a macOS /usr/bin stub that prompts to install the developer tools."""
     return system == "Darwin" and path in MACOS_STUBS and not developer_tools_installed
+
+
+def fixed_binary_dirs(hostenv: HostEnvironment) -> tuple[Path, ...]:
+    """Return the directories whose programs the binary detections list: GOBIN, each GOPATH bin and the usual bins."""
+    dirs: list[Path] = []
+    if hostenv.gobin and hostenv.gobin.startswith("/"):
+        dirs.append(Path(hostenv.gobin))
+    gopaths = [p for p in (hostenv.gopath or "").split(":") if p.startswith("/")]
+    for entry in gopaths or [str(hostenv.home / "go")]:
+        dirs.append(Path(entry) / "bin")
+    dirs += [hostenv.home / ".cargo" / "bin", hostenv.home / ".local" / "bin"]
+    dirs.append(Path("/usr/local/bin"))
+    if hostenv.brew_prefix is not None:
+        dirs.append(hostenv.brew_prefix / "bin")
+    return tuple(dict.fromkeys(dirs))
