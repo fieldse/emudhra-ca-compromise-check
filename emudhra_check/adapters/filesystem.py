@@ -1,10 +1,11 @@
 """filesystem.py: the file-system adapter, the only module that walks, stats and reads scanned files.
 
-LocalPathOracle resolves paths and reports file ids. LocalFiles walks the scan roots once with
-os.fwalk, never following directory symlinks, never crossing a device and never entering an
-excluded directory, and reads files with O_NOFOLLOW, S_ISREG and a size cap. Files above
-MAX_TEXT_BYTES are mapped with mmap. A mapped file truncated by another process raises SIGBUS,
-which Python cannot catch.
+LocalPathOracle resolves paths and reports file ids. LocalFiles walks the scan roots once, opening
+each directory relative to its parent's descriptor without following a symlink or blocking and
+checking it is the directory listed, never crossing a device and never entering an excluded
+directory. A directory that cannot be opened or listed is skipped with a notice. Files are read with
+O_NOFOLLOW, S_ISREG and a size cap. Files above MAX_TEXT_BYTES are mapped with mmap. A mapped file
+truncated by another process raises SIGBUS, which Python cannot catch.
 """
 
 from __future__ import annotations
@@ -48,11 +49,51 @@ from emudhra_check.scope import (
 )
 
 READ_CHUNK = 1024 * 1024
+# O_DIRECTORY and O_NONBLOCK each keep a FIFO swapped in for a directory from blocking the open.
+DIR_FLAGS = os.O_DIRECTORY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
 Classifier = Callable[[Buffer], BinaryKind]
 
 
 def file_id_of(st: os.stat_result) -> FileId:
     return FileId(st.st_dev, st.st_ino)
+
+
+def open_directory(
+    name: Union[str, Path], expected: FileId, dir_fd: Optional[int] = None
+) -> Optional[int]:
+    """Open a directory relative to dir_fd, or None when what opened is not the directory listed.
+
+    Raises OSError when the open fails.
+    """
+    fd = os.open(name, os.O_RDONLY | DIR_FLAGS, dir_fd=dir_fd)
+    try:
+        st = os.fstat(fd)
+    except OSError:
+        os.close(fd)
+        raise
+    if stat.S_ISDIR(st.st_mode) and file_id_of(st) == expected:
+        return fd
+    os.close(fd)
+    return None
+
+
+def list_entries(fd: int) -> tuple[list[str], list[str]]:
+    """Return the names in an open directory as directories and the rest, a symlink by its target."""
+    dirs: list[str] = []
+    others: list[str] = []
+    with os.scandir(fd) as entries:
+        for entry in entries:
+            try:
+                is_dir = entry.is_dir()
+            except OSError:
+                try:
+                    if entry.is_symlink():
+                        others.append(entry.name)
+                except OSError:
+                    pass
+                continue
+            (dirs if is_dir else others).append(entry.name)
+    return dirs, others
 
 
 class LocalPathOracle:
@@ -144,57 +185,69 @@ class Walk:
                 self.consider_program(path, real / name, st)
 
     def walk_root(self, root: Root) -> None:
+        """Walk one root top down. Directories that could not be opened or listed are noted last, sorted."""
+        missed: list[Path] = []
         try:
-            os.close(os.open(root.path, os.O_RDONLY | os.O_DIRECTORY))
-        except OSError:
+            fd = open_directory(root.path, root.file_id)
+        except (OSError, ValueError):
+            fd = None
+        if fd is None:
             self.notices.append(notice("scan", root.path, "not readable, skipped"))
             return
-        base_depth = len(root.path.parts)
-        expected = {str(root.path)}
-        opened: set[str] = set()
-        for dirpath, dirnames, filenames, dirfd in os.fwalk(
-            str(root.path), topdown=True, follow_symlinks=False
-        ):
-            opened.add(dirpath)
-            here = Path(dirpath)
-            at_limit = len(here.parts) - base_depth >= MAX_WALK_DEPTH
-            kept = []
-            for name in sorted(dirnames):
-                path = here / name
-                try:
-                    st = os.stat(name, dir_fd=dirfd, follow_symlinks=False)
-                except (OSError, ValueError):
-                    self.notices.append(notice("scan", path, "not readable, skipped"))
-                    continue
-                if (
-                    not stat.S_ISDIR(st.st_mode)
-                    or st.st_dev != root.dev
-                    or is_pruned(path)
-                ):
-                    continue
-                file_id = file_id_of(st)
-                if not self.owner.scope.permits(file_id):
-                    continue
-                if not at_limit and self.interests.matches(path):
-                    self.dirs.append(IndexedDir(path, file_id))
-                kept.append(name)
-            if kept and at_limit:
-                self.notices.append(
-                    notice(
-                        "scan",
-                        here,
-                        f"deeper than {MAX_WALK_DEPTH} levels, not entered",
-                    )
+        try:
+            self.walk_directory(root, root.path, fd, 0, missed)
+        finally:
+            os.close(fd)
+        for path in sorted(missed, key=str):
+            self.notices.append(notice("scan", path, "not readable, skipped"))
+
+    def walk_directory(
+        self, root: Root, here: Path, fd: int, depth: int, missed: list[Path]
+    ) -> None:
+        """Index one open directory's entries, then open and walk each kept subdirectory relative to fd."""
+        try:
+            dirnames, filenames = list_entries(fd)
+        except OSError:
+            missed.append(here)
+            return
+        at_limit = depth >= MAX_WALK_DEPTH
+        kept: list[tuple[str, FileId]] = []
+        for name in sorted(dirnames):
+            path = here / name
+            try:
+                st = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            except (OSError, ValueError):
+                self.notices.append(notice("scan", path, "not readable, skipped"))
+                continue
+            if not stat.S_ISDIR(st.st_mode) or st.st_dev != root.dev or is_pruned(path):
+                continue
+            file_id = file_id_of(st)
+            if not self.owner.scope.permits(file_id):
+                continue
+            if not at_limit and self.interests.matches(path):
+                self.dirs.append(IndexedDir(path, file_id))
+            kept.append((name, file_id))
+        if kept and at_limit:
+            self.notices.append(
+                notice(
+                    "scan", here, f"deeper than {MAX_WALK_DEPTH} levels, not entered"
                 )
-                kept = []
-            dirnames[:] = kept
-            expected.update(
-                dirpath + "/" + name if dirpath != "/" else "/" + name for name in kept
             )
-            for name in sorted(filenames):
-                self.consider_file(root, here / name, name, dirfd)
-        for missed in sorted(expected - opened):
-            self.notices.append(notice("scan", missed, "not readable, skipped"))
+            kept = []
+        for name in sorted(filenames):
+            self.consider_file(root, here / name, name, fd)
+        for name, file_id in kept:
+            try:
+                child = open_directory(name, file_id, fd)
+            except (OSError, ValueError):
+                child = None
+            if child is None:
+                missed.append(here / name)
+                continue
+            try:
+                self.walk_directory(root, here / name, child, depth + 1, missed)
+            finally:
+                os.close(child)
 
     def consider_file(self, root: Root, path: Path, name: str, dirfd: int) -> None:
         """Index one directory entry that is not a directory, when an interest or the program rule wants it."""

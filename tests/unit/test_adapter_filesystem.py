@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 from unittest import mock
 
 from emudhra_check.adapters import filesystem
@@ -40,12 +40,25 @@ ORACLE = LocalPathOracle()
 WATCHDOG = 10
 
 
+class Hung(Exception):
+    """Raised by the watchdog when a walk blocks."""
+
+
+def raise_hung(signum: int, frame: Any) -> None:
+    raise Hung()
+
+
 def other(data: Any) -> BinaryKind:
     return BinaryKind.OTHER
 
 
 def file_id(path: Path) -> FileId:
     st = os.stat(path)
+    return FileId(st.st_dev, st.st_ino)
+
+
+def file_id_of_fd(fd: int) -> FileId:
+    st = os.fstat(fd)
     return FileId(st.st_dev, st.st_ino)
 
 
@@ -349,6 +362,76 @@ class WalkTest(TreeTest):
         self.assertEqual(
             lines(index),
             [f"INFO  scan [{self.root}/{deep}] deeper than 128 levels, not entered"],
+        )
+
+    def walk_with_swap(self, swap: Callable[[Path], None], flags: int) -> Any:
+        """Walk a root whose directory d is replaced by swap after the root is listed and before d is opened."""
+        write(self.root / "a.pem")
+        write(self.root / "d" / "cacert.pem")
+        write(self.root / "e" / "cacert.pem")
+        consider_file = filesystem.Walk.consider_file
+
+        def consider(walk: Any, root: Root, path: Path, name: str, fd: int) -> None:
+            if path == self.root / "a.pem":
+                (self.root / "d").rename(self.tmp / "moved")
+                swap(self.root / "d")
+            consider_file(walk, root, path, name, fd)
+
+        previous = signal.signal(signal.SIGALRM, raise_hung)
+        signal.alarm(WATCHDOG)
+        try:
+            with mock.patch.object(
+                filesystem.Walk, "consider_file", consider
+            ), mock.patch.object(filesystem, "DIR_FLAGS", flags):
+                return self.walk()
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, previous)
+
+    def assert_swap_skipped(self, index: Any) -> None:
+        self.assertEqual(
+            self.indexed(index), [f"{self.root}/a.pem", f"{self.root}/e/cacert.pem"]
+        )
+        self.assertEqual(
+            lines(index), [f"INFO  scan [{self.root}/d] not readable, skipped"]
+        )
+
+    def test_directory_swapped_for_a_fifo(self) -> None:
+        self.assert_swap_skipped(self.walk_with_swap(os.mkfifo, filesystem.DIR_FLAGS))
+
+    def test_directory_swapped_for_a_file(self) -> None:
+        self.assert_swap_skipped(self.walk_with_swap(write, filesystem.DIR_FLAGS))
+
+    def test_directory_swapped_for_a_symlink(self) -> None:
+        def link(path: Path) -> None:
+            path.symlink_to(self.tmp / "moved")
+
+        self.assert_swap_skipped(self.walk_with_swap(link, filesystem.DIR_FLAGS))
+
+    def test_o_nonblock_alone_keeps_a_fifo_from_blocking(self) -> None:
+        flags = filesystem.DIR_FLAGS & ~os.O_DIRECTORY
+        self.assert_swap_skipped(self.walk_with_swap(os.mkfifo, flags))
+
+    def test_o_directory_alone_keeps_a_fifo_from_blocking(self) -> None:
+        flags = filesystem.DIR_FLAGS & ~os.O_NONBLOCK
+        self.assert_swap_skipped(self.walk_with_swap(os.mkfifo, flags))
+
+    def test_listing_error_skips_one_directory(self) -> None:
+        write(self.root / "d" / "cacert.pem")
+        write(self.root / "e" / "cacert.pem")
+        list_entries = filesystem.list_entries
+        d_id = file_id(self.root / "d")
+
+        def failing(fd: int) -> Any:
+            if file_id_of_fd(fd) == d_id:
+                raise OSError("listing failed")
+            return list_entries(fd)
+
+        with mock.patch.object(filesystem, "list_entries", failing):
+            index = self.walk()
+        self.assertEqual(self.indexed(index), [f"{self.root}/e/cacert.pem"])
+        self.assertEqual(
+            lines(index), [f"INFO  scan [{self.root}/d] not readable, skipped"]
         )
 
     def test_directory_swapped_for_a_symlink_into_an_exclude(self) -> None:
