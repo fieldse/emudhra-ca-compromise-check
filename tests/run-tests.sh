@@ -104,6 +104,13 @@ function run_in() {
   "$ENGINE" run --rm --network=none -v "$REPO":/repo:ro -v "$OUT":/out "$image" "$@"
 }
 
+# Run a command as an unprivileged user with no capabilities, so file mode bits apply
+function run_unprivileged() {
+  local image="$1"
+  shift
+  "$ENGINE" run --rm --network=none --cap-drop=all --user 65534:65534 -v "$REPO":/repo:ro -v "$OUT":/out "$image" "$@"
+}
+
 # Build the test image, write the certificate fixtures and fetch the certifi bundles
 function make_fixtures() {
   "$ENGINE" build -q -t "$LAB_IMAGE" -f "$REPO/tests/Containerfile" "$REPO/tests" >/dev/null
@@ -291,18 +298,21 @@ print(len(hits), *hits)
 
 # Run the unit suite, the lint tools, the version gate and the archive's isolation cases
 function test_python() {
-  # The summary line names the skips: only the two standard-library contract tests skip, and only on 3.9.
-  local got unit="cd /repo && python3 -I -m unittest discover -q -s /repo/tests/unit -t /repo >/tmp/log 2>&1; \
-    if grep -q '^OK' /tmp/log; then tail -1 /tmp/log; else cat /tmp/log; fi"
+  # The summary line names the skips: the two mode-bit tests skip as root, and the two standard-library
+  # contract tests skip on 3.9.
+  local got discover="cd /repo && python3 -I -m unittest discover -q -s /repo/tests/unit -t /repo"
+  local summary=">/tmp/log 2>&1; if grep -q '^OK' /tmp/log; then tail -1 /tmp/log; else cat /tmp/log; fi"
   got=$(run_in "$LAB_IMAGE" sh -c "flake8 --version >/dev/null && black --version >/dev/null && mypy --version >/dev/null && echo ok")
   check "flake8, black and mypy run in the test image" "ok" "$got"
   got=$(run_in "$LAB_IMAGE" sh -c "cd /tmp && : >empty.py && out=\$(mypy --cache-dir=/dev/null --python-version 3.9 empty.py 2>&1) \
     && ! printf '%s' \"\$out\" | grep -qi 'warning\|error' && echo ok")
   check "mypy accepts a Python 3.9 target" "ok" "$got"
-  got=$(run_in "$LAB_IMAGE" sh -c "$unit")
-  check "unit tests on Python 3.13" "OK" "$got"
-  got=$(run_in "$PY39_IMAGE" sh -c "$unit")
-  check "unit tests on Python 3.9" "OK (skipped=2)" "$got"
+  got=$(run_in "$LAB_IMAGE" sh -c "$discover $summary")
+  check "unit tests on Python 3.13" "OK (skipped=2)" "$got"
+  got=$(run_in "$PY39_IMAGE" sh -c "$discover $summary")
+  check "unit tests on Python 3.9" "OK (skipped=4)" "$got"
+  got=$(run_unprivileged "$LAB_IMAGE" sh -c "$discover -p test_adapter_filesystem.py $summary")
+  check "file-system adapter tests as an unprivileged user" "OK" "$got"
   got=$(run_in "$PY38_IMAGE" sh -c "python3 -I -S /out/check.pyz 2>&1; echo \"exit=\$?\"" | tr '\n' ' ')
   check "archive refuses Python 3.8" "check.pyz: needs Python 3.9 or later, found 3.8 exit=2 " "$got"
   got=$(run_in "$LAB_IMAGE" sh -c "cd /repo && black --check --quiet --extend-exclude 'emudhra_check/certdata\.py' . 2>&1 && echo ok")

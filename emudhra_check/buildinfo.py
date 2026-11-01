@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from enum import Enum
 
+from emudhra_check.certificates import Buffer
+
 
 class BinaryKind(Enum):
     GO = "go"
@@ -17,6 +19,6 @@ class BinaryKind(Enum):
     OTHER = "other"
 
 
-def classify(data: bytes) -> BinaryKind:
+def classify(data: Buffer) -> BinaryKind:
     """Return the kind of binary data holds."""
     return BinaryKind.OTHER
