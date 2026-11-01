@@ -55,6 +55,30 @@ class NeedsReexecTest(unittest.TestCase):
                 False,
             ),
             ("empty argv[0]", (False, False, PYTHON, "", INSIDE, False), False),
+            (
+                "relative argv[0], run as ./FILE",
+                (
+                    False,
+                    False,
+                    PYTHON,
+                    "./check.pyz",
+                    os.getcwd() + "/./check.pyz/emudhra_check/__main__.py",
+                    False,
+                ),
+                True,
+            ),
+            (
+                "working directory /, so the module path starts with //",
+                (
+                    False,
+                    False,
+                    PYTHON,
+                    "/out/../out/check.pyz",
+                    "//out/../out/check.pyz/emudhra_check/__main__.py",
+                    False,
+                ),
+                True,
+            ),
         ]
         for label, args, want in rows:
             with self.subTest(label):

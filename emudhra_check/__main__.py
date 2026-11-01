@@ -12,6 +12,12 @@ import sys
 REEXEC_GUARD = "EMUDHRA_CHECK_REEXEC"
 
 
+def absolute(path: str) -> str:
+    """Return path made absolute against the working directory and normalised, with one leading slash."""
+    full = os.path.abspath(path)
+    return os.sep + full.lstrip(os.sep) if full.startswith(os.sep) else full
+
+
 def needs_reexec(
     isolated: bool,
     no_site: bool,
@@ -25,7 +31,7 @@ def needs_reexec(
         return False
     if not executable or guard_set or not argv0:
         return False
-    return module_file.startswith(argv0 + os.sep)
+    return absolute(module_file).startswith(absolute(argv0) + os.sep)
 
 
 def run(argv: "list[str] | None" = None) -> int:

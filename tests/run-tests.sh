@@ -19,6 +19,8 @@ PY39_IMAGE="docker.io/library/python@sha256:2d97f6910b16bd338d3060f261f53f144965
 PY38_IMAGE="docker.io/library/python@sha256:1d52838af602b4b5a831beb13a0e4d073280665ea7be7f69ce2382f29c5a613f"
 # alpine:3.22, a BusyBox userland.
 ALPINE_IMAGE="docker.io/library/alpine@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f"
+# The committed zipapp in scripts/, with its SHA-256 file beside it.
+PYZ_NAME="vuln-check-emudhra-ca-compromise.pyz"
 # A certifi release from before the incident, the first release that drops emSign ECC Root CA - G3,
 # and the release that restores the unaffected emSign roots. Each wheel is checked against its SHA-256.
 CERTIFI_OLD="2026.7.22"
@@ -390,6 +392,13 @@ bad = [n for n in z.namelist() if any(s in z.read(n) for s in (b'/Users/', b'/ho
 print('clean' if bad == [] else ' '.join(bad))
 ")
   check "archive holds no home paths" "clean" "$got"
+  got=$(run_in "$LAB_IMAGE" sh -c "cd /repo/scripts && sha256sum -c --quiet $PYZ_NAME.sha256 2>&1 && echo ok")
+  check "committed archive matches its SHA-256 file" "ok" "$got"
+  got=$(run_in "$LAB_IMAGE" sh -c "cmp /repo/scripts/$PYZ_NAME /out/check.pyz 2>&1 && echo same")
+  check "committed archive equals a fresh build on Python 3.13" "same" "$got"
+  got=$(run_in "$PY39_IMAGE" sh -c "python3 -I /repo/tools/build_pyz.py --out /tmp/check.pyz \
+    && cmp /repo/scripts/$PYZ_NAME /tmp/check.pyz 2>&1 && echo same")
+  check "committed archive equals a fresh build on Python 3.9" "same" "$got"
   got=$(run_in "$LAB_IMAGE" sh -c "$PYTHONPATH_CASE" | tr '\n' ' ')
   check "archive ignores planted modules on PYTHONPATH" "exit=2 Unknown option: --bogus (try --help) " "$got"
   got=$(run_in "$LAB_IMAGE" bash -c "$WRAPPER_CASE" | tr '\n' ' ')
@@ -438,13 +447,17 @@ function check_case() {
   check "check $name on $label" "ok" "${problems:-ok}"
 }
 
-# Run every tests/expect case through the archive on Python 3.13 and 3.9
+# Run every tests/expect case through the archive on Python 3.13 and 3.9, then the committed archive through
+# its shebang
 function test_check() {
-  local file
+  local file got
   for file in "$REPO"/tests/expect/*.txt; do
     check_case "3.13" "$LAB_IMAGE" "$file"
     check_case "3.9" "$CHECK39_IMAGE" "$file"
   done
+  got=$(run_in "$LAB_IMAGE" sh -c "cd /repo/scripts && ./$PYZ_NAME -h >/tmp/o 2>&1; echo \"exit=\$?\"; \
+    head -1 /tmp/o | cut -d ' ' -f 1-2; grep -c 'note: run this check' /tmp/o || true" | tr '\n' ' ')
+  check "committed archive runs through its shebang and re-executes under -I -S" "exit=0 Usage: $PYZ_NAME 0 " "$got"
 }
 
 # Run the rendered probe with dash in the test image and with BusyBox in Alpine, each holding the pre-fix JDK's
