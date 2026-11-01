@@ -4,13 +4,27 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 LAB_IMAGE="emudhra-ca-compromise-check-lab:latest"
-JAVA_IMAGE="docker.io/library/eclipse-temurin:21-jre"
-# A JDK released before the fix, whose cacerts still holds emSign ECC Root CA - G3.
-JAVA_OLD_IMAGE="docker.io/library/eclipse-temurin:21.0.8_9-jre"
-PY_IMAGE="docker.io/library/python:3.13-slim"
-# A certifi release from before the incident, and the first release that drops emSign ECC Root CA - G3.
+# Images are pinned by their multi-arch index digest. The tag each digest came from is in its comment.
+# eclipse-temurin:21.0.13_9-jre, a JDK released after the fix.
+JAVA_IMAGE="docker.io/library/eclipse-temurin@sha256:0b99b3376fbb50dbf9c0af8535fdd5b8eb0d3fdfc8b1e4967f383b6919f6901a"
+# eclipse-temurin:21.0.8_9-jre, a JDK released before the fix, whose cacerts still holds emSign ECC Root CA - G3.
+JAVA_OLD_IMAGE="docker.io/library/eclipse-temurin@sha256:66bb900643426ad01996d25bada7d56751913f9cec3b827fcb715d2ec9a0fbfc"
+# python:3.13.17-slim-trixie, used to download certifi.
+PY_IMAGE="docker.io/library/python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962"
+# python:3.9-slim, the oldest supported interpreter.
+PY39_IMAGE="docker.io/library/python@sha256:2d97f6910b16bd338d3060f261f53f144965f755599aab1acda1e13cf1731b1b"
+# python:3.8-slim, an interpreter below the supported minimum.
+PY38_IMAGE="docker.io/library/python@sha256:1d52838af602b4b5a831beb13a0e4d073280665ea7be7f69ce2382f29c5a613f"
+# alpine:3.22, a BusyBox userland.
+ALPINE_IMAGE="docker.io/library/alpine@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f"
+# A certifi release from before the incident, the first release that drops emSign ECC Root CA - G3,
+# and the release that restores the unaffected emSign roots. Each wheel is checked against its SHA-256.
 CERTIFI_OLD="2026.7.22"
+CERTIFI_OLD_SHA256="62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775"
 CERTIFI_FIXED="2026.10.18"
+CERTIFI_FIXED_SHA256="73191c47aaa79da394e8fee2dbc2ec827432cab56311122c9e47abf79e390f62"
+CERTIFI_RECOMMENDED="2026.10.19"
+CERTIFI_RECOMMENDED_SHA256="42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b"
 ENGINE=""
 OUT=""
 N_PASS=0
@@ -78,9 +92,10 @@ function run_in() {
 # Build the test image, write the certificate fixtures and fetch the certifi bundles
 function make_fixtures() {
   "$ENGINE" build -q -t "$LAB_IMAGE" -f "$REPO/tests/Containerfile" "$REPO/tests" >/dev/null
-  "$ENGINE" pull -q "$JAVA_IMAGE" >/dev/null
-  "$ENGINE" pull -q "$JAVA_OLD_IMAGE" >/dev/null
-  "$ENGINE" pull -q "$PY_IMAGE" >/dev/null
+  local image
+  for image in "$JAVA_IMAGE" "$JAVA_OLD_IMAGE" "$PY_IMAGE" "$PY39_IMAGE" "$PY38_IMAGE" "$ALPINE_IMAGE"; do
+    "$ENGINE" pull -q "$image" >/dev/null
+  done
   write_cert_fixtures
   fetch_certifi
 }
@@ -105,12 +120,17 @@ for i, pem in enumerate(pems):
 "
 }
 
-# Download the pre-fix and fixed certifi wheels and extract each one's CA bundle (needs network)
+# Download the pre-fix, fixed and recommended certifi wheels, check their SHA-256 and extract each CA bundle (needs network)
 function fetch_certifi() {
   mkdir -p "$OUT/certifi"
   "$ENGINE" run --rm -v "$OUT/certifi":/dl "$PY_IMAGE" sh -c \
-    "pip download -q --no-deps -d /dl certifi==$CERTIFI_OLD certifi==$CERTIFI_FIXED 2>/dev/null || \
-     { pip download -q --no-deps -d /dl certifi==$CERTIFI_OLD && pip download -q --no-deps -d /dl certifi==$CERTIFI_FIXED; }"
+    "for v in $CERTIFI_OLD $CERTIFI_FIXED $CERTIFI_RECOMMENDED; do pip download -q --no-deps -d /dl certifi==\$v || exit 1; done"
+  printf '%s  %s\n' \
+    "$CERTIFI_OLD_SHA256" "certifi-$CERTIFI_OLD-py3-none-any.whl" \
+    "$CERTIFI_FIXED_SHA256" "certifi-$CERTIFI_FIXED-py3-none-any.whl" \
+    "$CERTIFI_RECOMMENDED_SHA256" "certifi-$CERTIFI_RECOMMENDED-py3-none-any.whl" >"$OUT/certifi/SHA256SUMS"
+  "$ENGINE" run --rm --network=none -v "$OUT/certifi":/dl -w /dl "$PY_IMAGE" sha256sum --quiet -c SHA256SUMS \
+    || die "a certifi wheel does not match its recorded SHA-256"
   "$ENGINE" run --rm --network=none -v "$OUT/certifi":/dl "$PY_IMAGE" python3 -I -c "
 import glob, zipfile
 for w in glob.glob('/dl/certifi-*.whl'):
@@ -186,6 +206,16 @@ print('ok' if listed == want and len(want) == 19 else f'mismatch {len(listed)} {
   check "sigma rule structure and thumbprints (not converted to a SIEM query)" "ok" "$got"
 }
 
+# Check the Python lint tools in the test image
+function test_python() {
+  local got
+  got=$(run_in "$LAB_IMAGE" sh -c "flake8 --version >/dev/null && black --version >/dev/null && mypy --version >/dev/null && echo ok")
+  check "flake8, black and mypy run in the test image" "ok" "$got"
+  got=$(run_in "$LAB_IMAGE" sh -c "cd /tmp && : >empty.py && out=\$(mypy --cache-dir=/dev/null --python-version 3.9 empty.py 2>&1) \
+    && ! printf '%s' \"\$out\" | grep -qi 'warning\|error' && echo ok")
+  check "mypy accepts a Python 3.9 target" "ok" "$got"
+}
+
 # Lint the shell scripts and check the exposure script against the test image's bundle
 function test_scripts() {
   local got want
@@ -230,6 +260,7 @@ function main() {
   make_java_fixtures
   test_yara
   test_sigma
+  test_python
   test_scripts
   printf '\n%d passed, %d failed\n' "$N_PASS" "$N_FAIL"
   if [[ "$keep" -eq 1 ]]; then
