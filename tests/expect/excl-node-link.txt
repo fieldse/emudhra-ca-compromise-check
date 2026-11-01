@@ -1,0 +1,7 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py exclude && PY=$(command -v python3) && PATH=/tmp/t/links:$PATH && export PATH
+# args: -r /tmp/t/open -x /tmp/t/excl
+# exit: 0
+INFO  node [host] found on PATH inside an excluded directory, not run
+!MARKER
+![/tmp/t/excl
+!Traceback

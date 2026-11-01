@@ -46,6 +46,8 @@ def exclude_tree(base: str) -> None:
     for name in MARKER_TOOLS:
         marker(f"{base}/excl/tools/bin/{name}", name)
     marker(f"{base}/cwd/node", "cwd-node")
+    os.makedirs(f"{base}/links", exist_ok=True)
+    os.symlink(f"{base}/excl/tools/bin/node", f"{base}/links/node")
 
 
 def case_tree(base: str) -> None:

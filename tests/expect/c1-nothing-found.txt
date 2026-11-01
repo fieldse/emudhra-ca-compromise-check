@@ -1,0 +1,6 @@
+# setup: mkdir -p /tmp/empty
+# args: -r /tmp/empty
+# exit: 0
+INFO  node [host] not installed
+INFO  node [version managers] no nvm, volta, asdf, fnm or mise installs under scan roots
+!Traceback

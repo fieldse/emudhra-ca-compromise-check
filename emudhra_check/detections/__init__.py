@@ -12,6 +12,14 @@ from emudhra_check.detections.language_packages import (
     UvHost,
 )
 from emudhra_check.detections.os_packages import CaCertificatesPackage
+from emudhra_check.detections.runtimes import (
+    BunHost,
+    CPythonHost,
+    DenoHost,
+    GoToolchain,
+    NodeHost,
+    NodeVersionDirs,
+)
 from emudhra_check.detections.ports import Detection
 from emudhra_check.detections.trust_stores import OsTrustStore, PemBundles
 
@@ -20,6 +28,12 @@ __all__ = ["REGISTRY", "Detection"]
 REGISTRY: tuple[Detection, ...] = (
     OsTrustStore(),
     CaCertificatesPackage(),
+    BunHost(),
+    NodeHost(),
+    DenoHost(),
+    GoToolchain(),
+    CPythonHost(),
+    NodeVersionDirs(),
     PythonDistInfo(),
     PythonPins(),
     HostPythonPackages(),

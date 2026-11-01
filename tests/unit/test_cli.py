@@ -270,6 +270,12 @@ class RunTest(unittest.TestCase):
             (
                 "os-trust-store",
                 "ca-certificates-package",
+                "bun-host",
+                "node-host",
+                "deno-host",
+                "go-toolchain",
+                "cpython-host",
+                "node-version-dirs",
                 "python-dist-info",
                 "python-pins",
                 "host-python-packages",
