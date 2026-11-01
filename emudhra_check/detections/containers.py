@@ -19,7 +19,7 @@ from emudhra_check.certificates import (
     bundle_findings,
     keystore_kind,
 )
-from emudhra_check.detections.language_packages import python_package_finding
+from emudhra_check.detections.language_packages import Bundle, python_package_finding
 from emudhra_check.detections.os_packages import (
     SUSE_ID_PREFIXES,
     PackageObservation,
@@ -46,6 +46,7 @@ __all__ = ["PodmanImages", "image_findings"]
 
 G3_FULL = (CertificateMatch(G3_ECC_ROOT.label, G3_ECC_ROOT.role, MatchKind.FULL),)
 PYTHON_PACKAGES = frozenset({"certifi", "pip", "uv"})
+PROBE_BUNDLES = {"0": Bundle.ABSENT, "L": Bundle.LINKED}
 UNFINISHED = {
     ProbeStatus.FAILED: "failed",
     ProbeStatus.TIMEOUT: "timed out",
@@ -98,7 +99,7 @@ def image_findings(name: str, report: ProbeReport) -> list[Finding]:
                 subject,
                 python.version,
                 installer=python.installer,
-                bundled=python.bundled != "0",
+                bundle=PROBE_BUNDLES.get(python.bundled, Bundle.OWN),
             )
     for version in report.old_pythons:
         detail = f"{version} predates importlib.metadata, certifi and pip not inspected"

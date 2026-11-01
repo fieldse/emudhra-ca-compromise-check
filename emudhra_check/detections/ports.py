@@ -41,6 +41,14 @@ class CommandResult:
 
 
 @dataclass(frozen=True)
+class FoundFile:
+    """A fixed path inside the scope that exists: its resolved path and file id."""
+
+    real: Path
+    file_id: FileId
+
+
+@dataclass(frozen=True)
 class Skipped:
     """A read that returned no bytes, and why."""
 
@@ -93,13 +101,15 @@ class Files(Protocol):
 
     def file_id(self, path: Path) -> Optional[FileId]: ...
 
+    def lookup(self, path: Path) -> Union[FoundFile, Skipped]: ...
+
     def list_dir(self, path: Path) -> tuple[str, ...]: ...
 
     def is_dir(self, path: Path) -> bool: ...
 
     def refused_reads(self) -> int: ...
 
-    def charge_binary(self, size: int) -> bool: ...
+    def charge_binary_read(self, path: Path) -> bool: ...
 
 
 class Commands(Protocol):

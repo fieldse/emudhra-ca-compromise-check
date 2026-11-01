@@ -59,7 +59,11 @@ for dist in metadata.distributions(path=paths):
         location = str(dist.locate_file(""))
         bundled = "-"
         if name in bundles:
-            bundled = "1" if os.path.isfile(os.path.join(location, bundles[name])) else "0"
+            bundle = os.path.join(location, bundles[name])
+            bundled = "0"
+            if os.path.isfile(bundle):
+                package = os.path.realpath(os.path.join(location, name)) + os.sep
+                bundled = "1" if os.path.realpath(bundle).startswith(package) else "L"
         fields = (name, dist.version, installer[0] if installer else "unknown", bundled, location)
         sys.stdout.write("PY " + " ".join(fields) + "\n")
 ' "$(command -v python3)" 2>/dev/null

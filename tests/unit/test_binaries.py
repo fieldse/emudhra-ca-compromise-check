@@ -434,6 +434,7 @@ class ElectronAppsTest(unittest.TestCase):
             ],
         )
         self.assertEqual(ctx.files.binary_spent, len(files["/opt/a/a"]))
+        self.assertNotIn(Path("/opt/b/b"), ctx.files.reads)
 
 
 if __name__ == "__main__":

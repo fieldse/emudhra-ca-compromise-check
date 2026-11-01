@@ -358,6 +358,23 @@ class WalkTest(TreeTest):
             [f"INFO  scan [{self.root}/bin/c] binary budget exhausted, skipped"],
         )
 
+    def test_detection_reads_have_their_own_budget(self) -> None:
+        for name in ("a", "b"):
+            write(self.root / "bin" / name, b"\x7fELF" + b"\0" * 96, 0o755)
+        app = write(self.root / "app" / "app", b"\x7fELF" + b"\0" * 96, 0o755)
+        files = LocalFiles(
+            scope([self.root]), ORACLE, binary_budget=50, read_budget=150
+        )
+        index = files.walk(PROGRAMS, (), other)
+        self.assertEqual(
+            lines(index),
+            [f"INFO  scan [{self.root}/bin/b] binary budget exhausted, skipped"],
+        )
+        self.assertEqual(
+            [files.charge_binary_read(app) for _ in range(3)], [True, True, False]
+        )
+        self.assertEqual(files.read_spent, 200)
+
     def test_walk_of_filesystem_root_stays_on_its_device(self) -> None:
         index = self.walk(roots=[Path("/")])
         for entry in list(index.files) + list(index.dirs):

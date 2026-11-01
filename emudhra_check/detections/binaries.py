@@ -401,13 +401,12 @@ class ElectronApps:
             file_id = ctx.files.file_id(path)
             if file_id is None:
                 continue
+            if not ctx.files.charge_binary_read(path):
+                detail = "binary budget exhausted, skipped"
+                return [Finding(Level.INFO, Subject("scan", str(path)), detail)]
             data = ctx.files.read_bytes(path, MAX_BINARY_BYTES, file_id)
             if isinstance(data, Skipped):
                 continue
-            if not ctx.files.charge_binary(len(data)):
-                release(data)
-                detail = "binary budget exhausted, skipped"
-                return [Finding(Level.INFO, Subject("scan", str(path)), detail)]
             try:
                 if classify(data) is not BinaryKind.ELECTRON:
                     continue

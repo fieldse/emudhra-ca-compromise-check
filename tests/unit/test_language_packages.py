@@ -14,6 +14,7 @@ from pathlib import Path
 from emudhra_check.certificates import G3_ECC_ROOT
 from emudhra_check.detections.language_packages import (
     CHILD_SCRIPT,
+    Bundle,
     CargoLocks,
     ComposerLocks,
     ElectronPackages,
@@ -26,6 +27,7 @@ from emudhra_check.detections.language_packages import (
     electron_range_finding,
     python_package_finding,
 )
+from emudhra_check.detections.ports import UNREADABLE, Skipped
 from emudhra_check.report import Level, Subject
 from emudhra_check.scope import FileId, IndexedDir
 from tests.unit.fakes import (
@@ -93,7 +95,7 @@ class VerdictTest(unittest.TestCase):
                     Subject("certifi", "x"),
                     "2026.7.22",
                     installer=installer,
-                    bundled=False,
+                    bundle=Bundle.ABSENT,
                 )
                 self.assertEqual(
                     [f.line() for f in got],
@@ -189,6 +191,26 @@ class DistInfoTest(unittest.TestCase):
             f"FAIL  certifi bundle [{SITE}/certifi/cacert.pem] contains emSign ECC Root CA - G3 (removed root)",
         )
 
+    def test_pip_certifi_linked_to_the_system_bundle(self) -> None:
+        system = "/etc/ssl/certs/ca-certificates.crt"
+        files = FakeFiles(
+            {
+                f"{SITE}/certifi-2026.7.22.dist-info/INSTALLER": b"pip\n",
+                system: OLD_BUNDLE,
+            },
+            dirs=[f"{SITE}/certifi"],
+            links={f"{SITE}/certifi/cacert.pem": system},
+        )
+        ctx = make_context(files, dirs=[dist_dir("certifi-2026.7.22.dist-info")])
+        self.assertEqual(
+            lines(PythonDistInfo(), ctx),
+            [
+                f"INFO  certifi [{SITE}/certifi-2026.7.22.dist-info] found 2026.7.22, its cacert.pem links"
+                " outside the package, judged by the bundle it resolves to",
+                f"FAIL  certifi bundle [{SITE}/certifi/cacert.pem] contains emSign ECC Root CA - G3 (removed root)",
+            ],
+        )
+
     def test_brew_without_a_bundle(self) -> None:
         files = FakeFiles({f"{SITE}/pip-26.2.1.dist-info/INSTALLER": b"brew\n"})
         ctx = make_context(files, dirs=[dist_dir("pip-26.2.1.dist-info")])
@@ -277,6 +299,47 @@ class HostPythonTest(unittest.TestCase):
                 "FAIL  certifi [host python] found 2026.7.22, fixed 2026.10.18 (vendors its own CA bundle)",
                 f"FAIL  certifi bundle [{site}/certifi/cacert.pem] contains emSign ECC Root CA - G3 (removed root)",
                 "INFO  pip [host python] found 26.2.2, no bundled cacert.pem, patched to use the system store",
+            ],
+        )
+
+    def test_bundle_that_exists_but_was_not_read_keeps_the_version_verdict(
+        self,
+    ) -> None:
+        site = "/usr/lib/python3/dist-packages"
+        out = f"certifi\t2026.7.22\tpip\t{site}\n"
+        version_fail = (
+            "FAIL  certifi [host python] found 2026.7.22, fixed 2026.10.18"
+            " (vendors its own CA bundle)"
+        )
+        excluded = FakeFiles(excluded=[f"{site}/certifi"])
+        ctx, _ = host_context(out, files=excluded)
+        self.assertEqual(lines(HostPythonPackages(), ctx), [version_fail])
+        unreadable = FakeFiles({f"{site}/certifi/cacert.pem": Skipped(UNREADABLE)})
+        ctx, _ = host_context(out, files=unreadable)
+        self.assertEqual(
+            lines(HostPythonPackages(), ctx),
+            [
+                version_fail,
+                f"INFO  certifi bundle [{site}/certifi/cacert.pem] unreadable, skipped",
+            ],
+        )
+
+    def test_bundle_linked_out_of_the_package_is_judged_by_content(self) -> None:
+        site = "/usr/lib/python3/dist-packages"
+        system = "/etc/ssl/certs/ca-certificates.crt"
+        out = f"certifi\t2026.7.22\tpip\t{site}\n"
+        files = FakeFiles(
+            {system: OLD_BUNDLE},
+            dirs=[f"{site}/certifi"],
+            links={f"{site}/certifi/cacert.pem": system},
+        )
+        ctx, _ = host_context(out, files=files)
+        self.assertEqual(
+            lines(HostPythonPackages(), ctx),
+            [
+                "INFO  certifi [host python] found 2026.7.22, its cacert.pem links outside the package,"
+                " judged by the bundle it resolves to",
+                f"FAIL  certifi bundle [{site}/certifi/cacert.pem] contains emSign ECC Root CA - G3 (removed root)",
             ],
         )
 

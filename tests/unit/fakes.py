@@ -18,6 +18,7 @@ from emudhra_check.detections.ports import (
     Context,
     Detection,
     Ledger,
+    FoundFile,
     Located,
     Skipped,
 )
@@ -39,7 +40,9 @@ class FakeFiles:
         excluded: Iterable[str] = (),
         ids: Optional[dict[str, FileId]] = None,
         binary_budget: int = 1 << 40,
+        links: Optional[dict[str, str]] = None,
     ) -> None:
+        self.links = {Path(k): Path(v) for k, v in (links or {}).items()}
         self.binary_budget = binary_budget
         self.binary_spent = 0
         self.files = {Path(p): v for p, v in (files or {}).items()}
@@ -65,6 +68,7 @@ class FakeFiles:
         if self.is_excluded(path):
             self.refused += 1
             return Skipped(EXCLUDED)
+        path = self.links.get(path, path)
         if path not in self.files:
             return Skipped(MISSING)
         value = self.files[path]
@@ -77,10 +81,25 @@ class FakeFiles:
         self.reads.append(path)
         return value
 
+    def lookup(self, path: Path) -> Union[FoundFile, Skipped]:
+        if self.is_excluded(path):
+            self.refused += 1
+            return Skipped(EXCLUDED)
+        target = self.links.get(path, path)
+        if target in self.dirs and target not in self.files:
+            return FoundFile(target, FileId(4, len(target.parts)))
+        if target not in self.files:
+            return Skipped(MISSING)
+        value = self.files[target]
+        if isinstance(value, Skipped):
+            return value
+        return FoundFile(target, self.id_of(target))
+
     def file_id(self, path: Path) -> Optional[FileId]:
         if self.is_excluded(path):
             self.refused += 1
             return None
+        path = self.links.get(path, path)
         return self.id_of(path) if path in self.files else None
 
     def list_dir(self, path: Path) -> tuple[str, ...]:
@@ -96,10 +115,11 @@ class FakeFiles:
     def refused_reads(self) -> int:
         return self.refused
 
-    def charge_binary(self, size: int) -> bool:
+    def charge_binary_read(self, path: Path) -> bool:
         if self.binary_spent >= self.binary_budget:
             return False
-        self.binary_spent += size
+        value = self.files.get(path)
+        self.binary_spent += len(value) if isinstance(value, bytes) else 0
         return True
 
     def indexed(self, *paths: str) -> tuple[IndexedFile, ...]:

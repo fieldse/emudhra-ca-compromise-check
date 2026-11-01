@@ -17,6 +17,7 @@ from emudhra_check.scope import ExcludeSet, PathOracle, first_excluded
 from emudhra_check.versions import Version
 
 MACOS_STUBS = frozenset({Path("/usr/bin/python3")})
+STICKY = 0o1000
 CHILD_FIXED_ENV = {
     "LANG": "C",
     "LC_ALL": "C",
@@ -73,13 +74,17 @@ class OwnerOracle(Protocol):
 
 def writable_by_non_root(real: Path, oracle: OwnerOracle) -> bool:
     """Return whether a non-root user could change real: it or a directory above it is not owned by root
-    or is group- or world-writable. A path that cannot be stat'ed counts as writable."""
+    or is group- or world-writable. A sticky directory counts as safe, since every entry below it on the
+    path is root-owned and only root can rename or remove those. A path that cannot be stat'ed counts
+    as writable. ACLs are not read."""
     for path in (real, *real.parents):
         facts = oracle.owner_and_mode(path)
         if facts is None:
             return True
         uid, mode = facts
-        if uid != 0 or mode & 0o022:
+        if uid != 0:
+            return True
+        if mode & 0o022 and not (path != real and mode & STICKY):
             return True
     return False
 

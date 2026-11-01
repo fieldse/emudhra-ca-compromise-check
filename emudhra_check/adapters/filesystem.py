@@ -24,6 +24,7 @@ from emudhra_check.detections.ports import (
     MISSING,
     TOO_LARGE,
     UNREADABLE,
+    FoundFile,
     Skipped,
 )
 from emudhra_check.limits import (
@@ -144,6 +145,7 @@ class Walk:
         self.executables: list[Executable] = []
         self.seen_programs: set[FileId] = set()
         self.notices: list[Finding] = []
+        self.spent = 0
 
     def index(self) -> Index:
         return Index(
@@ -327,11 +329,12 @@ class Walk:
         if st.st_size > MAX_BINARY_BYTES:
             self.notices.append(notice("scan", path, "too large to scan, skipped"))
             return
-        if not self.owner.charge_binary(st.st_size):
+        if self.spent >= self.owner.binary_budget:
             self.notices.append(
                 notice("scan", path, "binary budget exhausted, skipped")
             )
             return
+        self.spent += st.st_size
         data = self.owner.read_bytes(real, MAX_BINARY_BYTES, file_id)
         if isinstance(data, Skipped):
             self.notices.append(notice("scan", path, "not readable, skipped"))
@@ -356,18 +359,28 @@ class LocalFiles:
         scope: ScanScope,
         oracle: LocalPathOracle,
         binary_budget: int = MAX_BINARY_TOTAL_BYTES,
+        read_budget: int = MAX_BINARY_TOTAL_BYTES,
     ) -> None:
         self.scope = scope
         self.oracle = oracle
         self.binary_budget = binary_budget
-        self.binary_spent = 0
+        self.read_budget = read_budget
+        self.read_spent = 0
         self.refused = 0
 
-    def charge_binary(self, size: int) -> bool:
-        """Spend size bytes of the run's binary budget, or return False when it is already spent."""
-        if self.binary_spent >= self.binary_budget:
+    def charge_binary_read(self, path: Path) -> bool:
+        """Spend a file's size from the detections' binary read budget before it is read.
+
+        Returns False when the budget is already spent. The walk keeps a budget of its own.
+        """
+        if self.read_spent >= self.read_budget:
             return False
-        self.binary_spent += size
+        real = Path(os.path.realpath(path))
+        if self.scope.permits_path(real, self.oracle):
+            try:
+                self.read_spent += os.stat(real).st_size
+            except (OSError, ValueError):
+                pass
         return True
 
     def walk(
@@ -432,6 +445,22 @@ class LocalFiles:
             return Skipped(CHANGED)
         finally:
             os.close(fd)
+
+    def lookup(self, path: Path) -> Union[FoundFile, Skipped]:
+        """Return a fixed path's real path and file id, or why not: refused, missing or unreadable.
+
+        A refused path is never stat'ed.
+        """
+        real = self.resolve(path)
+        if real is None:
+            return Skipped(EXCLUDED)
+        try:
+            st = os.stat(real)
+        except (FileNotFoundError, NotADirectoryError):
+            return Skipped(MISSING)
+        except (OSError, ValueError):
+            return Skipped(UNREADABLE)
+        return FoundFile(real, file_id_of(st))
 
     def file_id(self, path: Path) -> Optional[FileId]:
         """Return the file id of a fixed path inside the scope, or None when it is missing or refused."""

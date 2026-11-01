@@ -206,13 +206,30 @@ class WritableByNonRootTest(unittest.TestCase):
             ("file world-writable", {"/opt/tools/bin/node": (0, 0o100757)}, True),
             ("parent owned by a user", {"/opt/tools/bin": (501, 0o40755)}, True),
             ("grandparent group-writable", {"/opt/tools": (0, 0o40775)}, True),
-            ("root directory world-writable", {"/": (0, 0o41777)}, True),
+            ("root directory world-writable", {"/": (0, 0o40777)}, True),
             ("parent cannot be stat'ed", {"/opt": None}, True),
             (
                 "setuid bit is not a write bit",
                 {"/opt/tools/bin/node": (0, 0o104755)},
                 False,
             ),
+            (
+                "sticky group-writable parent, as /nix/store",
+                {"/opt/tools": (0, 0o41775)},
+                False,
+            ),
+            ("sticky world-writable parent", {"/opt": (0, 0o41777)}, False),
+            (
+                "sticky parent, entry below it owned by a user",
+                {"/opt/tools": (0, 0o41775), "/opt/tools/bin": (501, 0o40755)},
+                True,
+            ),
+            (
+                "sticky bit on the file itself",
+                {"/opt/tools/bin/node": (0, 0o101775)},
+                True,
+            ),
+            ("sticky parent owned by a user", {"/opt/tools": (501, 0o41775)}, True),
         ]
         for name, entries, want in rows:
             with self.subTest(name):

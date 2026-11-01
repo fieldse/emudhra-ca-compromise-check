@@ -82,6 +82,7 @@ class PodmanImagesTest(unittest.TestCase):
             b"PY pip 23.0.1 unknown 0 /usr/lib/python3/dist-packages\n"
             b"PY certifi 2026.7.22 unknown 1 /usr/local/lib/python3.13/site-packages\n"
             b"PY uv 0.13.3 unknown - /usr/local/lib/python3.13/site-packages\n"
+            b"PY certifi 2026.7.22 pip L /opt/lib/site-packages\n"
         )
         self.assertEqual(
             image_lines(stream),
@@ -90,6 +91,8 @@ class PodmanImagesTest(unittest.TestCase):
                 f"INFO  pip [{WHERE}] found 23.0.1, no bundled cacert.pem, patched to use the system store",
                 f"FAIL  certifi [{WHERE}] found 2026.7.22, fixed 2026.10.18 (vendors its own CA bundle)",
                 f"FAIL  uv [{WHERE}] found 0.13.3, fixed 0.13.4 (vendors its own CA bundle)",
+                f"INFO  certifi [{WHERE}] found 2026.7.22, its cacert.pem links outside the package,"
+                " judged by the bundle it resolves to",
             ],
         )
 

@@ -95,7 +95,7 @@ class CommandsTest(unittest.TestCase):
             ("all root", {}, 0, False),
             ("file owned by a user", {tool: (1000, 0o100755)}, 0, True),
             ("directory group-writable", {tool.parent: (0, 0o40775)}, 0, True),
-            ("ancestor world-writable", {self.tmp.parent: (0, 0o41777)}, 0, True),
+            ("ancestor world-writable", {self.tmp.parent: (0, 0o40777)}, 0, True),
             ("not root", {tool: (1000, 0o100755)}, 1000, False),
         ]
         for name, owners, euid, writable in rows:

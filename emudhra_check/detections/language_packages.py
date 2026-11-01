@@ -12,16 +12,24 @@ carry their own roots.
 
 from __future__ import annotations
 
+from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Iterator, Optional, Union
 
-from emudhra_check.detections.ports import Context, Located
+from emudhra_check.detections.ports import (
+    MISSING,
+    Context,
+    FoundFile,
+    Located,
+    Skipped,
+)
 from emudhra_check.detections.shared import (
     content_findings,
     find_tool,
     read_or_skip,
     release,
     run_tool,
+    skipped_findings,
 )
 from emudhra_check.fixes import (
     CASTORE_FIXED,
@@ -58,6 +66,7 @@ from emudhra_check.scope import FileId, FileInterests, IndexedFile
 from emudhra_check.versions import judge, judge_branched, parse_version
 
 __all__ = [
+    "Bundle",
     "CargoLocks",
     "ComposerLocks",
     "ElectronPackages",
@@ -78,6 +87,9 @@ BUNDLES = {"certifi": "certifi/cacert.pem", "pip": "pip/_vendor/certifi/cacert.p
 DISTRO_INSTALLERS = frozenset({"dpkg", "rpm", "apk", "brew", "debian"})
 TOML_LOCKS = frozenset({"poetry.lock", "uv.lock"})
 NO_BUNDLE = "no bundled cacert.pem, patched to use the system store"
+LINKED_BUNDLE = (
+    "its cacert.pem links outside the package, judged by the bundle it resolves to"
+)
 CHILD_SCRIPT = """\
 import sys
 if sys.version_info < (3, 8):
@@ -113,13 +125,23 @@ for dist in metadata.distributions(path=paths):
 """
 
 
+class Bundle(Enum):
+    """Where a certifi or pip cacert.pem stands: inside the package, absent, or a link out of it."""
+
+    OWN = "own"
+    ABSENT = "absent"
+    LINKED = "linked"
+
+
 def python_package_finding(
-    subject: Subject, version: str, *, installer: str, bundled: bool = True
+    subject: Subject, version: str, *, installer: str, bundle: Bundle = Bundle.OWN
 ) -> list[Finding]:
-    """Judge certifi, pip or uv: INFO when its own bundle is absent, deferred to the bundle for a distro
-    install, else by version."""
-    if not bundled:
+    """Judge certifi, pip or uv: INFO when its cacert.pem is absent or links out of the package, deferred
+    to the bundle for a distro install, else by version."""
+    if bundle is Bundle.ABSENT:
         return [Finding(Level.INFO, subject, f"found {version}, {NO_BUNDLE}")]
+    if bundle is Bundle.LINKED:
+        return [Finding(Level.INFO, subject, f"found {version}, {LINKED_BUNDLE}")]
     if installer in DISTRO_INSTALLERS:
         detail = f"found {version}, installed by {installer}, judged by the bundle it resolves to"
         return [Finding(Level.INFO, subject, detail)]
@@ -145,12 +167,30 @@ def text_of(
 
 def package_bundle(
     ctx: Context, name: str, location: Path
-) -> tuple[Optional[Path], Optional[FileId]]:
-    """Return the path and file id of a package's own cacert.pem, the id None when it is absent."""
+) -> tuple[Optional[Path], Union[FoundFile, Skipped, None], Bundle]:
+    """Look up a package's cacert.pem: its path, what the lookup found, and where it stands.
+
+    A bundle that exists but was not read (refused or unreadable) counts as the package's own.
+    """
     if name not in BUNDLES:
-        return None, None
+        return None, None, Bundle.OWN
     bundle = location / BUNDLES[name]
-    return bundle, ctx.files.file_id(bundle)
+    found = ctx.files.lookup(bundle)
+    if isinstance(found, Skipped):
+        return bundle, found, Bundle.ABSENT if found.reason == MISSING else Bundle.OWN
+    package = ctx.files.lookup(location / name)
+    if isinstance(package, FoundFile) and package.real not in found.real.parents:
+        return bundle, found, Bundle.LINKED
+    return bundle, found, Bundle.OWN
+
+
+def bundle_lines(
+    ctx: Context, name: str, bundle: Path, found: Union[FoundFile, Skipped]
+) -> list[Finding]:
+    """Return a package bundle's content verdict once per file, or the line for one that was not read."""
+    if isinstance(found, Skipped):
+        return skipped_findings(Subject(f"{name} bundle", str(bundle)), found)
+    return bundle_findings_once(ctx, name, bundle, found.file_id)
 
 
 def bundle_findings_once(
@@ -183,16 +223,13 @@ class PythonDistInfo:
             text = text_of(ctx, subject, indexed.path / "INSTALLER")
             lines = text.strip().splitlines() if isinstance(text, str) else []
             installer = lines[0].strip()[:MAX_FIELD_CHARS] if lines else "unknown"
-            bundle, file_id = package_bundle(ctx, name, indexed.path.parent)
+            bundle, found, kind = package_bundle(ctx, name, indexed.path.parent)
             yield from python_package_finding(
-                subject,
-                version,
-                installer=installer,
-                bundled=bundle is None or file_id is not None,
+                subject, version, installer=installer, bundle=kind
             )
-            distro = installer in DISTRO_INSTALLERS
-            if distro and bundle is not None and file_id is not None:
-                yield from bundle_findings_once(ctx, name, bundle, file_id)
+            judged = installer in DISTRO_INSTALLERS or kind is Bundle.LINKED
+            if judged and bundle is not None and found is not None:
+                yield from bundle_lines(ctx, name, bundle, found)
 
 
 class PythonPins:
@@ -267,12 +304,12 @@ class HostPythonPackages:
             return
         for name, version, installer, location in records:
             subject = Subject(name, "host python")
-            bundle, file_id = package_bundle(ctx, name, Path(location))
+            bundle, found, kind = package_bundle(ctx, name, Path(location))
             yield from python_package_finding(
-                subject, version, installer=installer, bundled=file_id is not None
+                subject, version, installer=installer, bundle=kind
             )
-            if bundle is not None and file_id is not None:
-                yield from bundle_findings_once(ctx, name, bundle, file_id)
+            if bundle is not None and found is not None:
+                yield from bundle_lines(ctx, name, bundle, found)
 
     @staticmethod
     def not_inspected(version: str) -> Finding:
