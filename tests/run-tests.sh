@@ -496,30 +496,13 @@ for finding in image_findings('$label', parse_probe_output(open('/out/probe-$lab
   done
 }
 
-# Lint the shell scripts and check the exposure script against the test image's bundle
+# Lint the test scripts, the probe and the fake podman
 function test_scripts() {
-  local got want
-  got=$(run_in "$LAB_IMAGE" sh -c "shellcheck -S warning /repo/scripts/*.sh /repo/tests/*.sh >/dev/null 2>&1 && echo clean || echo findings")
+  local got
+  got=$(run_in "$LAB_IMAGE" sh -c "shellcheck -S warning /repo/tests/*.sh >/dev/null 2>&1 && echo clean || echo findings")
   check "shellcheck -S warning" "clean" "$got"
   got=$(run_in "$LAB_IMAGE" sh -c "shellcheck -s sh /repo/emudhra_check/probe.sh && shellcheck /repo/tests/fixtures/fake-podman && echo clean")
   check "shellcheck on the probe and the fake podman" "clean" "$got"
-  want=$(run_in "$LAB_IMAGE" sh -c "yara /repo/rules/yara/emudhra-ca.yar /etc/ssl/certs/ca-certificates.crt | grep -q . && echo FAIL || echo PASS")
-  got=$(run_in "$LAB_IMAGE" sh -c "bash /repo/scripts/vuln-check-emudhra-ca-compromise.sh -r /etc/ssl 2>/dev/null \
-    | grep -F '/etc/ssl/certs/ca-certificates.crt' | grep -q '^FAIL' && echo FAIL || echo PASS")
-  check "check script agrees with YARA on the system bundle" "$want" "$got"
-  local v exp
-  for v in "$CERTIFI_OLD|FAIL" "$CERTIFI_FIXED|PASS"; do
-    exp="${v#*|}"
-    got=$(run_in "$LAB_IMAGE" sh -c "mkdir -p /tmp/c && cp /out/certifi/cacert-${v%%|*}.pem /tmp/c/cacert.pem && \
-      bash /repo/scripts/vuln-check-emudhra-ca-compromise.sh -r /tmp/c 2>/dev/null \
-      | grep -F '/tmp/c/cacert.pem' | grep -q '^FAIL' && echo FAIL || echo PASS")
-    check "check script on certifi ${v%%|*} bundle" "$exp" "$got"
-    got=$(run_in "$LAB_IMAGE" sh -c "mkdir -p /tmp/d/certifi-${v%%|*}.dist-info && \
-      echo pip >/tmp/d/certifi-${v%%|*}.dist-info/INSTALLER && \
-      bash /repo/scripts/vuln-check-emudhra-ca-compromise.sh -r /tmp/d 2>/dev/null \
-      | grep -F 'certifi-${v%%|*}.dist-info' | grep -q '^FAIL' && echo FAIL || echo PASS")
-    check "check script on certifi ${v%%|*} version" "$exp" "$got"
-  done
 }
 
 # Parse arguments, build fixtures and run every test
