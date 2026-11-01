@@ -1,0 +1,21 @@
+# Project exceptions to the global policy config. @global resolves to it in the git hook wrapper.
+[extend]
+path = "@global"
+
+[[allowlists]]
+description = "SEC-7: the guide pages carry the owner-authorised security-firm name and call to action"
+targetRules = ["policy-sec7-term-1"]
+paths = [
+  '''^index\.html$''',
+  '''^checks\.html$''',
+  '''^references\.html$''',
+  '''^README\.md$''',
+]
+
+[[allowlists]]
+description = "SEC-1: certificate fingerprint prefixes (emSign ECC Root CA - G3, AAA Certificate Services), not MAC addresses"
+targetRules = ["policy-sec1-mac-address"]
+regexes = [
+  '''(?i)^86:A1:EC:BA:08:9C$''',
+  '''(?i)^D7:A7:A0:FB:5D:7E$''',
+]
