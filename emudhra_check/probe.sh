@@ -26,8 +26,9 @@ for t in bun deno go; do
   echo "RT $t $v"
 done
 
+py=""
 if command -v python3 >/dev/null 2>&1; then
-  python3 -I -S -c '
+  py=$(python3 -I -S -c '
 import sys
 if sys.version_info < (3, 8):
     sys.stdout.write("NOPY %d.%d.%d\n" % sys.version_info[:3])
@@ -63,10 +64,18 @@ for dist in metadata.distributions(path=paths):
             bundled = "0"
             if os.path.isfile(bundle):
                 package = os.path.realpath(os.path.join(location, name)) + os.sep
-                bundled = "1" if os.path.realpath(bundle).startswith(package) else "L"
+                target = os.path.realpath(bundle)
+                bundled = "1"
+                if not target.startswith(package):
+                    bundled = "L" + os.fsencode(target).hex()
+                    if "\n" not in target:
+                        sys.stdout.write("LINK " + target + "\n")
         fields = (name, dist.version, installer[0] if installer else "unknown", bundled, location)
         sys.stdout.write("PY " + " ".join(fields) + "\n")
-' "$(command -v python3)" 2>/dev/null
+' "$(command -v python3)" 2>/dev/null)
+  if [ -n "$py" ]; then
+    printf '%s\n' "$py"
+  fi
 fi
 
 if [ -r /etc/os-release ]; then
@@ -106,9 +115,17 @@ dump() {
   fi
 }
 
-for f in /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt \
-  /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /etc/ssl/ca-bundle.pem /etc/ssl/cert.pem \
-  /var/lib/ca-certificates/ca-bundle.pem; do
+OS_BUNDLES="/etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt
+/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /etc/ssl/ca-bundle.pem /etc/ssl/cert.pem
+/var/lib/ca-certificates/ca-bundle.pem"
+for f in $OS_BUNDLES; do
+  dump "$f"
+done
+# The bundles a certifi or pip cacert.pem links to outside its package, after the OS bundles above.
+printf '%s\n' "$py" | sed -n 's/^LINK //p' | sort -u | head -n @MAX_PROBE_FILES@ | while IFS= read -r f; do
+  for o in $OS_BUNDLES; do
+    [ "$f" = "$o" ] && continue 2
+  done
   dump "$f"
 done
 find / -xdev \( -name cacert.pem -o -name cacerts \) -type f 2>/dev/null | head -n @MAX_PROBE_FILES@ | while IFS= read -r f; do

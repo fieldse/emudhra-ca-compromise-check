@@ -494,6 +494,24 @@ for finding in image_findings('$label', parse_probe_output(open('/out/probe-$lab
     got=$(grep -c "dropped\|did not finish\|no od" <<<"$judged" || true)
     check "probe under $label drops no records" "0" "$got"
   done
+  # A pip-installed certifi whose cacert.pem links to an affected bundle under a name the probe does not search for
+  run_in "$LAB_IMAGE" sh -c "P=\$(python3 -I -c 'import sysconfig; print(sysconfig.get_paths()[\"purelib\"])') \
+    && mkdir -p \$P/certifi \$P/certifi-$CERTIFI_OLD.dist-info /opt/corp \
+    && printf 'Metadata-Version: 2.1\nName: certifi\nVersion: $CERTIFI_OLD\n' >\$P/certifi-$CERTIFI_OLD.dist-info/METADATA \
+    && echo pip >\$P/certifi-$CERTIFI_OLD.dist-info/INSTALLER \
+    && cp /out/certifi/cacert-$CERTIFI_OLD.pem /opt/corp/ca.pem && ln -s /opt/corp/ca.pem \$P/certifi/cacert.pem \
+    && sh /out/probe.sh" >"$OUT/probe-linked.txt"
+  judged=$(run_in "$LAB_IMAGE" python3 -I -c "
+import sys
+sys.path.insert(0, '/repo')
+from emudhra_check.detections.containers import image_findings
+from emudhra_check.probe import parse_probe_output
+for finding in image_findings('linked', parse_probe_output(open('/out/probe-linked.txt', 'rb').read())):
+    print(finding.line())
+")
+  got=$(grep -cFx -e "INFO  certifi [image:linked] found $CERTIFI_OLD, its cacert.pem links outside the package, judged by the bundle it resolves to" \
+    -e "FAIL  ca-bundle [image:linked /opt/corp/ca.pem] contains emSign ECC Root CA - G3 (removed root)" <<<"$judged" || true)
+  check "probe dumps the affected bundle a certifi cacert.pem links to" "2" "$got"
 }
 
 # Lint the test scripts, the probe and the fake podman

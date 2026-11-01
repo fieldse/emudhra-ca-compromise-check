@@ -16,6 +16,7 @@ from emudhra_check.detections.containers import PodmanImages
 from emudhra_check.detections.ports import ProbeRun, ProbeStatus
 from emudhra_check.report import Level
 from tests.unit.fakes import lines, make_context
+from tests.unit.test_certificates import pem
 from tests.unit.test_probe import RECORDED, file_record
 
 IMAGE = "localhost/x:1"
@@ -91,10 +92,57 @@ class PodmanImagesTest(unittest.TestCase):
                 f"INFO  pip [{WHERE}] found 23.0.1, no bundled cacert.pem, patched to use the system store",
                 f"FAIL  certifi [{WHERE}] found 2026.7.22, fixed 2026.10.18 (vendors its own CA bundle)",
                 f"FAIL  uv [{WHERE}] found 0.13.3, fixed 0.13.4 (vendors its own CA bundle)",
-                f"INFO  certifi [{WHERE}] found 2026.7.22, its cacert.pem links outside the package,"
-                " judged by the bundle it resolves to",
+                f"FAIL  certifi [{WHERE}] found 2026.7.22, fixed 2026.10.18 (vendors its own CA bundle)",
             ],
         )
+
+    def linked_stream(self, target: bytes) -> bytes:
+        return (
+            b"PY certifi 2026.7.22 pip L%s /usr/lib/python3/site-packages\n"
+            % target.hex().encode()
+            + b"LINK "
+            + target
+            + b"\n"
+        )
+
+    def test_linked_bundle_is_judged_by_its_dumped_target(self) -> None:
+        stream = self.linked_stream(b"/opt/corp/ca.pem") + file_record(
+            b"/opt/corp/ca.pem", pem(G3_ECC_ROOT.der)
+        )
+        self.assertEqual(
+            image_lines(stream),
+            [
+                f"INFO  certifi [{WHERE}] found 2026.7.22, its cacert.pem links outside the package,"
+                " judged by the bundle it resolves to",
+                f"FAIL  ca-bundle [{WHERE} /opt/corp/ca.pem] contains {G3_LABEL}",
+            ],
+        )
+
+    def test_linked_target_with_the_content_of_another_dumped_file(self) -> None:
+        bundle = pem(G3_ECC_ROOT.der)
+        stream = (
+            file_record(b"/etc/ssl/cert.pem", bundle)
+            + self.linked_stream(b"/opt/corp/ca.pem")
+            + file_record(b"/opt/corp/ca.pem", bundle)
+        )
+        got = image_lines(stream)
+        self.assertIn(
+            f"INFO  certifi [{WHERE}] found 2026.7.22, its cacert.pem links outside the package,"
+            " judged by the bundle it resolves to",
+            got,
+        )
+        self.assertIn(
+            f"FAIL  ca-bundle [{WHERE} /etc/ssl/cert.pem] contains {G3_LABEL}", got
+        )
+
+    def test_linked_target_without_a_record_falls_back_to_the_version(self) -> None:
+        for extra in (b"", b"BIG 99999999 /opt/corp/ca.pem\n"):
+            with self.subTest(extra=extra):
+                got = image_lines(self.linked_stream(b"/opt/corp/ca.pem") + extra)
+                self.assertEqual(
+                    got[0],
+                    f"FAIL  certifi [{WHERE}] found 2026.7.22, fixed 2026.10.18 (vendors its own CA bundle)",
+                )
 
     def test_suse_records_only_on_suse(self) -> None:
         stream = b"OS opensuse-leap\nPKG rpm ca-certificates 2.0-1\nPKG suse ca-certificates-mozilla 2.92\n"

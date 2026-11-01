@@ -148,6 +148,30 @@ class HostileStreamTest(unittest.TestCase):
         self.assertEqual(report.old_pythons, ("3.7.17",))
         self.assertEqual(report.dropped, 2)
 
+    def test_link_targets_and_judged_paths(self) -> None:
+        target = "/opt/corp/ca bundle.pem"
+        stream = (
+            b"PY certifi 2026.7.22 pip L%s /site\nPY pip 26.2.2 pip L /site\n"
+            % target.encode().hex().encode()
+            + b"PY certifi 1 pip L123 /site\n"
+            + GOOD
+            + file_record(b"/etc/ssl/copy.pem", b"good bundle")
+        )
+        report = parse_probe_output(stream)
+        self.assertEqual([p.link_target for p in report.pythons], [target, "", ""])
+        self.assertEqual(
+            report.judged_paths, frozenset({"/etc/ssl/cert.pem", "/etc/ssl/copy.pem"})
+        )
+
+    def test_file_over_the_record_cap_is_not_judged(self) -> None:
+        stream = b"".join(
+            file_record(b"/f/%d" % n, b"bundle %d" % n)
+            for n in range(MAX_PROBE_RECORDS + 1)
+        )
+        report = parse_probe_output(stream)
+        self.assertNotIn(f"/f/{MAX_PROBE_RECORDS}", report.judged_paths)
+        self.assertIn("/f/0", report.judged_paths)
+
     def test_duplicate_files_are_kept_once(self) -> None:
         stream = GOOD + file_record(
             b"/etc/ssl/certs/ca-certificates.crt", b"good bundle"

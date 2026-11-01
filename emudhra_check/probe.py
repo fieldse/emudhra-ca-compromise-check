@@ -27,6 +27,7 @@ HEX_LINE = re.compile(
     rb"[ \t]{0,16}[0-9a-f]{2}(?:[ \t]{1,8}[0-9a-f]{2}){0,63}[ \t]{0,16}"
 )
 SIZE_DIGITS = MAX_VERSION_COMPONENT_DIGITS
+BUNDLED_FIELD = re.compile(r"[01-]|L[0-9a-f]*")
 KINDS = frozenset(
     {b"NODE", b"RT", b"PY", b"NOPY", b"OS", b"PKG", b"CHG", b"NOOD", b"FILE", b"BIG"}
 )
@@ -66,14 +67,22 @@ class ProbeRuntime:
 
 @dataclass(frozen=True)
 class ProbePython:
-    """A PY record. bundled is 1 when the package's own cacert.pem exists, L when it links out of the
-    package, 0 when it is absent, and - for uv."""
+    """A PY record. bundled is 1 when the package's own cacert.pem exists, L and the hex of the real path
+    when it links out of the package, 0 when it is absent, and - for uv."""
 
     name: str
     version: str
     installer: str
     bundled: str
     location: str
+
+    @property
+    def link_target(self) -> Optional[str]:
+        """Return the real path a linked cacert.pem resolves to, decoded as FILE paths are, or None."""
+        if not self.bundled.startswith("L"):
+            return None
+        digits = self.bundled[1:]
+        return text(bytes.fromhex(digits)) if len(digits) % 2 == 0 else ""
 
 
 @dataclass(frozen=True)
@@ -108,6 +117,7 @@ class ProbeReport:
     big: tuple[ProbeBig, ...] = ()
     no_od: bool = False
     dropped: int = 0
+    judged_paths: frozenset[str] = frozenset()
 
 
 def text(raw: bytes) -> str:
@@ -136,12 +146,14 @@ class Collector:
     kept: dict[bytes, list[object]] = field(default_factory=dict)
     dropped: int = 0
 
-    def add(self, kind: bytes, record: object) -> None:
+    def add(self, kind: bytes, record: object) -> bool:
+        """Keep a record and return True, or count it as dropped and return False when its kind is full."""
         records = self.kept.setdefault(kind, [])
         if len(records) < MAX_PROBE_RECORDS:
             records.append(record)
-        else:
-            self.dropped += 1
+            return True
+        self.dropped += 1
+        return False
 
     def of(self, kind: bytes) -> list[object]:
         return self.kept.get(kind, [])
@@ -184,6 +196,7 @@ def parse_probe_output(data: bytes) -> ProbeReport:
         lines.pop()
     found = Collector()
     hashes: set[bytes] = set()
+    judged: set[str] = set()
     os_id = ""
     changelog = 0
     no_od = False
@@ -204,9 +217,11 @@ def parse_probe_output(data: bytes) -> ProbeReport:
             content, index = read_file(lines, index, size)
             if content is None:
                 found.dropped += 1
-            elif hashlib.sha256(content).digest() not in hashes:
+            elif hashlib.sha256(content).digest() in hashes:
+                judged.add(fields[1])
+            elif found.add(kind, ProbeFile(fields[1], content)):
                 hashes.add(hashlib.sha256(content).digest())
-                found.add(kind, ProbeFile(fields[1], content))
+                judged.add(fields[1])
             continue
         if kind == b"NOOD":
             no_od = True
@@ -232,6 +247,7 @@ def parse_probe_output(data: bytes) -> ProbeReport:
         big=tuple(r for r in found.of(b"BIG") if isinstance(r, ProbeBig)),
         no_od=no_od,
         dropped=found.dropped,
+        judged_paths=frozenset(judged),
     )
 
 
@@ -247,7 +263,7 @@ def parse_record(kind: bytes, line: bytes) -> Optional[object]:
         return ProbeRuntime(fields[0], fields[1]) if fields else None
     if kind == b"PY":
         fields = words(line, 5)
-        if fields is None or fields[3] not in ("0", "1", "L", "-"):
+        if fields is None or not BUNDLED_FIELD.fullmatch(fields[3]):
             return None
         return ProbePython(*fields)
     if kind == b"OS":

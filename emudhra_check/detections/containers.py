@@ -37,7 +37,7 @@ from emudhra_check.detections.runtimes import (
 from emudhra_check.detections.shared import MATCHER
 from emudhra_check.detections.trust_stores import keystore_findings
 from emudhra_check.fixes import BUN_FIXED, DENO_FIXED, GO_FIXED
-from emudhra_check.probe import ProbeReport, parse_probe_output
+from emudhra_check.probe import ProbePython, ProbeReport, parse_probe_output
 from emudhra_check.report import Finding, Level, Subject
 from emudhra_check.scope import FileInterests
 from emudhra_check.versions import judge, judge_branched
@@ -46,7 +46,6 @@ __all__ = ["PodmanImages", "image_findings"]
 
 G3_FULL = (CertificateMatch(G3_ECC_ROOT.label, G3_ECC_ROOT.role, MatchKind.FULL),)
 PYTHON_PACKAGES = frozenset({"certifi", "pip", "uv"})
-PROBE_BUNDLES = {"0": Bundle.ABSENT, "L": Bundle.LINKED}
 UNFINISHED = {
     ProbeStatus.FAILED: "failed",
     ProbeStatus.TIMEOUT: "timed out",
@@ -68,6 +67,25 @@ def runtime_findings(where: str, tool: str, line: str) -> list[Finding]:
             [judge_branched(Subject("go", where), version, GO_FIXED)] if version else []
         )
     return []
+
+
+def python_finding(
+    where: str, python: ProbePython, report: ProbeReport
+) -> list[Finding]:
+    """Judge one PY record. A linked cacert.pem defers to its target only when the probe dumped and the
+    host judged that target, else the version decides."""
+    installer = python.installer
+    bundle = Bundle.ABSENT if python.bundled == "0" else Bundle.OWN
+    target = python.link_target
+    if target is not None:
+        if target in report.judged_paths:
+            bundle = Bundle.LINKED
+        else:
+            installer = ""
+    subject = Subject(python.name, where)
+    return python_package_finding(
+        subject, python.version, installer=installer, bundle=bundle
+    )
 
 
 def package_wanted(manager: str, os_id: str) -> bool:
@@ -94,13 +112,7 @@ def image_findings(name: str, report: ProbeReport) -> list[Finding]:
         found += runtime_findings(where, runtime.tool, runtime.version_line)
     for python in report.pythons:
         if python.name in PYTHON_PACKAGES:
-            subject = Subject(python.name, where)
-            found += python_package_finding(
-                subject,
-                python.version,
-                installer=python.installer,
-                bundle=PROBE_BUNDLES.get(python.bundled, Bundle.OWN),
-            )
+            found += python_finding(where, python, report)
     for version in report.old_pythons:
         detail = f"{version} predates importlib.metadata, certifi and pip not inspected"
         found.append(Finding(Level.WARN, Subject("python3", where), detail))
