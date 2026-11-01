@@ -28,7 +28,13 @@ from emudhra_check.fixes import (
 from emudhra_check.limits import MAX_TEXT_BYTES
 from emudhra_check.report import Finding, Level, Subject
 from emudhra_check.scope import FileInterests
-from emudhra_check.versions import apk_compare, dpkg_compare, judge, rpm_compare
+from emudhra_check.versions import (
+    apk_compare,
+    dpkg_compare,
+    judge,
+    rpm_compare,
+    rpm_evr_compare,
+)
 
 __all__ = [
     "SUSE_ID_PREFIXES",
@@ -79,25 +85,29 @@ def apk_finding(subject: Subject, version: str, os_id: str) -> Finding:
 
 
 def rpm_finding(subject: Subject, version: str, changelog_hits: int) -> Finding:
-    if changelog_hits > 0:
-        return Finding(
-            Level.PASS, subject, f"found {version}, changelog mentions {RPM_CVE}"
-        )
+    """Judge an rpm VERSION-RELEASE: a TLS-only build first, then a changelog mention, then its family's fix."""
+    changelog = Finding(
+        Level.PASS, subject, f"found {version}, changelog mentions {RPM_CVE}"
+    )
     release_part = version.rpartition("-")[2]
     tls_only = dict(RPM_TLS_ONLY_BUILDS)
     for family, pattern, first_fixed in RPM_FIXED_BUILDS:
         if not fnmatch.fnmatchcase(release_part, pattern):
             continue
-        fixed = rpm_compare(version, first_fixed) >= 0
+        fixed = rpm_evr_compare(version, first_fixed) >= 0
         partial = tls_only.get(family)
         if (
             partial is not None
-            and rpm_compare(version, partial) >= 0
+            and rpm_evr_compare(version, partial) >= 0
             and (partial == first_fixed or not fixed)
         ):
             return Finding(Level.WARN, subject, f"found {version}, {CODE_SIGNING}")
+        if changelog_hits > 0:
+            return changelog
         level = Level.PASS if fixed else Level.FAIL
         return Finding(level, subject, f"found {version}, fixed {first_fixed}")
+    if changelog_hits > 0:
+        return changelog
     return Finding(
         Level.WARN,
         subject,

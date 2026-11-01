@@ -416,6 +416,25 @@ class ElectronAppsTest(unittest.TestCase):
             ],
         )
 
+    def test_linux_reads_count_against_the_binary_budget(self) -> None:
+        files = {
+            "/opt/a/a": ELF + b"Electron/43.8.0",
+            "/opt/a/resources/app.asar": b"asar",
+            "/opt/b/b": ELF + b"Electron/43.8.0",
+            "/opt/b/resources/app.asar": b"asar",
+        }
+        ctx = apps_context(files, ())
+        assert isinstance(ctx.files, FakeFiles)
+        ctx.files.binary_budget = 10
+        self.assertEqual(
+            lines(ElectronApps(), ctx),
+            [
+                "FAIL  electron app [/opt/a/a] found 43.8.0, fixed 43.8.1 (update the app)",
+                "INFO  scan [/opt/b/b] binary budget exhausted, skipped",
+            ],
+        )
+        self.assertEqual(ctx.files.binary_spent, len(files["/opt/a/a"]))
+
 
 if __name__ == "__main__":
     unittest.main()

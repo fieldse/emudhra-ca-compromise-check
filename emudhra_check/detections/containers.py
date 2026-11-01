@@ -78,6 +78,9 @@ def package_wanted(manager: str, os_id: str) -> bool:
 def image_findings(name: str, report: ProbeReport) -> list[Finding]:
     """Judge every record of one image's probe report."""
     where = f"image:{name}"
+    if report == ProbeReport():
+        detail = "returned no records, nothing inspected"
+        return [Finding(Level.INFO, Subject("probe", where), detail)]
     found: list[Finding] = []
     for node in report.nodes:
         version = node_version(node.version_line) or node.version_line

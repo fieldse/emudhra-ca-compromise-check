@@ -14,13 +14,13 @@ from pathlib import Path
 from typing import ClassVar, Iterator, Optional
 
 from emudhra_check.certificates import (
-    PEM_BEGIN,
     Buffer,
     CertificateMatch,
     KeystoreKind,
     MatchKind,
     Role,
     bundle_findings,
+    has_pem,
     keystore_kind,
 )
 from emudhra_check.detections.ports import Context
@@ -213,7 +213,7 @@ class PemBundles:
                 yield from data
                 continue
             try:
-                if data.find(PEM_BEGIN) < 0 or not ctx.ledger.claim(indexed.file_id):
+                if not has_pem(data) or not ctx.ledger.claim(indexed.file_id):
                     continue
                 checked += 1
                 matches = MATCHER.scan(data)
@@ -238,11 +238,12 @@ ENCRYPTED_DETAIL = (
 def keystore_findings(
     subject: Subject, data: Buffer, matches: tuple[CertificateMatch, ...]
 ) -> list[Finding]:
-    """Judge a Java keystore: plain stores by their content, an encrypted PKCS12 with no FAIL as WARN."""
+    """Judge a Java keystore: plain stores by their content, an encrypted PKCS12 with no FAIL as WARN, and a
+    file of unknown format by its content only when that holds a FAIL."""
     kind = keystore_kind(data)
-    if kind is KeystoreKind.UNKNOWN:
-        return []
     findings = bundle_findings(subject, matches)
+    if kind is KeystoreKind.UNKNOWN:
+        return findings if any(f.level is Level.FAIL for f in findings) else []
     if kind is KeystoreKind.PKCS12_ENCRYPTED and not any(
         f.level is Level.FAIL for f in findings
     ):

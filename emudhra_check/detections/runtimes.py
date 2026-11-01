@@ -193,11 +193,14 @@ def version_of(
     args: list[str],
     parse: Callable[[str], Optional[str]],
 ) -> tuple[list[Finding], Optional[str]]:
-    """Run a tool's version command and parse it with parse, or return the timeout line."""
+    """Run a tool's version command and parse it with parse, or return the timeout or unreadable line."""
     result = run_tool(ctx, tool, name, args)
     if isinstance(result, list):
         return result, None
-    return [], parse(result.stdout or result.stderr)
+    version = parse(result.stdout or result.stderr)
+    if version is None:
+        return [Finding(Level.WARN, Subject(name, "host"), "version unreadable")], None
+    return [], version
 
 
 class BunHost:

@@ -20,6 +20,7 @@ from emudhra_check.versions import (
     parse_version,
     pseudo_version_time,
     rpm_compare,
+    rpm_evr_compare,
 )
 
 SUBJECT = Subject("node", "host")
@@ -278,6 +279,14 @@ class PackageCompareTest(unittest.TestCase):
 
     def test_apk(self) -> None:
         self.check(apk_compare, APK)
+
+    def test_rpm_version_before_release(self) -> None:
+        older, newer = "2026.2.92-1.el9", "2026.2.92_v9.0.319-90.3.el9_8"
+        self.assertEqual(rpm_compare(older, newer), 1)
+        self.assertEqual(rpm_evr_compare(older, newer), -1)
+        self.assertEqual(rpm_evr_compare(newer, older), 1)
+        self.assertEqual(rpm_evr_compare(newer, newer), 0)
+        self.assertEqual(rpm_evr_compare("2.92", "2.92-1"), -1)
 
     def test_no_int_in_package_compares(self) -> None:
         with mock.patch("emudhra_check.versions.int", no_int, create=True):

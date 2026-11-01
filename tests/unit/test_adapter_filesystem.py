@@ -227,6 +227,30 @@ class WalkTest(TreeTest):
         assert not isinstance(data, Skipped)
         self.assertEqual(data.find(b"tail"), 40 * 1024 * 1024)
 
+    def test_non_regular_file_is_never_opened(self) -> None:
+        os.mkfifo(self.root / "cacert.pem")
+        (self.root / "link.pem").symlink_to(self.root / "cacert.pem")
+        files = LocalFiles(scope([self.root]), ORACLE)
+        with mock.patch.object(
+            filesystem.os, "open", side_effect=AssertionError("opened")
+        ):
+            for name in ("cacert.pem", "link.pem"):
+                self.assertEqual(
+                    files.read_bytes(self.root / name, 10), Skipped(UNREADABLE)
+                )
+
+    def test_file_shrunk_before_it_is_mapped(self) -> None:
+        path = self.root / "large.crt"
+        with open(path, "wb") as handle:
+            handle.truncate(40 * 1024 * 1024)
+        files = LocalFiles(scope([self.root]), ORACLE)
+        with mock.patch.object(
+            filesystem.mmap,
+            "mmap",
+            side_effect=ValueError("mmap length is greater than file size"),
+        ):
+            self.assertEqual(files.read_bytes(path, MAX_BUNDLE_BYTES), Skipped(CHANGED))
+
     def test_invalid_utf8_name(self) -> None:
         name = b"cacert-\xff.pem"
         with open(os.path.join(os.fsencode(self.root), name), "wb") as handle:

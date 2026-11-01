@@ -26,6 +26,8 @@ from emudhra_check.certificates import (
     MatchKind,
     Role,
     bundle_findings,
+    first_der_element,
+    has_pem,
     keystore_kind,
     pem_blocks,
 )
@@ -55,6 +57,15 @@ def pem(der: bytes, width: int = 64, eol: str = "\n") -> bytes:
             ["-----BEGIN CERTIFICATE-----", *lines, "-----END CERTIFICATE-----"]
         ).encode()
         + eol.encode()
+    )
+
+
+def trusted_pem(der: bytes, width: int) -> bytes:
+    """Wrap DER as an OpenSSL TRUSTED CERTIFICATE block."""
+    return (
+        pem(der, width)
+        .replace(b"BEGIN CERTIFICATE", b"BEGIN TRUSTED CERTIFICATE")
+        .replace(b"END CERTIFICATE", b"END TRUSTED CERTIFICATE")
     )
 
 
@@ -235,6 +246,46 @@ class MatcherTest(unittest.TestCase):
             + pem(G3_ECC_ROOT.der)
         )
         self.assertEqual(self.full(data), [G3_ECC_ROOT.label])
+
+    def test_truncated_block_does_not_swallow_the_next(self) -> None:
+        data = b"-----BEGIN CERTIFICATE-----\nMIIBtruncated\n" + pem(
+            G3_ECC_ROOT.der, 60
+        )
+        self.assertNotIn(G3_ECC_ROOT.pem_line, data)
+        self.assertNotIn(G3_ECC_ROOT.der, data)
+        self.assertEqual(list(pem_blocks(data)), [G3_ECC_ROOT.der])
+        self.assertEqual(self.full(data), [G3_ECC_ROOT.label])
+
+    def test_trusted_certificate_block(self) -> None:
+        aux = bytes.fromhex("30060c0474657374")
+        data = trusted_pem(G3_ECC_ROOT.der + aux, 60)
+        self.assertNotIn(G3_ECC_ROOT.pem_line, data)
+        self.assertNotIn(b"-----BEGIN CERTIFICATE-----", data)
+        self.assertTrue(has_pem(data))
+        self.assertEqual(self.full(data), [G3_ECC_ROOT.label])
+        self.assertEqual(
+            self.full(
+                b"# bundle\n" + trusted_pem(AAA.der + aux, 76) + pem(b"\x30\x00")
+            ),
+            [AAA.label],
+        )
+
+    def test_first_der_element(self) -> None:
+        self.assertEqual(
+            first_der_element(b"\x30\x02\x05\x00tail"), b"\x30\x02\x05\x00"
+        )
+        self.assertEqual(
+            first_der_element(G3_ECC_ROOT.der + b"\x30\x00"), G3_ECC_ROOT.der
+        )
+        for bad in (
+            b"",
+            b"\x30",
+            b"\x31\x00",
+            b"\x30\x85\x01\x01\x01\x01\x01",
+            b"\x30\x05ab",
+        ):
+            with self.subTest(bad=bad):
+                self.assertIsNone(first_der_element(bad))
 
     def test_certifi_2026_10_19_has_no_match(self) -> None:
         path = OUT / "certifi" / "cacert-2026.10.19.pem"

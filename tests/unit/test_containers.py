@@ -144,6 +144,14 @@ class PodmanImagesTest(unittest.TestCase):
                     ],
                 )
 
+    def test_image_with_no_records(self) -> None:
+        self.assertEqual(
+            image_lines(b""),
+            [f"INFO  probe [{WHERE}] returned no records, nothing inspected"],
+        )
+        self.assertEqual(image_lines(b"HELLO\n"), image_lines(b""))
+        self.assertEqual(image_lines(b"OS debian\n"), [])
+
     def test_findings_name_the_image(self) -> None:
         ctx = dataclasses.replace(
             make_context(),

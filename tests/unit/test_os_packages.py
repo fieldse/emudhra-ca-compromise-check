@@ -134,6 +134,16 @@ class VerdictTest(unittest.TestCase):
     def test_rpm_changelog_names_the_cve(self) -> None:
         self.assertIs(level("rpm", "2024.2.69_v8.0.303-91.4.el9_4", hits=1), PASS)
 
+    def test_changelog_cannot_lift_a_tls_only_build(self) -> None:
+        for version in ("2026.2.92_v9.0.319-1.fc44", "2026.2.92_v9.0.319-100.1.el10"):
+            with self.subTest(version=version):
+                self.assertIs(level("rpm", version, hits=1), WARN)
+        self.assertIs(level("rpm", "1.0-1.unknown", hits=1), PASS)
+
+    def test_rpm_compares_version_before_release(self) -> None:
+        self.assertIs(level("rpm", "2026.2.92-95.el9_8"), FAIL)
+        self.assertIs(level("rpm", "2026.2.92_v9.0.319-90.3.el9_8"), PASS)
+
     def test_rpm_detail(self) -> None:
         found = PackageObservation("rpm", "2024.2.69_v8.0.303-91.4.el9_4", "rhel")
         self.assertEqual(

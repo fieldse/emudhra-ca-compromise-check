@@ -135,6 +135,23 @@ class PemBundlesTest(unittest.TestCase):
             ],
         )
 
+    def test_trusted_certificate_only_file_is_scanned(self) -> None:
+        trusted = (
+            pem(G3_ECC_ROOT.der + bytes.fromhex("30060c0474657374"))
+            .replace(b"BEGIN CERTIFICATE", b"BEGIN TRUSTED CERTIFICATE")
+            .replace(b"END CERTIFICATE", b"END TRUSTED CERTIFICATE")
+        )
+        files = FakeFiles({"/r/trusted.pem": trusted})
+        ctx = make_context(files, indexed=files.indexed("/r/trusted.pem"))
+        self.assertEqual(
+            lines(PemBundles(), ctx),
+            [
+                "FAIL  ca-bundle [/r/trusted.pem] contains emSign ECC Root CA - G3 (removed root)",
+                "INFO  ca-bundle [scan roots] checked 1 PEM files; only files containing an affected certificate"
+                " are listed",
+            ],
+        )
+
     def test_aaa_only_bundle_warns_and_passes(self) -> None:
         files = FakeFiles({"/r/aaa.pem": pem(AAA.der)})
         ctx = make_context(files, indexed=files.indexed("/r/aaa.pem"))
@@ -301,7 +318,32 @@ class KeystoreFindingsTest(unittest.TestCase):
         self.assertIn("AAA Certificate Services", got[0])
 
     def test_unknown_file_gives_no_line(self) -> None:
-        self.assertEqual(keystore_lines(b"not a keystore " + G3_ECC_ROOT.der), [])
+        self.assertEqual(keystore_lines(b"not a keystore " + AAA.der), [])
+        self.assertEqual(keystore_lines(b"not a keystore, no certificate"), [])
+
+    def test_unknown_file_with_a_fail_gives_the_content_verdict(self) -> None:
+        self.assertEqual(
+            keystore_lines(b"not a keystore " + G3_ECC_ROOT.der),
+            [
+                "FAIL  java keystore [/k] contains emSign ECC Root CA - G3 (removed root)"
+            ],
+        )
+
+    def test_pem_cacerts_reached_by_both_detections(self) -> None:
+        files = FakeFiles({"/r/cacerts": AFFECTED})
+        ctx = make_context(files, indexed=files.indexed("/r/cacerts"))
+        self.assertEqual(
+            [
+                line
+                for line in (
+                    f.line() for f in run_all([JavaKeystores(), PemBundles()], ctx)
+                )
+                if line.startswith("FAIL")
+            ],
+            [
+                "FAIL  java keystore [/r/cacerts] contains emSign ECC Root CA - G3 (removed root)"
+            ],
+        )
 
 
 class JavaKeystoresTest(unittest.TestCase):

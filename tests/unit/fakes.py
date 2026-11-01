@@ -38,7 +38,10 @@ class FakeFiles:
         dirs: Iterable[str] = (),
         excluded: Iterable[str] = (),
         ids: Optional[dict[str, FileId]] = None,
+        binary_budget: int = 1 << 40,
     ) -> None:
+        self.binary_budget = binary_budget
+        self.binary_spent = 0
         self.files = {Path(p): v for p, v in (files or {}).items()}
         self.dirs = {Path(d) for d in dirs}
         for path in self.files:
@@ -92,6 +95,12 @@ class FakeFiles:
 
     def refused_reads(self) -> int:
         return self.refused
+
+    def charge_binary(self, size: int) -> bool:
+        if self.binary_spent >= self.binary_budget:
+            return False
+        self.binary_spent += size
+        return True
 
     def indexed(self, *paths: str) -> tuple[IndexedFile, ...]:
         """Return index entries for some of the files, as the walk would record them."""

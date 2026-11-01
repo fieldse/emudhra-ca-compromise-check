@@ -12,7 +12,7 @@ import binascii
 import hashlib
 from dataclasses import dataclass
 from enum import Enum
-from typing import Iterator, Protocol
+from typing import Iterator, Optional, Protocol
 
 from emudhra_check.certdata import RECORDS
 from emudhra_check.fixes import AAA_LEVEL
@@ -25,6 +25,8 @@ class Buffer(Protocol):
 
     def find(self, sub: bytes, start: int = ..., end: int = ...) -> int: ...
 
+    def rfind(self, sub: bytes, start: int = ..., end: int = ...) -> int: ...
+
     def __getitem__(self, index: slice) -> bytes: ...
 
     def __len__(self) -> int: ...
@@ -32,6 +34,8 @@ class Buffer(Protocol):
 
 PEM_BEGIN = b"-----BEGIN CERTIFICATE-----"
 PEM_END = b"-----END CERTIFICATE-----"
+TRUSTED_BEGIN = b"-----BEGIN TRUSTED CERTIFICATE-----"
+TRUSTED_END = b"-----END TRUSTED CERTIFICATE-----"
 PEM_WHITESPACE = b"\r\n \t"
 BASE64_ALPHABET = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
 ISRG_ROOT_X1_LINE = b"MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAw"
@@ -108,23 +112,50 @@ G3_ECC_ROOT = next(
 )
 
 
-def pem_blocks(data: Buffer) -> Iterator[bytes]:
-    """Yield the DER of each decodable PEM certificate block, skipping a BEGIN with no END nearby."""
+def has_pem(data: Buffer) -> bool:
+    """Return whether data holds a PEM certificate or trusted certificate block."""
+    return data.find(PEM_BEGIN) >= 0 or data.find(TRUSTED_BEGIN) >= 0
+
+
+def first_der_element(der: bytes) -> Optional[bytes]:
+    """Return the first DER SEQUENCE in der, the certificate of an OpenSSL trusted certificate."""
+    if len(der) < 2 or der[0] != 0x30:
+        return None
+    if der[1] < 0x80:
+        header, length = 2, der[1]
+    else:
+        width = der[1] & 0x7F
+        if not 1 <= width <= 4 or len(der) < 2 + width:
+            return None
+        header, length = 2 + width, int.from_bytes(der[2 : 2 + width], "big")
+    return der[: header + length] if header + length <= len(der) else None
+
+
+def pem_blocks(
+    data: Buffer, begin_marker: bytes = PEM_BEGIN, end_marker: bytes = PEM_END
+) -> Iterator[bytes]:
+    """Yield the DER of each decodable PEM block, skipping a BEGIN with no END nearby.
+
+    A block runs from the last BEGIN before its END, so a truncated block cannot swallow the next one.
+    """
     pos = 0
     no_end_until = 0
     while True:
-        begin = data.find(PEM_BEGIN, pos)
+        begin = data.find(begin_marker, pos)
         if begin < 0:
             return
-        start = begin + len(PEM_BEGIN)
-        window_end = min(len(data), start + MAX_PEM_BLOCK_BYTES + len(PEM_END))
-        end = data.find(PEM_END, max(start, no_end_until), window_end)
+        start = begin + len(begin_marker)
+        window_end = min(len(data), start + MAX_PEM_BLOCK_BYTES + len(end_marker))
+        end = data.find(end_marker, max(start, no_end_until), window_end)
         if end < 0:
-            no_end_until = window_end - len(PEM_END) + 1
+            no_end_until = window_end - len(end_marker) + 1
             pos = start
             continue
+        last = data.rfind(begin_marker, start, end)
+        if last >= 0:
+            start = last + len(begin_marker)
         body = data[start:end].translate(None, PEM_WHITESPACE)
-        pos = end + len(PEM_END)
+        pos = end + len(end_marker)
         if body.translate(None, BASE64_ALPHABET):
             continue
         try:
@@ -147,11 +178,18 @@ class Matcher:
     def scan(self, data: Buffer) -> tuple[CertificateMatch, ...]:
         """Return each known certificate or key found in data once, with its strongest kind."""
         full: set[bytes] = set()
+        ders: list[bytes] = []
         if data.find(PEM_BEGIN) >= 0:
-            for der in pem_blocks(data):
-                certificate = BY_SHA256.get(hashlib.sha256(der).digest())
-                if certificate is not None:
-                    full.add(certificate.sha256)
+            ders += pem_blocks(data)
+        if data.find(TRUSTED_BEGIN) >= 0:
+            for trusted in pem_blocks(data, TRUSTED_BEGIN, TRUSTED_END):
+                der = first_der_element(trusted)
+                if der is not None:
+                    ders.append(der)
+        for der in ders:
+            certificate = BY_SHA256.get(hashlib.sha256(der).digest())
+            if certificate is not None:
+                full.add(certificate.sha256)
         for certificate in self.certificates:
             if certificate.sha256 in full:
                 continue

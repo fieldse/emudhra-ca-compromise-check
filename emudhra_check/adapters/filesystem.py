@@ -144,7 +144,6 @@ class Walk:
         self.executables: list[Executable] = []
         self.seen_programs: set[FileId] = set()
         self.notices: list[Finding] = []
-        self.spent = 0
 
     def index(self) -> Index:
         return Index(
@@ -328,12 +327,11 @@ class Walk:
         if st.st_size > MAX_BINARY_BYTES:
             self.notices.append(notice("scan", path, "too large to scan, skipped"))
             return
-        if self.spent >= self.owner.binary_budget:
+        if not self.owner.charge_binary(st.st_size):
             self.notices.append(
                 notice("scan", path, "binary budget exhausted, skipped")
             )
             return
-        self.spent += st.st_size
         data = self.owner.read_bytes(real, MAX_BINARY_BYTES, file_id)
         if isinstance(data, Skipped):
             self.notices.append(notice("scan", path, "not readable, skipped"))
@@ -362,7 +360,15 @@ class LocalFiles:
         self.scope = scope
         self.oracle = oracle
         self.binary_budget = binary_budget
+        self.binary_spent = 0
         self.refused = 0
+
+    def charge_binary(self, size: int) -> bool:
+        """Spend size bytes of the run's binary budget, or return False when it is already spent."""
+        if self.binary_spent >= self.binary_budget:
+            return False
+        self.binary_spent += size
+        return True
 
     def walk(
         self,
@@ -389,11 +395,16 @@ class LocalFiles:
     def read_bytes(
         self, path: Path, cap: int, expect: Optional[FileId] = None
     ) -> Union[Buffer, Skipped]:
-        """Read a regular file of at most cap bytes, refusing excluded paths and files changed since indexed."""
+        """Read a regular file of at most cap bytes, refusing excluded paths and files changed since indexed.
+
+        A path that is not a regular file is never opened, so no FIFO or device sees an open.
+        """
         real = self.resolve(path)
         if real is None:
             return Skipped(EXCLUDED)
         try:
+            if not stat.S_ISREG(os.stat(real, follow_symlinks=False).st_mode):
+                return Skipped(UNREADABLE)
             fd = os.open(
                 real, os.O_RDONLY | os.O_NONBLOCK | os.O_NOCTTY | os.O_NOFOLLOW
             )
@@ -416,6 +427,9 @@ class LocalFiles:
             return mmap.mmap(fd, min(cap, st.st_size), access=mmap.ACCESS_READ)
         except OSError:
             return Skipped(UNREADABLE)
+        except ValueError:
+            # mmap raises ValueError when the file shrank after fstat.
+            return Skipped(CHANGED)
         finally:
             os.close(fd)
 

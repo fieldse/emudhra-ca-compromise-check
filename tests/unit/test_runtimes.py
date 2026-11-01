@@ -106,10 +106,18 @@ class VersionVerdictTest(unittest.TestCase):
             )
         )
 
-    def test_bun_unparsable_output_gives_no_version_line(self) -> None:
-        for output in ("", HUGE):
-            ctx, _ = tool_context("bun", output)
-            self.assertFalse(any("[host]" in line for line in lines(BunHost(), ctx)))
+    def test_unparsable_version_output_warns(self) -> None:
+        for detection, name in (
+            (BunHost(), "bun"),
+            (NodeHost(), "node"),
+            (DenoHost(), "deno"),
+            (GoToolchain(), "go"),
+        ):
+            for output in ("", HUGE):
+                with self.subTest(name=name, output=output[:8]):
+                    ctx, _ = tool_context(name, output)
+                    got = [line for line in lines(detection, ctx) if "[host]" in line]
+                    self.assertEqual(got, [f"WARN  {name} [host] version unreadable"])
 
     def test_deno(self) -> None:
         two_lines = "deno {} (stable, release, x86_64-unknown-linux-gnu)\nv8 14.1\n"

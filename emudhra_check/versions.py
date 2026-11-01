@@ -275,6 +275,13 @@ def rpm_compare(a: str, b: str) -> int:
     return -1 if i >= len(a) else 1
 
 
+def rpm_evr_compare(a: str, b: str) -> int:
+    """Order two rpm VERSION-RELEASE strings as rpm does: the versions first, then the releases."""
+    a_version, _, a_release = a.rpartition("-") if "-" in a else (a, "", "")
+    b_version, _, b_release = b.rpartition("-") if "-" in b else (b, "", "")
+    return rpm_compare(a_version, b_version) or rpm_compare(a_release, b_release)
+
+
 APK_SUFFIXES = {
     "alpha": 0,
     "beta": 1,
