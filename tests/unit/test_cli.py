@@ -269,6 +269,7 @@ class RunTest(unittest.TestCase):
             tuple(d.name for d in REGISTRY),
             (
                 "os-trust-store",
+                "ca-certificates-package",
                 "pem-bundles",
             ),
         )

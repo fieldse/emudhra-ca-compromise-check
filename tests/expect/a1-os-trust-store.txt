@@ -2,6 +2,7 @@
 # args: -r /tmp/empty
 # exit: 0
 PASS  os trust store [/etc/ssl/certs/ca-certificates.crt] contains no compromised eMudhra certificate
+PASS  ca-certificates [host] found 20250419+deb13u1, fixed 20250419+deb13u1
 !/etc/pki/
 !/etc/ssl/cert.pem
 !/var/lib/ca-certificates

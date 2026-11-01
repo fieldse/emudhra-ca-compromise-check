@@ -102,6 +102,10 @@ RPM_FIXED_BUILDS: Final = (  # OS-022, OS-025, OS-026, OS-027, OS-028, OS-032 to
     ("rhel 7", "*.el7_*", "2026.2.92_v9.0.319-70.3.el7_9"),
     ("rhel 6", "*.el6_*", "2026.2.92_v9.0.319-60.3.el6_10"),
 )
+RPM_TLS_ONLY_BUILDS: Final = (  # OS-023, OS-033
+    ("fedora", "2026.2.92_v9.0.319-1"),
+    ("centos stream 10", "2026.2.92_v9.0.319-100.1.el10"),
+)
 SUSE_FIXED: Final = "2.92"  # OS-051, OS-052, OS-053
 PACMAN_FIXED: Final = FixRule.single("3.131.1", Level.FAIL)  # OS-049
 AAA_LEVEL: Final = Level.WARN  # INC-004, INC-046, OS-074

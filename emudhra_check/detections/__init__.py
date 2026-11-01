@@ -5,6 +5,7 @@ REGISTRY lists one instance of every detection class. Its order is the output or
 
 from __future__ import annotations
 
+from emudhra_check.detections.os_packages import CaCertificatesPackage
 from emudhra_check.detections.ports import Detection
 from emudhra_check.detections.trust_stores import OsTrustStore, PemBundles
 
@@ -12,5 +13,6 @@ __all__ = ["REGISTRY", "Detection"]
 
 REGISTRY: tuple[Detection, ...] = (
     OsTrustStore(),
+    CaCertificatesPackage(),
     PemBundles(),
 )
