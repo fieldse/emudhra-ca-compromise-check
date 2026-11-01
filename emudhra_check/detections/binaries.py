@@ -3,7 +3,8 @@
 GoBinaries reads the build information of every Go program the walk classified, judges its
 toolchain and the x509roots fallback module it embeds, and scans it for the compromised roots.
 RustBinaries judges the webpki crates whose source paths a Rust program carries and scans it the
-same way. BundledNodeBinaries judges the Node binaries apps ship by the release they name.
+same way. An old rustls-webpki crate is FAIL only when the same program holds an affected root.
+BundledNodeBinaries judges the Node binaries apps ship by the release they name.
 ElectronApps judges macOS and Linux Electron apps by version, with what the framework binary holds
 as notes, and UpdaterCaches the apps left in ShipIt update caches. Each claims its binaries in the
 ledger, so a binary a runtime check already reported is not reported again.
@@ -69,6 +70,9 @@ GO_BINARY_RULE = dataclasses.replace(
 GO_FALLBACK_MODULE = "golang.org/x/crypto/x509roots/fallback"
 TOOLCHAIN_DIR = "/Cellar/go/"
 RUST_NOTE = "rebuild against the fixed crates"
+RUSTLS_NO_ROOT_NOTE = (
+    "lacks the key blocklist, matters only when the binary uses the system trust store"
+)
 WEBPKI_CRATES = ("webpki-roots", "webpki-root-certs")
 UNPARSED = Version("", (0,))
 G3_NAME = "emSign ECC Root CA - G3"
@@ -171,6 +175,24 @@ def with_rust_note(finding: Finding) -> Finding:
     return Finding(finding.level, finding.subject, with_note(finding.detail, RUST_NOTE))
 
 
+def holds_affected_root(
+    subject: Subject, matches: tuple[CertificateMatch, ...]
+) -> bool:
+    """True when a match is the G3 root or a compromised intermediate that the binary would trust."""
+    return any(match_finding(subject, m).level is Level.FAIL for m in matches)
+
+
+def rustls_binary_finding(
+    subject: Subject, version: str, affected_root: bool
+) -> Finding:
+    """Judge a binary's rustls-webpki crate, a FAIL becoming WARN when the binary holds no affected root."""
+    finding = rustls_webpki_finding(subject, version)
+    if finding.level is not Level.FAIL or affected_root:
+        return with_rust_note(finding)
+    detail = with_note(finding.detail, RUSTLS_NO_ROOT_NOTE)
+    return Finding(Level.WARN, subject, detail)
+
+
 class RustBinaries:
     """Rust programs whose embedded source paths name the webpki crates."""
 
@@ -198,11 +220,11 @@ class RustBinaries:
                 packages = webpki_packages(crate, versions.get(crate, frozenset()))
                 for finding in webpki_findings(Subject(crate, where), packages):
                     yield with_rust_note(finding)
+            affected_root = holds_affected_root(subject, matches)
             for version in sorted(versions.get("rustls-webpki", frozenset())):
-                finding = rustls_webpki_finding(
-                    Subject("rustls-webpki", where), version
+                yield rustls_binary_finding(
+                    Subject("rustls-webpki", where), version, affected_root
                 )
-                yield with_rust_note(finding)
             if matches:
                 yield from bundle_findings(subject, matches)
 

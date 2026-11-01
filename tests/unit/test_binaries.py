@@ -16,8 +16,15 @@ from pathlib import Path
 from typing import Optional
 
 from emudhra_check.buildinfo import BinaryKind, GoBuildInfo, GoModule
-from emudhra_check.certificates import G3_ECC_ROOT, ISRG_ROOT_X1_LINE, KNOWN_KEYS, Role
+from emudhra_check.certificates import (
+    G3_ECC_ROOT,
+    ISRG_ROOT_X1_LINE,
+    KNOWN_CERTIFICATES,
+    KNOWN_KEYS,
+    Role,
+)
 from emudhra_check.detections.binaries import (
+    RUSTLS_NO_ROOT_NOTE,
     BundledNodeBinaries,
     ElectronApps,
     GoBinaries,
@@ -39,6 +46,9 @@ INTERMEDIATE_KEYS = b"".join(
     k.spki_value for k in KNOWN_KEYS if k.role is Role.COMPROMISED_INTERMEDIATE
 )
 G3_KEY = next(k.spki_value for k in KNOWN_KEYS if k.label == G3_ECC_ROOT.label)
+INTERMEDIATE_DER = next(
+    c.der for c in KNOWN_CERTIFICATES if c.role is Role.COMPROMISED_INTERMEDIATE
+)
 
 
 def binaries_context(
@@ -171,6 +181,39 @@ class RustBinariesTest(unittest.TestCase):
             " as a trust anchor",
         )
         self.assertEqual(len(got), 2)
+
+    def test_old_crate_and_a_compromised_intermediate_fails(self) -> None:
+        got = self.rust_lines(
+            b"/rustls-webpki-0.103.14/src/lib.rs\x00" + INTERMEDIATE_DER
+        )
+        self.assertEqual(
+            got[0],
+            "FAIL  rustls-webpki [/fx/bin/r] found 0.103.14, fixed 0.103.16"
+            " (rebuild against the fixed crates)",
+        )
+        self.assertTrue(got[1].startswith("FAIL  rust binary [/fx/bin/r] contains EM"))
+
+    def test_old_crate_without_an_affected_root_warns(self) -> None:
+        got = self.rust_lines(b"/rustls-webpki-0.103.14/src/lib.rs\x00")
+        self.assertEqual(
+            got,
+            [
+                "WARN  rustls-webpki [/fx/bin/r] found 0.103.14, fixed 0.103.16"
+                f" ({RUSTLS_NO_ROOT_NOTE})"
+            ],
+        )
+
+    def test_unfixed_line_without_an_affected_root_warns(self) -> None:
+        got = self.rust_lines(
+            b"/rustls-webpki-0.102.8/src/lib.rs\x00" + INTERMEDIATE_KEYS
+        )
+        self.assertTrue(
+            got[0].startswith(
+                "WARN  rustls-webpki [/fx/bin/r] found 0.102.8, 0.102 and older lines have no fix"
+            )
+        )
+        self.assertIn(RUSTLS_NO_ROOT_NOTE, got[0])
+        self.assertFalse(any(line.startswith("FAIL") for line in got))
 
     def test_fixed_crate_with_its_blocklist(self) -> None:
         got = self.rust_lines(
