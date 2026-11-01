@@ -1,0 +1,5 @@
+# args: --root=
+# exit: 2
+# summaries: 0
+Option --root needs an argument
+!Traceback

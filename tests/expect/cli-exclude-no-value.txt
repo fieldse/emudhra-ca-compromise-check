@@ -1,0 +1,5 @@
+# args: -x
+# exit: 2
+# summaries: 0
+Option -x needs an argument
+!Traceback

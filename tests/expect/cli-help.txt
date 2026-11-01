@@ -1,0 +1,6 @@
+# args: -h
+# exit: 0
+# summaries: 0
+Usage: check.pyz [-r|--root ROOT]... [-x|--exclude DIR]... [-c|--containers] [-i|--image IMAGE]... [-q|--quiet] [-s|--strict] [-h|--help]
+  -x, --exclude DIR Never enter this directory (repeatable). Also accepts --exclude=DIR
+!Traceback

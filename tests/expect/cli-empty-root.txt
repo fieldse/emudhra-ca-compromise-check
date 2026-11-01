@@ -1,0 +1,6 @@
+# setup: mkdir -p /tmp/empty
+# args: -r /tmp/empty
+# exit: 0
+INFO  eMudhra CA compromise check; scan roots: /tmp/empty containers=0
+!Traceback
+!ERROR

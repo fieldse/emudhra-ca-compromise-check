@@ -1,0 +1,5 @@
+# args: -r /nope
+# exit: 2
+# summaries: 0
+check.pyz: scan root is not a directory: /nope
+!Traceback

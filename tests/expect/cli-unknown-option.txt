@@ -1,0 +1,5 @@
+# args: --bogus
+# exit: 2
+# summaries: 0
+Unknown option: --bogus (try --help)
+!Traceback

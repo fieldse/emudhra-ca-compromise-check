@@ -25,11 +25,12 @@ CERTIFI_FIXED="2026.10.18"
 CERTIFI_FIXED_SHA256="73191c47aaa79da394e8fee2dbc2ec827432cab56311122c9e47abf79e390f62"
 CERTIFI_RECOMMENDED="2026.10.19"
 CERTIFI_RECOMMENDED_SHA256="42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b"
-# The archive run without -I -S, with a json.py on PYTHONPATH that leaves a marker if imported
-PYTHONPATH_CASE='mkdir -p /tmp/evil && echo "open(\"/tmp/EXECUTED-json\", \"w\").close()" >/tmp/evil/json.py
-PYTHONPATH=/tmp/evil python3 /out/check.pyz 2>/tmp/err; echo "exit=$?"
-if test -e /tmp/EXECUTED-json; then echo EXECUTED; fi
-cat /tmp/err'
+# The archive run without -I -S, with a json.py and an fnmatch.py on PYTHONPATH that leave a marker if imported
+PYTHONPATH_CASE='mkdir -p /tmp/evil && for m in json fnmatch; do
+  echo "open(\"/tmp/EXECUTED-$m\", \"w\").close()" >/tmp/evil/$m.py; done
+PYTHONPATH=/tmp/evil python3 /out/check.pyz --bogus 2>/tmp/err; echo "exit=$?"
+for m in json fnmatch; do if test -e /tmp/EXECUTED-$m; then echo "EXECUTED $m"; fi; done
+head -1 /tmp/err'
 # A python3 wrapper first on PATH that drops -I and -S and keeps argv[0], so sys.executable is the wrapper
 WRAPPER_CASE='mkdir -p /tmp/wrap && cat >/tmp/wrap/python3 <<"W"
 #!/bin/bash
@@ -38,8 +39,8 @@ for a in "$@"; do case "$a" in -I|-S) ;; *) args+=("$a") ;; esac; done
 exec -a "$0" /usr/bin/python3.13 "${args[@]}"
 W
 chmod +x /tmp/wrap/python3
-PATH=/tmp/wrap:$PATH timeout 30 python3 /out/check.pyz 2>/tmp/err; echo "exit=$?"
-echo "notes=$(grep -c "python3 -I -S" /tmp/err)"'
+PATH=/tmp/wrap:$PATH timeout 30 python3 /out/check.pyz --bogus 2>/tmp/err; echo "exit=$?"
+echo "notes=$(grep -c "note: run this check as python3 -I -S" /tmp/err)"'
 ENGINE=""
 OUT=""
 N_PASS=0
@@ -329,9 +330,43 @@ print('clean' if bad == [] else ' '.join(bad))
 ")
   check "archive holds no home paths" "clean" "$got"
   got=$(run_in "$LAB_IMAGE" sh -c "$PYTHONPATH_CASE" | tr '\n' ' ')
-  check "archive ignores a planted json.py on PYTHONPATH" "exit=2 not implemented " "$got"
+  check "archive ignores planted modules on PYTHONPATH" "exit=2 Unknown option: --bogus (try --help) " "$got"
   got=$(run_in "$LAB_IMAGE" bash -c "$WRAPPER_CASE" | tr '\n' ' ')
   check "archive re-executes once through a wrapper that drops -I -S" "exit=2 notes=1 " "$got"
+}
+
+# Run one tests/expect case: "# args:", "# setup:", "# exit:" and "# summaries:" set the run, a "!" line
+# is a forbidden substring, and every other line must appear as an exact output line
+function check_case() {
+  local label="$1" image="$2" file="$3" name args setup want_exit summaries out got_exit count line problems=""
+  name="$(basename "$file" .txt)"
+  args=$(sed -n 's/^# args: //p' "$file")
+  setup=$(sed -n 's/^# setup: //p' "$file")
+  want_exit=$(sed -n 's/^# exit: //p' "$file")
+  summaries=$(sed -n 's/^# summaries: //p' "$file")
+  out=$(run_in "$image" sh -c "${setup:-:}; cd /tmp; python3 -I -S /out/check.pyz $args 2>&1; echo \"exit=\$?\"")
+  got_exit="${out##*exit=}"
+  out="${out%exit=*}"
+  [[ "$got_exit" == "${want_exit:-0}" ]] || problems+=" exit=$got_exit"
+  count=$(grep -c '^SUMMARY ' <<<"$out" || true)
+  [[ "$count" == "${summaries:-1}" ]] || problems+=" summaries=$count"
+  while IFS= read -r line; do
+    case "$line" in
+      '# '*|'') ;;
+      '!'*) if grep -Fq -- "${line#!}" <<<"$out"; then problems+=" forbidden: ${line#!}"; fi ;;
+      *) grep -Fxq -- "$line" <<<"$out" || problems+=" missing: $line" ;;
+    esac
+  done <"$file"
+  check "check $name on $label" "ok" "${problems:-ok}"
+}
+
+# Run every tests/expect case through the archive on Python 3.13 and 3.9
+function test_check() {
+  local file
+  for file in "$REPO"/tests/expect/*.txt; do
+    check_case "3.13" "$LAB_IMAGE" "$file"
+    check_case "3.9" "$PY39_IMAGE" "$file"
+  done
 }
 
 # Lint the shell scripts and check the exposure script against the test image's bundle
@@ -380,6 +415,7 @@ function main() {
   test_sigma
   test_certdata
   test_python
+  test_check
   test_scripts
   printf '\n%d passed, %d failed\n' "$N_PASS" "$N_FAIL"
   if [[ "$keep" -eq 1 ]]; then
