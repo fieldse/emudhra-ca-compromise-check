@@ -393,37 +393,51 @@ p.more a { font-weight: 600; font-size: 15px; }
   <section class="read" id="helper">
     <h2>Automated checker</h2>
     <p class="src"><a href="https://github.com/fieldse/emudhra-ca-compromise-check"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>Source on GitHub</span></a></p>
-    <p>We provide a free Bash script that runs most of these checks against one machine in a single pass. It only reads files. Usage is in the <a href="https://github.com/fieldse/emudhra-ca-compromise-check#readme">repository README</a>.</p>
-    <div class="code"><button type="button">Copy</button><pre>git clone https://github.com/fieldse/emudhra-ca-compromise-check.git
-cd emudhra-ca-compromise-check
-less scripts/vuln-check-emudhra-ca-compromise.sh   # review before running</pre></div>
-    <div class="code"><button type="button">Copy</button><pre>./scripts/vuln-check-emudhra-ca-compromise.sh -r ~/src -r /srv -q       # scan two trees, print problems only
-./scripts/vuln-check-emudhra-ca-compromise.sh --root=/opt --containers   # also probe local Podman images
-./scripts/vuln-check-emudhra-ca-compromise.sh -i registry/app:tag        # probe one local image
-./scripts/vuln-check-emudhra-ca-compromise.sh --help</pre></div>
+    <p>We provide a free check, <code>vuln-check-emudhra-ca-compromise.pyz</code>, that runs most of these checks against one machine in a single pass. It is a single Python zipapp that needs Python 3.9 or later and no packages, and it only reads files. Usage is in the <a href="https://github.com/fieldse/emudhra-ca-compromise-check#readme">repository README</a>.</p>
+    <div class="code"><button type="button">Copy</button><pre>curl -fLO https://raw.githubusercontent.com/fieldse/emudhra-ca-compromise-check/v2.0.0/scripts/vuln-check-emudhra-ca-compromise.pyz
+curl -fLO https://raw.githubusercontent.com/fieldse/emudhra-ca-compromise-check/v2.0.0/scripts/vuln-check-emudhra-ca-compromise.pyz.sha256
+shasum -a 256 -c vuln-check-emudhra-ca-compromise.pyz.sha256
+unzip -l vuln-check-emudhra-ca-compromise.pyz   # review before running</pre></div>
+    <div class="code"><button type="button">Copy</button><pre>python3 -I -S vuln-check-emudhra-ca-compromise.pyz -r ~ -q                      # scan home, print problems only
+python3 -I -S vuln-check-emudhra-ca-compromise.pyz -r ~/src -x ~/src/vendor -q  # skip one directory
+python3 -I -S vuln-check-emudhra-ca-compromise.pyz --root=/opt --containers     # also probe local Podman images
+python3 -I -S vuln-check-emudhra-ca-compromise.pyz -i registry/app:tag          # probe one local image
+python3 -I -S vuln-check-emudhra-ca-compromise.pyz --help</pre></div>
+    <p><code>-I -S</code> keeps the scanned machine’s Python settings and site-packages hooks out of the check, so always pass them. The archive is reproducible: the README shows how to rebuild it in a container under Python 3.9 or 3.13 and compare it byte for byte.</p>
     <h3>What it checks</h3>
     <ul class="notes">
-      <li><strong>Certificates inside files.</strong> It looks in CA bundles, Java keystores and Node.js binaries for <code>emSign ECC Root CA - G3</code> and the compromised certificates. It matches a slice of each certificate’s public key, so bundles without comments or labels are covered.</li>
-      <li><strong>Versions against the fixes on this page.</strong> It compares OS <code>ca-certificates</code> packages, runtimes (Node.js, Bun, Deno, Go) and language packages (certifi, pip, uv, Electron, Rust, Composer, Ruby, Elixir and Perl bundles) with the fixed releases.</li>
-      <li><strong>Where it looks.</strong> <code>-r</code> sets each directory to scan for bundles, keystores and lock files, <code>$HOME</code> by default. It also reads the OS bundle files and the host JDK’s <code>cacerts</code>.</li>
-      <li><strong>Images, opt in.</strong> <code>-c</code> also probes every local Podman image with networking off, and <code>-i</code> probes one image.</li>
+      <li><strong>Certificates and keys inside files.</strong> It looks in CA bundles, Java keystores (read directly, without <code>keytool</code>), and Node.js, Bun, Deno, Go and Rust binaries and Electron apps for <code>emSign ECC Root CA - G3</code> and the compromised certificates. It matches each certificate and its public key in PEM or DER, so bundles without comments or labels are covered. It never runs a binary it judges.</li>
+      <li><strong>Versions against the fixes on this page.</strong> It compares OS <code>ca-certificates</code> packages, Homebrew’s <code>ca-certificates</code>, runtimes (Node.js, Bun, Deno, Go, CPython), language packages (certifi, pip, uv, Electron, Rust, Composer, Ruby, Elixir and Perl bundles), Go and Rust binaries, Electron apps and ShipIt updater caches with the fixed releases.</li>
+      <li><strong>Where it looks.</strong> <code>-r</code> sets each directory to scan, <code>$HOME</code> by default, and <code>-x</code> keeps it out of a directory. It also reads the OS bundle files, Homebrew’s bundle, the <code>cacerts</code> of each Java home, and programs in <code>GOBIN</code>, <code>GOPATH/bin</code>, <code>~/.cargo/bin</code>, <code>~/.local/bin</code>, <code>/usr/local/bin</code> and Homebrew’s <code>bin</code>. On macOS it always adds <code>/Applications</code> and Homebrew’s <code>etc</code> and <code>Caskroom</code>.</li>
+      <li><strong>Images, opt in.</strong> <code>-c</code> also probes every local Podman image with networking off, and <code>-i</code> probes one image. The probe reads runtimes, Python packages, the <code>ca-certificates</code> package, CA bundles and Java keystores.</li>
+      <li><strong>What it runs.</strong> For version answers it runs <code>node</code>, <code>bun</code>, <code>deno</code>, <code>go</code>, <code>python3</code>, <code>uv</code> and <code>perl</code>, and on macOS <code>security</code>, <code>xcode-select</code> and <code>java_home</code>, plus <code>podman</code> with <code>-c</code>. Each comes from <code>PATH</code> and is skipped when it sits in an excluded directory. On a machine whose <code>PATH</code> tools you don’t trust, scan from a clean account or pass <code>-x</code> for those directories.</li>
     </ul>
     <dl class="levels">
       <dt class="fail">FAIL</dt><dd>A bundle, keystore or binary still holds the G3 root or a compromised certificate, or a release is older than its fix.</dd>
-      <dt>WARN</dt><dd>Needs manual review.</dd>
-      <dt>INFO</dt><dd>Context. The AAA Certificate Services root is reported here, never as a failure.</dd>
+      <dt>WARN</dt><dd>Needs manual review. The AAA Certificate Services root is reported here&nbsp;<span class="rl">[<a href="references.html#r040">R040</a>]</span>.</dd>
+      <dt>INFO</dt><dd>Context, such as a compromised key held as a blocklist entry.</dd>
+      <dt>ERROR</dt><dd>A check that failed to run. The rest of the run continues.</dd>
     </dl>
-    <p>The script exits 0 when nothing fails, 1 on any <code>FAIL</code> (or any <code>WARN</code> with <code>--strict</code>) and 2 on a usage or environment error, so it can gate CI.</p>
+    <p>The check exits 0 when nothing fails, 1 on any <code>FAIL</code> (or any <code>WARN</code> or <code>ERROR</code> with <code>--strict</code>) and 2 on a usage or environment error, so it can gate CI. A stock Mac fails <code>--strict</code> on the AAA line for <code>/etc/ssl/cert.pem</code> until Apple updates that file&nbsp;<span class="rl">[<a href="references.html#r099">R099</a>, <a href="references.html#r044">R044</a>]</span>.</p>
+    <h3>Changes from the Bash script</h3>
+    <p>The zipapp replaces the earlier Bash script. Its lines keep the same format, with these changes:</p>
+    <ul class="notes">
+      <li><strong>AAA is WARN.</strong> AAA Certificate Services was INFO and is now WARN, so <code>--strict</code> fails on it.</li>
+      <li><strong>Exact Electron versions below the fix are FAIL.</strong> An exact <code>"43.8.0"</code> or <code>"=43.8.0"</code> in <code>package.json</code> can install only that version. Ranges (<code>^</code>, <code>~</code>, <code>N.x</code>) below the fix stay WARN.</li>
+      <li><strong>rpm lines show the full VERSION-RELEASE.</strong> For example <code>found 2025.2.80_v9.0.304-6.fc44, fixed 2026.2.92_v9.0.319-2</code>, as <code>rpm -q</code> prints it.</li>
+      <li><strong>The PEM count includes linked files.</strong> <code>checked N PEM files</code> counts each certificate a link in <code>/etc/ssl/certs</code> points to.</li>
+      <li><strong>Old <code>rustls-webpki</code> in a binary with no affected root is WARN.</strong> A Rust binary whose <code>rustls-webpki</code> is below 0.103.16 lacks the key blocklist&nbsp;<span class="rl">[<a href="references.html#r223">R223</a>]</span>, which matters only when it uses the system trust store. It is FAIL when the same binary holds the G3 root or a compromised intermediate, and WARN otherwise. uv 0.13.4 gets this WARN, and uv calls 0.13.4 fixed&nbsp;<span class="rl">[<a href="references.html#r172">R172</a>]</span>.</li>
+      <li><strong>ERROR lines.</strong> They can appear, and the <code>SUMMARY</code> line gains <code>error=N</code>.</li>
+    </ul>
     <h3>What it doesn’t check yet</h3>
     <ul class="notes">
-      <li><strong>The AAA-only path.</strong> It reports AAA Certificate Services as INFO and never fails on it, so a store that holds AAA without the G3 root passes. Check those stores with the AAA column on the <a href="checks.html">checks page</a>.</li>
-      <li><strong>Electron app bundles.</strong> It treats Electron 44.9.1 in <code>package.json</code> as fixed, as Electron’s advisory does. Fixed Electron binaries still contain the G3 root, because the fix blocks the intermediates and leaves the root in place&nbsp;<span class="rl">[<a href="references.html#r271">R271</a>]</span>. It doesn’t read installed app bundles, so check each Electron app’s Electron version by hand&nbsp;<span class="rl">[<a href="references.html#r273">R273</a>, <a href="references.html#r274">R274</a>]</span>.</li>
-      <li><strong>Other apps.</strong> It doesn’t check Firefox ESR 115, JetBrains Runtime inside IDE installs, LibreOffice, Godot, Docker Desktop or Git for Windows.</li>
-      <li><strong>Paths outside the scan roots.</strong> With the default <code>$HOME</code> root it misses Homebrew’s bundle, JDKs under <code>/usr/lib/jvm</code> or <code>/Library/Java</code>, Debian’s <code>/etc/ssl/certs/java/cacerts</code>, the python.org macOS certifi and Go binaries outside <code>GOBIN</code>, <code>GOPATH/bin</code> and <code>~/.local/bin</code>. Add those directories with <code>-r</code>.</li>
-      <li><strong>Some OS bundles.</strong> It doesn’t read the Red Hat-family code-signing and email bundles or SUSE’s <code>/var/lib/ca-certificates/ca-bundle.pem</code>, and it has no version check for SUSE’s <code>ca-certificates-mozilla</code>.</li>
-      <li><strong>Packages without a version check.</strong> Composer itself, Ruby <code>httpclient</code>, Go’s <code>x/crypto/x509roots/fallback</code>, <code>Pipfile.lock</code>, conda, Pixi, uv-managed Python, CPython’s bundled pip, Dart and Flutter.</li>
-      <li><strong>Platform stores.</strong> The macOS system keychain, Windows trust lists, iOS, Android and Bottlerocket.</li>
-      <li><strong>Inside images.</strong> The image probe reads no Java keystores and checks bundles for the G3 root only.</li>
+      <li><strong>Electron apps on Windows.</strong> It reads macOS and Linux app layouts only. Fixed Electron binaries still contain the G3 root, because the fix blocks the intermediates and leaves the root in place&nbsp;<span class="rl">[<a href="references.html#r271">R271</a>]</span>, so it judges apps by their Electron version&nbsp;<span class="rl">[<a href="references.html#r273">R273</a>, <a href="references.html#r274">R274</a>]</span>.</li>
+      <li><strong>Other apps.</strong> It has no version check for Firefox ESR 115, LibreOffice, Godot, Docker Desktop or Git for Windows. Bundles and keystores inside them are read only when they sit under a scan root.</li>
+      <li><strong>Paths outside the scan roots.</strong> It misses JDKs that are not <code>JAVA_HOME</code>, the <code>java</code> on <code>PATH</code> or (on macOS) listed by <code>java_home</code>, Debian’s <code>/etc/ssl/certs/java/cacerts</code> when no JDK it reads links to it, and Go and Rust binaries outside the directories above. Add those directories with <code>-r</code>.</li>
+      <li><strong>Some OS bundles.</strong> It doesn’t read the Red Hat-family code-signing and email bundles.</li>
+      <li><strong>Packages without a version check.</strong> Composer itself, Ruby <code>httpclient</code>, Go’s <code>x/crypto/x509roots/fallback</code> in <code>go.mod</code> (it is checked inside Go binaries), conda, Pixi, uv-managed Python, CPython’s bundled pip, Dart and Flutter.</li>
+      <li><strong>Platform stores.</strong> The macOS system keychain (reported as notes only), Windows trust lists, iOS, Android and Bottlerocket.</li>
+      <li><strong>Inside images.</strong> The image probe doesn’t read Go or Rust binaries, Electron apps or lock files.</li>
     </ul>
     <h3>YARA rule</h3>
     <p>The repository also ships <code>rules/yara/emudhra-ca.yar</code>, which matches the G3 root and the compromised intermediates in any file, and <code>rules/iocs.csv</code> with all 16 compromised certificates. A hit for the compromised intermediates inside Deno 2.9.8 or later likely comes from Deno’s own distrust list, so judge Deno by its version and the root grep&nbsp;<span class="rl">[<a href="references.html#r203">R203</a>]</span>.</p>
