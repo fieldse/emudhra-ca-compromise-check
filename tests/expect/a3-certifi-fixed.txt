@@ -1,0 +1,7 @@
+# setup: mkdir -p /tmp/c && cp /out/certifi/cacert-2026.10.18.pem /tmp/c/cacert.pem
+# args: -r /tmp/c
+# exit: 0
+INFO  ca-bundle [scan roots] checked 1 PEM files; only files containing an affected certificate are listed
+![/tmp/c/cacert.pem]
+!FAIL
+!Traceback

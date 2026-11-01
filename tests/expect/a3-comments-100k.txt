@@ -1,0 +1,5 @@
+# setup: mkdir -p /tmp/w && cp /out/bundles/comments100k.pem /tmp/w/bundle.crt
+# args: -r /tmp/w
+# exit: 1
+FAIL  ca-bundle [/tmp/w/bundle.crt] contains emSign ECC Root CA - G3 (removed root)
+!Traceback

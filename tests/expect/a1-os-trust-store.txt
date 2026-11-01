@@ -1,0 +1,9 @@
+# setup: mkdir -p /tmp/empty
+# args: -r /tmp/empty
+# exit: 0
+PASS  os trust store [/etc/ssl/certs/ca-certificates.crt] contains no compromised eMudhra certificate
+!/etc/pki/
+!/etc/ssl/cert.pem
+!/var/lib/ca-certificates
+!FAIL
+!Traceback

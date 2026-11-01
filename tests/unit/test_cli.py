@@ -159,7 +159,8 @@ class ParseArgsTest(unittest.TestCase):
     def test_exclude_with_a_newline_gives_one_note_line(self) -> None:
         tmp = tempfile.mkdtemp(dir="/tmp")
         try:
-            code, out, err = main("-r", tmp, "-x", "a\nb")
+            with mock.patch.object(cli, "REGISTRY", ()):
+                code, out, err = main("-r", tmp, "-x", "a\nb")
         finally:
             os.rmdir(tmp)
         self.assertEqual(code, 0)
@@ -264,7 +265,13 @@ class RunTest(unittest.TestCase):
         )
 
     def test_registry_order(self) -> None:
-        self.assertEqual(tuple(d.name for d in REGISTRY), ())
+        self.assertEqual(
+            tuple(d.name for d in REGISTRY),
+            (
+                "os-trust-store",
+                "pem-bundles",
+            ),
+        )
 
 
 class LedgerTest(unittest.TestCase):

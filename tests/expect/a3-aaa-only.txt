@@ -1,0 +1,7 @@
+# setup: mkdir -p /tmp/a && cp /out/bundles/aaa.pem /tmp/a/aaa.pem
+# args: -r /tmp/a
+# exit: 0
+WARN  ca-bundle [/tmp/a/aaa.pem] contains AAA Certificate Services (issued cross-signed copies of all eight compromised intermediates, revoked 2026-10-19, trusted by clients that skip revocation)
+PASS  ca-bundle [/tmp/a/aaa.pem] contains no compromised eMudhra certificate
+!FAIL
+!Traceback

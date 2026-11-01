@@ -1,0 +1,7 @@
+# setup: mkdir -p /tmp/c && cp /out/certifi/cacert-2026.7.22.pem /tmp/c/cacert.pem
+# args: -r /tmp/c
+# exit: 1
+FAIL  ca-bundle [/tmp/c/cacert.pem] contains emSign ECC Root CA - G3 (removed root)
+INFO  ca-bundle [scan roots] checked 1 PEM files; only files containing an affected certificate are listed
+!PASS  ca-bundle [/tmp/c/cacert.pem]
+!Traceback

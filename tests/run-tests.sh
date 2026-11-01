@@ -4,6 +4,8 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 LAB_IMAGE="emudhra-ca-compromise-check-lab:latest"
+# The python:3.9-slim image with its own trust store fixed and pip removed, for the check cases on 3.9.
+CHECK39_IMAGE="emudhra-ca-compromise-check-py39:latest"
 # Images are pinned by their multi-arch index digest. The tag each digest came from is in its comment.
 # eclipse-temurin:21.0.13_9-jre, a JDK released after the fix.
 JAVA_IMAGE="docker.io/library/eclipse-temurin@sha256:0b99b3376fbb50dbf9c0af8535fdd5b8eb0d3fdfc8b1e4967f383b6919f6901a"
@@ -119,10 +121,13 @@ function make_fixtures() {
   for image in "$JAVA_IMAGE" "$JAVA_OLD_IMAGE" "$PY_IMAGE" "$PY39_IMAGE" "$PY38_IMAGE" "$ALPINE_IMAGE"; do
     "$ENGINE" image inspect "$image" >/dev/null 2>&1 || "$ENGINE" pull -q "$image" >/dev/null
   done
+  "$ENGINE" build -q -t "$CHECK39_IMAGE" -f "$REPO/tests/Containerfile.py39" "$REPO/tests" >/dev/null
   run_in "$LAB_IMAGE" python3 -I /repo/tools/build_pyz.py --out /out/check.pyz
   write_cert_fixtures
   write_key_fixtures
   fetch_certifi
+  write_bundle_fixtures
+  require_clean_system_bundles
 }
 
 # Write each certificate as DER, as PEM wrapped at 64 columns, and as PEM wrapped at 76 with CRLF
@@ -187,6 +192,43 @@ for w in glob.glob('/dl/certifi-*.whl'):
     v = w.split('-')[1]
     open(f'/dl/cacert-{v}.pem', 'wb').write(zipfile.ZipFile(w).read('certifi/cacert.pem'))
 "
+}
+
+# Write certifi 2026.7.22's bundle in other layouts, and a bundle of the AAA root alone
+function write_bundle_fixtures() {
+  run_in "$LAB_IMAGE" python3 -I -c "
+import base64, os, ssl
+os.makedirs('/out/bundles', exist_ok=True)
+text = open('/out/certifi/cacert-$CERTIFI_OLD.pem').read()
+ders = [ssl.PEM_cert_to_DER_cert(b[b.index('-----BEGIN'):] + '-----END CERTIFICATE-----')
+        for b in text.split('-----END CERTIFICATE-----')[:-1]]
+def wrap(ders, width, eol):
+    out = []
+    for der in ders:
+        b64 = base64.b64encode(der).decode()
+        out += ['-----BEGIN CERTIFICATE-----', *[b64[i:i + width] for i in range(0, len(b64), width)],
+                '-----END CERTIFICATE-----']
+    return eol.join(out) + eol
+def write(name, body):
+    open('/out/bundles/' + name, 'w', newline='').write(body)
+write('crlf76.pem', wrap(ders, 76, '\r\n'))
+write('w32.pem', wrap(ders, 32, '\n'))
+write('commentless.pem', wrap(ders, 64, '\n'))
+write('comments100k.pem', '# padding comment line before the first certificate\n' * 2000 + text)
+aaa = open('/repo/rules/certs/sectigo-aaa-certificate-services.pem').read()
+write('aaa.pem', aaa[aaa.index('-----BEGIN'):])
+"
+}
+
+# Stop when YARA finds a compromised certificate in a check image's own system bundle, since every case reads it
+function require_clean_system_bundles() {
+  local image
+  for image in "$LAB_IMAGE" "$CHECK39_IMAGE"; do
+    "$ENGINE" run --rm --network=none "$image" cat /etc/ssl/certs/ca-certificates.crt >"$OUT/system-bundle.crt"
+    run_in "$LAB_IMAGE" sh -c "yara /repo/rules/yara/emudhra-ca.yar /out/system-bundle.crt | grep -q ." \
+      && die "YARA finds a compromised certificate in the system bundle of $image"
+  done
+  rm -f "$OUT/system-bundle.crt"
 }
 
 
@@ -365,7 +407,7 @@ function test_check() {
   local file
   for file in "$REPO"/tests/expect/*.txt; do
     check_case "3.13" "$LAB_IMAGE" "$file"
-    check_case "3.9" "$PY39_IMAGE" "$file"
+    check_case "3.9" "$CHECK39_IMAGE" "$file"
   done
 }
 

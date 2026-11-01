@@ -1,0 +1,7 @@
+# python:3.9-slim (multi-arch index digest, the PY39_IMAGE of run-tests.sh) with its own trust store fixed and pip
+# removed, so a check run in it reports only the case under test. ca-certificates 20250419+deb13u1 is the trixie
+# security fix of 2026-10-20 (DSA-6572-1), the build the test image already has. pip 23.0.1 vendors a pre-fix certifi.
+FROM docker.io/library/python@sha256:2d97f6910b16bd338d3060f261f53f144965f755599aab1acda1e13cf1731b1b
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates=20250419+deb13u1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m pip uninstall -y -q pip
