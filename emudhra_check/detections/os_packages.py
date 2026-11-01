@@ -30,7 +30,12 @@ from emudhra_check.report import Finding, Level, Subject
 from emudhra_check.scope import FileInterests
 from emudhra_check.versions import apk_compare, dpkg_compare, judge, rpm_compare
 
-__all__ = ["CaCertificatesPackage", "PackageObservation", "ca_package_finding"]
+__all__ = [
+    "SUSE_ID_PREFIXES",
+    "CaCertificatesPackage",
+    "PackageObservation",
+    "ca_package_finding",
+]
 
 OS_RELEASE = Path("/etc/os-release")
 RPM_CVE = "CVE-2026-114406"

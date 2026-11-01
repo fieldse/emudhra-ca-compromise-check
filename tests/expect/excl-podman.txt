@@ -1,0 +1,9 @@
+# -c with the only podman on PATH inside the excluded folder: the run stops before the header and nothing runs.
+# setup: python3 -I /repo/tests/fixtures/make_trees.py exclude && PY=$(command -v python3) && PATH=/tmp/t/excl/tools/bin:$PATH && export PATH
+# args: -r /tmp/t/open -x /tmp/t/excl -c
+# exit: 2
+# summaries: 0
+check.pyz: -c needs podman, which was not found
+!MARKER
+!eMudhra CA compromise check; scan roots
+!Traceback

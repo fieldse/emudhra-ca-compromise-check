@@ -301,6 +301,7 @@ class RunTest(unittest.TestCase):
                 "pem-bundles",
                 "java-keystores",
                 "perl-mozilla-ca",
+                "podman-images",
             ),
         )
 

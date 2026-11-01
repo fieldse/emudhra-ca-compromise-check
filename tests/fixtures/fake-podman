@@ -1,0 +1,36 @@
+#!/bin/sh
+# fake-podman: stands in for podman in the adapter tests. Copied into a test directory as podman, it
+# records each call's arguments NUL-separated in calls/N and where its stdin points in stdin/N, then
+# behaves as the mode named in the file mode beside it says.
+dir=$(dirname "$0")
+mkdir -p "$dir/calls" "$dir/stdin"
+n=$(($(cat "$dir/count" 2>/dev/null || echo 0) + 1))
+echo "$n" >"$dir/count"
+printf '%s\0' "$@" >"$dir/calls/$n"
+readlink /proc/self/fd/0 >"$dir/stdin/$n" 2>/dev/null
+mode=$(cat "$dir/mode" 2>/dev/null)
+case "$1 $2" in
+  "image exists")
+    [ "$mode" = missing ] && exit 1
+    exit 0
+    ;;
+  "images --format")
+    if [ "$mode" = imagesfail ]; then
+      echo "Error: cannot connect to Podman" >&2
+      exit 125
+    fi
+    printf 'a:1\n<none>:<none>\na:1\nb:2\n'
+    exit 0
+    ;;
+  "rm -f")
+    exit 0
+    ;;
+esac
+case "$mode" in
+  flood) exec yes 'FILE 1 /x' ;;
+  sleep) exec sleep 600 ;;
+  noshell) exit 127 ;;
+  fail) exit 3 ;;
+  output) cat "$dir/output" ;;
+esac
+exit 0

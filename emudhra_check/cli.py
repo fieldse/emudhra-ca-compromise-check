@@ -19,6 +19,7 @@ from typing import Callable, Mapping, Optional, Sequence
 from emudhra_check import buildinfo
 from emudhra_check.adapters.filesystem import LocalFiles, LocalPathOracle
 from emudhra_check.adapters.platform import LocalHost
+from emudhra_check.adapters.podman import LocalPodman
 from emudhra_check.adapters.process import LocalCommands
 from emudhra_check.detections import REGISTRY
 from emudhra_check.detections.ports import Context, Detection, Ledger
@@ -29,6 +30,7 @@ from emudhra_check.hostenv import (
     filter_path,
     find_brew_prefix,
     fixed_binary_dirs,
+    podman_environment,
 )
 from emudhra_check.limits import MAX_ERROR_CHARS
 from emudhra_check.report import (
@@ -157,6 +159,20 @@ def executable_globs(registry: Sequence[Detection]) -> frozenset[str]:
     return globs
 
 
+def podman_images(
+    commands: LocalCommands, images: tuple[str, ...], env: Mapping[str, str]
+) -> LocalPodman:
+    """Find podman on the filtered PATH and run the preflight, or raise CheckError."""
+    podman = commands.which("podman")
+    if podman is None:
+        raise CheckError("-c needs podman, which was not found")
+    if not podman.permitted:
+        raise CheckError("-c needs podman, found only inside an excluded directory")
+    local = LocalPodman(commands, podman, extra_env=env)
+    local.preflight(images)
+    return local
+
+
 def build_context(
     options: Options,
     environ: Mapping[str, str],
@@ -196,6 +212,11 @@ def build_context(
         hostenv, result.scope, child_environment(hostenv, environ), oracle
     )
     host = LocalHost(commands, system, hostenv.java_home_env)
+    images = (
+        podman_images(commands, options.images, podman_environment(environ))
+        if options.containers
+        else None
+    )
     index = files.walk(
         all_interests(registry),
         fixed_binary_dirs(hostenv),
@@ -209,7 +230,7 @@ def build_context(
         files,
         commands,
         host,
-        None,
+        images,
         Ledger(),
         excludes.notes + path_notes + result.notes,
         result.findings,

@@ -133,8 +133,12 @@ class LocalCommands:
         args: Sequence[str],
         timeout: int = COMMAND_TIMEOUT,
         limit: int = MAX_COMMAND_OUTPUT,
+        extra_env: Optional[Mapping[str, str]] = None,
     ) -> CommandResult:
-        """Run a permitted tool and return its bounded, decoded output."""
+        """Run a permitted tool and return its bounded, decoded output.
+
+        extra_env adds variables to the allowlisted environment for this one child.
+        """
         if not tool.permitted:
             raise ValueError(
                 f"refusing to run {tool.path}, it lies inside an excluded directory"
@@ -143,7 +147,7 @@ class LocalCommands:
             [str(tool.path), *args],
             executable=str(tool.real),
             cwd="/",
-            env=self.env,
+            env={**self.env, **(extra_env or {})},
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

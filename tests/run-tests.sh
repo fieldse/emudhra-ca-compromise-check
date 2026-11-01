@@ -447,11 +447,49 @@ function test_check() {
   done
 }
 
+# Run the rendered probe with dash in the test image and with BusyBox in Alpine, each holding the pre-fix JDK's
+# cacerts, then judge its output on the host side: the system bundle verdict must agree with YARA and the keystore FAIL
+function test_probe_live() {
+  local label image want got judged where
+  run_in "$LAB_IMAGE" python3 -I -c "
+import sys
+sys.path.insert(0, '/repo')
+from emudhra_check.probe import render
+open('/out/probe.sh', 'w').write(render(open('/repo/emudhra_check/probe.sh').read()))
+"
+  for label in dash busybox; do
+    image="$LAB_IMAGE"
+    [[ "$label" == busybox ]] && image="$ALPINE_IMAGE"
+    run_in "$image" sh -c "cat /etc/ssl/certs/ca-certificates.crt" >"$OUT/probe-bundle-$label.crt"
+    want=$(run_in "$LAB_IMAGE" sh -c "yara /repo/rules/yara/emudhra-ca.yar /out/probe-bundle-$label.crt | grep -q . && echo FAIL || echo PASS")
+    run_in "$image" sh -c "mkdir -p /opt/jdk/lib/security && cp /out/jdk-old-cacerts /opt/jdk/lib/security/cacerts \
+      && sh /out/probe.sh" >"$OUT/probe-$label.txt"
+    judged=$(run_in "$LAB_IMAGE" python3 -I -c "
+import sys
+sys.path.insert(0, '/repo')
+from emudhra_check.detections.containers import image_findings
+from emudhra_check.probe import parse_probe_output
+for finding in image_findings('$label', parse_probe_output(open('/out/probe-$label.txt', 'rb').read())):
+    print(finding.line())
+")
+    where="image:$label /etc/ssl/certs/ca-certificates.crt"
+    got=$(grep -F "ca-bundle [$where]" <<<"$judged" | grep -q '^FAIL' && echo FAIL || echo PASS)
+    check "probe under $label agrees with YARA on the image bundle" "$want" "$got"
+    got=$(grep -cF "FAIL  java keystore [image:$label /opt/jdk/lib/security/cacerts] contains emSign ECC Root CA - G3" \
+      <<<"$judged" || true)
+    check "probe under $label reads the JDK keystore" "1" "$got"
+    got=$(grep -c "dropped\|did not finish\|no od" <<<"$judged" || true)
+    check "probe under $label drops no records" "0" "$got"
+  done
+}
+
 # Lint the shell scripts and check the exposure script against the test image's bundle
 function test_scripts() {
   local got want
   got=$(run_in "$LAB_IMAGE" sh -c "shellcheck -S warning /repo/scripts/*.sh /repo/tests/*.sh >/dev/null 2>&1 && echo clean || echo findings")
   check "shellcheck -S warning" "clean" "$got"
+  got=$(run_in "$LAB_IMAGE" sh -c "shellcheck -s sh /repo/emudhra_check/probe.sh && shellcheck /repo/tests/fixtures/fake-podman && echo clean")
+  check "shellcheck on the probe and the fake podman" "clean" "$got"
   want=$(run_in "$LAB_IMAGE" sh -c "yara /repo/rules/yara/emudhra-ca.yar /etc/ssl/certs/ca-certificates.crt | grep -q . && echo FAIL || echo PASS")
   got=$(run_in "$LAB_IMAGE" sh -c "bash /repo/scripts/vuln-check-emudhra-ca-compromise.sh -r /etc/ssl 2>/dev/null \
     | grep -F '/etc/ssl/certs/ca-certificates.crt' | grep -q '^FAIL' && echo FAIL || echo PASS")
@@ -496,6 +534,7 @@ function main() {
   test_certdata
   test_python
   test_check
+  test_probe_live
   test_scripts
   printf '\n%d passed, %d failed\n' "$N_PASS" "$N_FAIL"
   if [[ "$keep" -eq 1 ]]; then

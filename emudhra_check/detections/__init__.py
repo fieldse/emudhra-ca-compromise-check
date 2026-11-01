@@ -12,6 +12,7 @@ from emudhra_check.detections.binaries import (
     RustBinaries,
     UpdaterCaches,
 )
+from emudhra_check.detections.containers import PodmanImages
 from emudhra_check.detections.language_packages import (
     CargoLocks,
     ComposerLocks,
@@ -70,4 +71,5 @@ REGISTRY: tuple[Detection, ...] = (
     PemBundles(),
     JavaKeystores(),
     PerlMozillaCa(),
+    PodmanImages(),
 )

@@ -108,3 +108,11 @@ def fixed_binary_dirs(hostenv: HostEnvironment) -> tuple[Path, ...]:
     if hostenv.brew_prefix is not None:
         dirs.append(hostenv.brew_prefix / "bin")
     return tuple(dict.fromkeys(dirs))
+
+
+PODMAN_ENV_KEYS = ("XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS")
+
+
+def podman_environment(environ: Mapping[str, str]) -> dict[str, str]:
+    """Return the caller's variables rootless Podman needs to apply its resource limits."""
+    return {key: environ[key] for key in PODMAN_ENV_KEYS if environ.get(key)}
