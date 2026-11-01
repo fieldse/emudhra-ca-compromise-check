@@ -113,6 +113,7 @@ function make_fixtures() {
   done
   run_in "$LAB_IMAGE" python3 -I /repo/tools/build_pyz.py --out /out/check.pyz
   write_cert_fixtures
+  write_key_fixtures
   fetch_certifi
 }
 
@@ -133,6 +134,31 @@ for i, pem in enumerate(pems):
         lines = [b64[j:j + width] for j in range(0, len(b64), width)]
         body = eol.join(['-----BEGIN CERTIFICATE-----', *lines, '-----END CERTIFICATE-----']) + eol
         open(f'/out/yara/cert{i:02d}-w{width}.pem', 'w', newline='').write(body)
+"
+}
+
+# Write each certificate's SubjectPublicKeyInfo as openssl prints it, and bare-key files for the matcher tests
+function write_key_fixtures() {
+  run_in "$LAB_IMAGE" python3 -I -c "
+import glob, hashlib, os, ssl, subprocess
+os.makedirs('/out/keys', exist_ok=True)
+intermediates = {}
+for f in sorted(glob.glob('/repo/rules/certs/*.pem')):
+    for blk in open(f).read().split('-----END CERTIFICATE-----')[:-1]:
+        pem = blk[blk.index('-----BEGIN'):] + '-----END CERTIFICATE-----\n'
+        der = ssl.PEM_cert_to_DER_cert(pem)
+        pub = subprocess.run(['openssl', 'x509', '-pubkey', '-noout'], input=pem.encode(), capture_output=True, check=True).stdout
+        spki = subprocess.run(['openssl', 'pkey', '-pubin', '-outform', 'DER'], input=pub, capture_output=True, check=True).stdout
+        open(f'/out/keys/spki-{hashlib.sha256(der).hexdigest()}.der', 'wb').write(spki)
+        name = next(line[2:].strip() for line in blk.split('\n') if line.startswith('# '))
+        if name.startswith('EM '):
+            intermediates[spki] = name
+        if name == 'emSign ECC Root CA - G3':
+            open('/out/keys/g3-ecc-root.der', 'wb').write(spki)
+        if name == 'AAA Certificate Services':
+            open('/out/keys/aaa.der', 'wb').write(spki)
+assert len(intermediates) == 8, len(intermediates)
+open('/out/keys/intermediates.der', 'wb').write(b''.join(sorted(intermediates)))
 "
 }
 
@@ -222,18 +248,61 @@ print('ok' if listed == want and len(want) == 19 else f'mismatch {len(listed)} {
   check "sigma rule structure and thumbprints (not converted to a SIEM query)" "ok" "$got"
 }
 
+# Compare the generated certificate data with openssl and the test image, and scan its system files
+function test_certdata() {
+  local got
+  got=$(run_in "$LAB_IMAGE" python3 -I -c "
+import sys
+sys.path.insert(0, '/repo')
+from emudhra_check.certdata import RECORDS
+bad = []
+for r in RECORDS:
+    spki = open(f'/out/keys/spki-{r.sha256.hex()}.der', 'rb').read()
+    n = spki[1] & 0x7f if spki[1] & 0x80 else 0
+    if spki[2 + n:] != r.spki_value:
+        bad.append(r.label)
+print('ok' if not bad and len(RECORDS) == 20 else 'mismatch: ' + ', '.join(bad))
+")
+  check "certdata public keys match openssl" "ok" "$got"
+  got=$(run_in "$LAB_IMAGE" python3 -I -c "
+import sys
+sys.path.insert(0, '/repo')
+from emudhra_check.certificates import ISRG_ROOT_X1_LINE
+text = open('/usr/share/ca-certificates/mozilla/ISRG_Root_X1.crt').read()
+body = ''.join(text.split('-----BEGIN CERTIFICATE-----')[1].split('-----END')[0].split())
+print('ok' if body.startswith(ISRG_ROOT_X1_LINE.decode()) else 'mismatch')
+")
+  check "ISRG Root X1 line starts the test image's ISRG Root X1" "ok" "$got"
+  got=$(run_in "$LAB_IMAGE" python3 -I -c "
+import os, stat, sys
+sys.path.insert(0, '/repo')
+from emudhra_check.certificates import Matcher
+matcher, hits = Matcher(), []
+for top in ('/usr/bin', '/usr/sbin', '/usr/lib'):
+    for root, dirs, files in os.walk(top):
+        for name in files:
+            path = os.path.join(root, name)
+            if stat.S_ISREG(os.lstat(path).st_mode) and matcher.scan(open(path, 'rb').read()):
+                hits.append(path)
+print(len(hits), *hits)
+")
+  check "matcher false positives in system binaries and libraries" "0" "$got"
+}
+
 # Run the unit suite, the lint tools, the version gate and the archive's isolation cases
 function test_python() {
-  local got unit="cd /repo && python3 -I -m unittest discover -q -s /repo/tests/unit -t /repo >/tmp/log 2>&1 && echo ok || cat /tmp/log"
+  # The summary line names the skips: only the two standard-library contract tests skip, and only on 3.9.
+  local got unit="cd /repo && python3 -I -m unittest discover -q -s /repo/tests/unit -t /repo >/tmp/log 2>&1; \
+    if grep -q '^OK' /tmp/log; then tail -1 /tmp/log; else cat /tmp/log; fi"
   got=$(run_in "$LAB_IMAGE" sh -c "flake8 --version >/dev/null && black --version >/dev/null && mypy --version >/dev/null && echo ok")
   check "flake8, black and mypy run in the test image" "ok" "$got"
   got=$(run_in "$LAB_IMAGE" sh -c "cd /tmp && : >empty.py && out=\$(mypy --cache-dir=/dev/null --python-version 3.9 empty.py 2>&1) \
     && ! printf '%s' \"\$out\" | grep -qi 'warning\|error' && echo ok")
   check "mypy accepts a Python 3.9 target" "ok" "$got"
   got=$(run_in "$LAB_IMAGE" sh -c "$unit")
-  check "unit tests on Python 3.13" "ok" "$got"
+  check "unit tests on Python 3.13" "OK" "$got"
   got=$(run_in "$PY39_IMAGE" sh -c "$unit")
-  check "unit tests on Python 3.9" "ok" "$got"
+  check "unit tests on Python 3.9" "OK (skipped=2)" "$got"
   got=$(run_in "$PY38_IMAGE" sh -c "python3 -I -S /out/check.pyz 2>&1; echo \"exit=\$?\"" | tr '\n' ' ')
   check "archive refuses Python 3.8" "check.pyz: needs Python 3.9 or later, found 3.8 exit=2 " "$got"
   got=$(run_in "$LAB_IMAGE" sh -c "cd /repo && black --check --quiet --extend-exclude 'emudhra_check/certdata\.py' . 2>&1 && echo ok")
@@ -299,6 +368,7 @@ function main() {
   make_java_fixtures
   test_yara
   test_sigma
+  test_certdata
   test_python
   test_scripts
   printf '\n%d passed, %d failed\n' "$N_PASS" "$N_FAIL"
