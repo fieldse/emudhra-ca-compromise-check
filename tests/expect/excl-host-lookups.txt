@@ -1,0 +1,7 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py exclude && PY=$(command -v python3) && PATH=/tmp/t/excl/tools/bin:$PATH && export PATH
+# args: -r /tmp/t/open -x /tmp/t/excl
+# exit: 0
+check.pyz: note: PATH entry /tmp/t/excl/tools/bin lies inside an excluded directory, not searched
+!MARKER
+![/tmp/t/excl
+!Traceback

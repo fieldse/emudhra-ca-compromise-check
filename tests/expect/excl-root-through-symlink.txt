@@ -1,0 +1,8 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py exclude
+# args: -r /tmp/t/via/b -x /tmp/t/secret
+# exit: 0
+check.pyz: note: scan root /tmp/t/secret/b lies inside an excluded directory, skipped
+![/tmp/t/secret/
+![/tmp/t/secret]
+!FAIL
+!Traceback

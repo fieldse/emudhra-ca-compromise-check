@@ -377,16 +377,26 @@ print('clean' if bad == [] else ' '.join(bad))
   check "archive re-executes once through a wrapper that drops -I -S" "exit=2 notes=1 " "$got"
 }
 
-# Run one tests/expect case: "# args:", "# setup:", "# exit:" and "# summaries:" set the run, a "!" line
-# is a forbidden substring, and every other line must appear as an exact output line
+# Run one tests/expect case. "# args:", "# setup:", "# cwd:", "# timeout:", "# user: nobody", "# exit:" and
+# "# summaries:" set the run. A "!" line is a forbidden substring, a "!^" line a forbidden line start, a "~" line a
+# required substring, and every other line must appear as an exact output line. A /tmp/EXECUTED-* file left by a
+# marker tool prints a "MARKER" line. Setup may set PY to the interpreter's absolute path before changing PATH.
 function check_case() {
-  local label="$1" image="$2" file="$3" name args setup want_exit summaries out got_exit count line problems=""
+  local label="$1" image="$2" file="$3" name args setup cwd secs want_exit summaries out got_exit count line problems=""
+  local -a engine_args=(--rm --network=none --cap-drop=all)
   name="$(basename "$file" .txt)"
   args=$(sed -n 's/^# args: //p' "$file")
   setup=$(sed -n 's/^# setup: //p' "$file")
+  cwd=$(sed -n 's/^# cwd: //p' "$file")
+  secs=$(sed -n 's/^# timeout: //p' "$file")
   want_exit=$(sed -n 's/^# exit: //p' "$file")
   summaries=$(sed -n 's/^# summaries: //p' "$file")
-  out=$(run_in "$image" sh -c "${setup:-:}; cd /tmp; python3 -I -S /out/check.pyz $args 2>&1; echo \"exit=\$?\"")
+  if [[ "$(sed -n 's/^# user: //p' "$file")" == "nobody" ]]; then
+    engine_args+=(--user 65534:65534)
+  fi
+  out=$("$ENGINE" run "${engine_args[@]}" -v "$REPO":/repo:ro -v "$OUT":/out "$image" sh -c \
+    "PY=python3; ${setup:-:}; cd ${cwd:-/tmp}; timeout ${secs:-120} \"\$PY\" -I -S /out/check.pyz $args 2>&1; rc=\$?
+    for m in /tmp/EXECUTED-*; do if test -e \"\$m\"; then echo \"MARKER \$m\"; fi; done; echo \"exit=\$rc\"")
   got_exit="${out##*exit=}"
   out="${out%exit=*}"
   [[ "$got_exit" == "${want_exit:-0}" ]] || problems+=" exit=$got_exit"
@@ -395,7 +405,10 @@ function check_case() {
   while IFS= read -r line; do
     case "$line" in
       '# '*|'') ;;
+      '!^'*) if awk -v p="${line#!^}" 'index($0, p) == 1 { f = 1 } END { exit !f }' <<<"$out"; then
+          problems+=" forbidden line: ${line#!^}"; fi ;;
       '!'*) if grep -Fq -- "${line#!}" <<<"$out"; then problems+=" forbidden: ${line#!}"; fi ;;
+      '~'*) grep -Fq -- "${line#\~}" <<<"$out" || problems+=" missing substring: ${line#\~}" ;;
       *) grep -Fxq -- "$line" <<<"$out" || problems+=" missing: $line" ;;
     esac
   done <"$file"
@@ -453,6 +466,8 @@ function main() {
   fi
   make_fixtures
   make_java_fixtures
+  # The check cases run without capabilities or as an unprivileged user, so the fixtures must be world-readable
+  chmod -R a+rX "$OUT"
   test_yara
   test_sigma
   test_certdata

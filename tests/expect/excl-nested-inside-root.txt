@@ -1,0 +1,7 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py nested
+# args: -r /tmp/t/a -r /tmp/t/a/b
+# exit: 1
+INFO  scan [/tmp/t/a/b] lies inside scan root [/tmp/t/a], skipped
+FAIL  ca-bundle [/tmp/t/a/b/cacert.pem] contains emSign ECC Root CA - G3 (removed root)
+INFO  ca-bundle [scan roots] checked 2 PEM files; only files containing an affected certificate are listed
+!Traceback

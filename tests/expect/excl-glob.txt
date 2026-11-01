@@ -1,0 +1,9 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py glob
+# args: -r /tmp/t -x '/tmp/t/glob[x]*?'
+# exit: 0
+check.pyz: note: excluding /tmp/t/glob[x]*? (given as /tmp/t/glob[x]*?)
+INFO  ca-bundle [scan roots] checked 1 PEM files; only files containing an affected certificate are listed
+![/tmp/t/glob[x]*?/
+![/tmp/t/glob[x]*?]
+!FAIL
+!Traceback

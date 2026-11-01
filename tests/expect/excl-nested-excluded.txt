@@ -1,0 +1,9 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py nested
+# args: -r /tmp/t/a -r /tmp/t/a/b -x /tmp/t/a/b
+# exit: 0
+check.pyz: note: scan root /tmp/t/a/b lies inside an excluded directory, skipped
+INFO  ca-bundle [scan roots] checked 1 PEM files; only files containing an affected certificate are listed
+![/tmp/t/a/b/
+![/tmp/t/a/b]
+!FAIL
+!Traceback

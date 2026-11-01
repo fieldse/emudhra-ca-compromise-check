@@ -1,0 +1,12 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py exclude
+# args: -r /tmp/t -x /tmp/t/link-to-secret
+# timeout: 10
+# exit: 0
+check.pyz: note: excluding /tmp/t/secret (given as /tmp/t/link-to-secret)
+INFO  symlink [/tmp/t/root/link.pem] points into an excluded directory, skipped
+INFO  symlink [/tmp/t/root/fifo-link.pem] points into an excluded directory, skipped
+INFO  ca-bundle [scan roots] checked 2 PEM files; only files containing an affected certificate are listed
+![/tmp/t/secret/
+![/tmp/t/secret]
+!FAIL
+!Traceback

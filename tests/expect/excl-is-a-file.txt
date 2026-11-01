@@ -1,0 +1,6 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py exclude
+# args: -r /tmp/t -x /tmp/t/open/cacert.pem
+# exit: 2
+# summaries: 0
+check.pyz: exclude is not a directory: /tmp/t/open/cacert.pem
+!Traceback

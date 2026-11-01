@@ -1,0 +1,6 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py case
+# args: -r /tmp/t -x /tmp/t/secret
+# exit: 1
+check.pyz: note: exclude /tmp/t/secret not found, nothing to skip
+FAIL  ca-bundle [/tmp/t/Secret/cacert.pem] contains emSign ECC Root CA - G3 (removed root)
+!Traceback

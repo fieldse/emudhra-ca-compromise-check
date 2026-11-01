@@ -1,0 +1,20 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py hostile
+# user: nobody
+# timeout: 120
+# args: -r /tmp/hostile -x /tmp/hostile/xloop
+# exit: 1
+check.pyz: note: exclude /tmp/hostile/xloop not found, nothing to skip
+FAIL  ca-bundle [/tmp/hostile/cacert.pem] contains emSign ECC Root CA - G3 (removed root)
+FAIL  ca-bundle [/tmp/hostile/cacert-?.pem] contains emSign ECC Root CA - G3 (removed root)
+FAIL  ca-bundle [/tmp/hostile/esc?[2J.pem] contains emSign ECC Root CA - G3 (removed root)
+FAIL  ca-bundle [/tmp/hostile/x?PASS  ca-bundle [/etc/ssl/cert.pem] clean/cacert.pem] contains emSign ECC Root CA - G3 (removed root)
+INFO  scan [/tmp/hostile/fifo/cacert.pem] is not a regular file, skipped
+INFO  scan [/tmp/hostile/fifo-link.pem] is not a regular file, skipped
+INFO  scan [/tmp/hostile/loop.pem] not readable, skipped
+INFO  ca-bundle [/tmp/hostile/m000/cacert.pem] unreadable, skipped
+INFO  ca-bundle [/tmp/hostile/sparse.crt] too large to scan, skipped
+INFO  scan [/tmp/hostile/a0444/cacert.pem] not readable, skipped
+~deeper than 128 levels, not entered
+!^PASS  ca-bundle [/etc/ssl/cert.pem] clean
+!ERROR
+!Traceback

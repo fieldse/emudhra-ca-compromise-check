@@ -1,0 +1,6 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py exclude && PY=$(command -v python3) && PATH=.:$PATH && export PATH
+# cwd: /tmp/t/cwd
+# args: -r /tmp/t/open
+# exit: 0
+!MARKER
+!Traceback

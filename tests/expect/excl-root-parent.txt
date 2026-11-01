@@ -1,0 +1,8 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py root-parent
+# args: -r / -x /tmp/exclroot
+# exit: 1
+check.pyz: note: excluding /tmp/exclroot (given as /tmp/exclroot)
+FAIL  ca-bundle [/tmp/openroot/cacert.pem] contains emSign ECC Root CA - G3 (removed root)
+![/tmp/exclroot/
+![/tmp/exclroot]
+!Traceback

@@ -1,0 +1,9 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py exclude
+# args: -r /tmp/t -x /tmp/t/secret/sub/..
+# exit: 0
+check.pyz: note: excluding /tmp/t/secret (given as /tmp/t/secret/sub/..)
+INFO  ca-bundle [scan roots] checked 2 PEM files; only files containing an affected certificate are listed
+![/tmp/t/secret/
+![/tmp/t/secret]
+!FAIL
+!Traceback

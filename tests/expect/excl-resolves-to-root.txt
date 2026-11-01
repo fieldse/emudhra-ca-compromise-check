@@ -1,0 +1,10 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py root-parent
+# args: -r /tmp/scan -x /..
+# exit: 0
+check.pyz: note: excluding / (given as /..)
+check.pyz: note: scan root /tmp/scan lies inside an excluded directory, skipped
+~host paths inside excluded directories were not read
+INFO  eMudhra CA compromise check; scan roots: containers=0
+![/tmp/scan
+!FAIL
+!Traceback

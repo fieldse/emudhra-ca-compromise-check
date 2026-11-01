@@ -1,0 +1,5 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py exclude
+# args: -r /tmp/t/open -x /tmp/t/loop
+# exit: 0
+check.pyz: note: exclude /tmp/t/loop not found, nothing to skip
+!Traceback

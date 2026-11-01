@@ -1,0 +1,9 @@
+# setup: python3 -I /repo/tests/fixtures/make_trees.py nested
+# args: -r /tmp/t/a/b -x /tmp/t/a
+# exit: 0
+check.pyz: note: scan root /tmp/t/a/b lies inside an excluded directory, skipped
+INFO  eMudhra CA compromise check; scan roots: containers=0
+![/tmp/t/a/
+![/tmp/t/a]
+!FAIL
+!Traceback
