@@ -263,6 +263,43 @@ class WalkTest(TreeTest):
         )
         self.assertEqual(seen, [b"\x7fELF"])
 
+    def test_symlinked_programs(self) -> None:
+        fixed = self.tmp / "fixedbin"
+        fixed.mkdir()
+        secret = write(self.tmp / "secret" / "evil", b"\x7fELF secret", 0o755)
+        (fixed / "gh").symlink_to(
+            write(self.tmp / "Cellar" / "gh", b"\x7fELF gh", 0o755)
+        )
+        (fixed / "evil").symlink_to(secret)
+        (fixed / "dangling").symlink_to(self.tmp / "nowhere")
+        (self.root / "bin").mkdir()
+        (self.root / "bin" / "tool").symlink_to(
+            write(self.root / "opt" / "tool", b"\x7fELF tool", 0o755)
+        )
+        (self.root / "bin" / "evil").symlink_to(secret)
+        write(self.root / "bin" / "real", b"\x7fELF real", 0o755)
+        (self.root / "bin" / "twin").symlink_to(self.root / "bin" / "real")
+        seen: list[bytes] = []
+
+        def classify(data: Any) -> BinaryKind:
+            seen.append(bytes(data))
+            return BinaryKind.GO
+
+        files = LocalFiles(scope([self.root], [self.tmp / "secret"]), ORACLE)
+        index = files.walk(PROGRAMS, (fixed,), classify)
+        self.assertEqual(
+            [str(e.path) for e in index.executables],
+            [f"{fixed}/gh", f"{self.root}/bin/real", f"{self.root}/bin/tool"],
+        )
+        self.assertEqual(seen, [b"\x7fELF gh", b"\x7fELF real", b"\x7fELF tool"])
+        self.assertEqual(
+            lines(index),
+            [
+                f"INFO  symlink [{fixed}/evil] points into an excluded directory, skipped",
+                f"INFO  symlink [{self.root}/bin/evil] points into an excluded directory, skipped",
+            ],
+        )
+
     def test_no_executable_interest_never_classifies(self) -> None:
         write(self.root / "bin" / "tool", b"\x7fELF", 0o755)
         index = self.walk(BUNDLE, mock.Mock(side_effect=AssertionError("classified")))

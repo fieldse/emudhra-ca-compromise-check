@@ -121,7 +121,7 @@ class Walk:
         return self.index()
 
     def list_fixed_dir(self, directory: Path) -> None:
-        """Record the program candidates directly inside one fixed binary directory."""
+        """Record the program candidates directly inside one fixed binary directory, following file symlinks."""
         real = Path(os.path.realpath(directory))
         if not self.owner.scope.permits_path(real, self.owner.oracle):
             return
@@ -136,7 +136,12 @@ class Walk:
             except (OSError, ValueError):
                 self.notices.append(notice("scan", path, "not readable, skipped"))
                 continue
-            self.consider_program(path, real / name, st)
+            if stat.S_ISLNK(st.st_mode):
+                target = self.follow_link(path, None, quiet=True)
+                if target is not None:
+                    self.consider_program(path, *target)
+            else:
+                self.consider_program(path, real / name, st)
 
     def walk_root(self, root: Root) -> None:
         try:
@@ -210,32 +215,47 @@ class Walk:
             if program:
                 self.consider_program(path, path, st)
         elif stat.S_ISLNK(st.st_mode):
+            target = self.follow_link(path, root.dev, quiet=not wanted)
+            if target is None:
+                return
+            real, target_st = target
             if wanted:
-                self.consider_symlink(root, path)
+                self.files.append(
+                    IndexedFile(path, real, file_id_of(target_st), target_st.st_size)
+                )
+            if program:
+                self.consider_program(path, real, target_st)
         elif wanted:
             self.notices.append(notice("scan", path, "is not a regular file, skipped"))
 
-    def consider_symlink(self, root: Root, path: Path) -> None:
-        """Index a symlinked file by its target when the target is a regular file on the root's device in scope."""
+    def follow_link(
+        self, path: Path, dev: Optional[int], quiet: bool
+    ) -> Optional[tuple[Path, os.stat_result]]:
+        """Return a symlink's real path and stat when the target is a regular file in scope, on dev when given.
+
+        A link into an excluded directory always gives its notice. quiet drops the others.
+        """
         real = Path(os.path.realpath(path))
         if not self.owner.scope.permits_path(real, self.owner.oracle):
             self.notices.append(
                 notice("symlink", path, "points into an excluded directory, skipped")
             )
-            return
+            return None
+        problem = None
         try:
             st = os.stat(real)
         except (OSError, ValueError):
-            self.notices.append(notice("scan", path, "not readable, skipped"))
-            return
-        if not stat.S_ISREG(st.st_mode):
-            self.notices.append(notice("scan", path, "is not a regular file, skipped"))
-        elif st.st_dev != root.dev:
-            self.notices.append(
-                notice("symlink", path, "leaves the scan device, skipped")
-            )
+            problem = notice("scan", path, "not readable, skipped")
         else:
-            self.files.append(IndexedFile(path, real, file_id_of(st), st.st_size))
+            if not stat.S_ISREG(st.st_mode):
+                problem = notice("scan", path, "is not a regular file, skipped")
+            elif dev is not None and st.st_dev != dev:
+                problem = notice("symlink", path, "leaves the scan device, skipped")
+        if problem is None:
+            return real, st
+        if not quiet:
+            self.notices.append(problem)
+        return None
 
     def consider_program(self, path: Path, real: Path, st: os.stat_result) -> None:
         """Classify one executable regular file, once, within the size cap and the walk's byte budget."""

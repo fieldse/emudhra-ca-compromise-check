@@ -1,0 +1,6 @@
+# A Go program reached through a symlink in a fixed binary directory, as Homebrew links bin entries into its Cellar.
+# setup: python3 -I /repo/tests/fixtures/make_trees.py exclude && python3 -I /repo/tests/fixtures/make_binaries.py cargo-home && mkdir -p /tmp/t/home/cellar /tmp/t/home/.local/bin && mv /tmp/t/home/.cargo/bin/hello /tmp/t/home/cellar/hello && ln -s /tmp/t/home/cellar/hello /tmp/t/home/.local/bin/hello && export HOME=/tmp/t/home
+# args: -r /tmp/t/open
+# exit: 1
+FAIL  go binary [/tmp/t/home/.local/bin/hello] found 1.27.2, fixed 1.27.3 (built with an affected toolchain, rebuild)
+!Traceback
