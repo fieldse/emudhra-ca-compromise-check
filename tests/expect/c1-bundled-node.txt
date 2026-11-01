@@ -1,0 +1,11 @@
+# Three binaries naming the Node 24.22.1 release, none called node: one bundles the G3 root as PEM, one bundles a
+# store holding ISRG Root X1 only, and one bundles no store.
+# setup: python3 -I /repo/tests/fixtures/make_binaries.py node
+# args: -r /tmp/fx
+# exit: 1
+PASS  node [/tmp/fx/bin/bundled-node-g3] found 24.22.1, fixed 24.22.1
+FAIL  node [/tmp/fx/bin/bundled-node-g3] binary still bundles emSign ECC Root CA - G3 (removed root)
+PASS  node [/tmp/fx/bin/bundled-node-isrg] found 24.22.1, fixed 24.22.1
+!FAIL  node [/tmp/fx/bin/bundled-node-isrg]
+INFO  node [/tmp/fx/bin/bundled-node-none] 24.22.1 bundles no root store (distro build using the OS CA store); the trust-store check decides
+!Traceback

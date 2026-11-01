@@ -18,6 +18,7 @@ from unittest import mock
 
 from emudhra_check import cli
 from emudhra_check.detections import REGISTRY
+from emudhra_check.detections.binaries import BundledNodeBinaries
 from emudhra_check.detections.ports import Context, Ledger
 from emudhra_check.hostenv import HostEnvironment
 from emudhra_check.report import Finding, Level, Subject
@@ -264,6 +265,12 @@ class RunTest(unittest.TestCase):
             (2, "", "check.pyz: scan root is not a directory: /nope\n"),
         )
 
+    def test_executable_globs_come_only_from_program_detections(self) -> None:
+        self.assertEqual(
+            cli.executable_globs(REGISTRY), BundledNodeBinaries.interests.dir_globs
+        )
+        self.assertNotIn("*.app", cli.executable_globs(REGISTRY))
+
     def test_registry_order(self) -> None:
         self.assertEqual(
             tuple(d.name for d in REGISTRY),
@@ -276,7 +283,10 @@ class RunTest(unittest.TestCase):
                 "deno-host",
                 "go-toolchain",
                 "cpython-host",
+                "electron-apps",
+                "updater-caches",
                 "node-version-dirs",
+                "bundled-node-binaries",
                 "python-dist-info",
                 "python-pins",
                 "host-python-packages",

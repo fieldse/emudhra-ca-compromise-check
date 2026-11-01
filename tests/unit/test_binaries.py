@@ -1,29 +1,35 @@
 """test_binaries.py: unit tests of emudhra_check/detections/binaries.py.
 
-Runs GoBinaries and RustBinaries over in-memory classified binaries: Go toolchain and fallback module
-verdicts, unreadable and legacy build information, the toolchain's own commands, Rust crates found
-by their source paths, trust anchors and blocklist keys, and the ledger that keeps a binary a
-runtime check reported from a second report.
+Runs the binary detections over in-memory files: Go toolchain and fallback module verdicts,
+unreadable and legacy build information, the toolchain's own commands, Rust crates found by their
+source paths, trust anchors and blocklist keys, bundled Node stores, Electron apps judged by version
+in both layouts, updater caches, and the ledger that keeps a binary a runtime check reported from a
+second report.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import plistlib
 import unittest
 from pathlib import Path
 from typing import Optional
 
 from emudhra_check.buildinfo import BinaryKind, GoBuildInfo, GoModule
-from emudhra_check.certificates import G3_ECC_ROOT, KNOWN_KEYS, Role
+from emudhra_check.certificates import G3_ECC_ROOT, ISRG_ROOT_X1_LINE, KNOWN_KEYS, Role
 from emudhra_check.detections.binaries import (
+    BundledNodeBinaries,
+    ElectronApps,
     GoBinaries,
     RustBinaries,
+    UpdaterCaches,
+    electron_app_findings,
     go_binary_findings,
 )
 from emudhra_check.detections.ports import Context, Ledger
 from emudhra_check.detections.shared import MATCHER
 from emudhra_check.report import Subject
-from emudhra_check.scope import Executable, Index
+from emudhra_check.scope import Executable, FileId, Index, IndexedDir
 from tests.unit.fakes import FakeFiles, lines, make_context
 from tests.unit.test_buildinfo import ELF, FALLBACK, OLD_FALLBACK, go_blob, modinfo
 
@@ -197,6 +203,175 @@ class RustBinariesTest(unittest.TestCase):
     def test_wrapper_alone_warns(self) -> None:
         got = self.rust_lines(b"/webpki-roots-0.26.11/src/lib.rs")
         self.assertEqual([line[:4] for line in got], ["WARN"])
+
+
+G3_PEM_LINE = G3_ECC_ROOT.pem_line
+NODE_URL = b"https://nodejs.org/download/release/v24.22.1/node-v24.22.1-headers.tar.gz"
+
+
+class BundledNodeBinariesTest(unittest.TestCase):
+    def node_lines(self, payload: bytes) -> list[str]:
+        ctx = binaries_context(BinaryKind.NODE, {"/fx/bin/n": ELF + NODE_URL + payload})
+        return lines(BundledNodeBinaries(), ctx)
+
+    def test_fixed_version_still_bundling_g3_fails(self) -> None:
+        self.assertEqual(
+            self.node_lines(G3_PEM_LINE),
+            [
+                "PASS  node [/fx/bin/n] found 24.22.1, fixed 24.22.1",
+                "FAIL  node [/fx/bin/n] binary still bundles emSign ECC Root CA - G3 (removed root)",
+            ],
+        )
+
+    def test_bundled_store_without_g3_passes(self) -> None:
+        self.assertEqual(
+            self.node_lines(ISRG_ROOT_X1_LINE),
+            ["PASS  node [/fx/bin/n] found 24.22.1, fixed 24.22.1"],
+        )
+
+    def test_os_store_build_is_info(self) -> None:
+        got = self.node_lines(b"")
+        self.assertEqual(len(got), 1)
+        self.assertTrue(
+            got[0].startswith("INFO  node [/fx/bin/n] 24.22.1 bundles no root store")
+        )
+
+    def test_glob_candidates(self) -> None:
+        globs = BundledNodeBinaries.interests.dir_globs
+        self.assertTrue(BundledNodeBinaries.interests.executables)
+        self.assertIn(".cache/codex-runtimes/*/payload", globs)
+
+
+FRAMEWORK = "Contents/Frameworks/Electron Framework.framework"
+
+
+def app_files(app: str, version: Optional[str], binary: bytes) -> dict[str, bytes]:
+    fw = f"{app}/{FRAMEWORK}"
+    files = {f"{fw}/Versions/A/Electron Framework": binary}
+    if version is not None:
+        plist = plistlib.dumps({"CFBundleVersion": version}, fmt=plistlib.FMT_BINARY)
+        files[f"{fw}/Versions/A/Resources/Info.plist"] = plist
+    return files
+
+
+def apps_context(files: dict[str, bytes], apps: tuple[str, ...]) -> Context:
+    fake = FakeFiles(files)
+    dirs = tuple(IndexedDir(Path(a), FileId(5, n)) for n, a in enumerate(apps))
+    indexed = tuple(f for f in fake.indexed(*files) if f.path.name == "app.asar")
+    return make_context(fake, indexed=indexed, dirs=dirs)
+
+
+class ElectronAppFindingsTest(unittest.TestCase):
+    def test_version_decides_and_g3_is_a_note(self) -> None:
+        subject = Subject("electron app", "/A/Old.app/fw")
+        matches = MATCHER.scan(G3_PEM_LINE)
+        old = [
+            f.line()
+            for f in electron_app_findings(subject, "44.9.0", matches, "/A/bin")
+        ]
+        self.assertEqual(
+            old[0],
+            "FAIL  electron app [/A/Old.app/fw] found 44.9.0, fixed 44.9.1 (update the app)",
+        )
+        self.assertEqual(
+            old[1],
+            "INFO  electron app [/A/bin] also bundles emSign ECC Root CA - G3 (confirms the version FAIL)",
+        )
+        fixed = [
+            f.line()
+            for f in electron_app_findings(subject, "44.9.1", matches, "/A/bin")
+        ]
+        self.assertEqual(
+            fixed[0], "PASS  electron app [/A/Old.app/fw] found 44.9.1, fixed 44.9.1"
+        )
+        self.assertTrue(
+            fixed[1].startswith(
+                "INFO  electron app [/A/bin] bundled Node.js root store still lists"
+            )
+        )
+        self.assertEqual(len(fixed), 2)
+
+    def test_no_version(self) -> None:
+        got = electron_app_findings(Subject("electron app", "/A/fw"), None, ())
+        self.assertEqual(
+            [f.line() for f in got],
+            [
+                "WARN  electron app [/A/fw] version unreadable, check the app's About window"
+            ],
+        )
+
+
+class ElectronAppsTest(unittest.TestCase):
+    def test_macos_apps(self) -> None:
+        files = {
+            **app_files("/A/Old.app", "44.9.0", ELF + G3_PEM_LINE),
+            **app_files("/A/Fixed.app", "44.9.1", ELF + G3_PEM_LINE),
+            **app_files("/A/NoPlist.app", None, ELF + b"Electron/43.8.1"),
+            **app_files("/A/Bad.app", None, ELF),
+            "/A/Plain.app/Contents/MacOS/Plain": ELF,
+        }
+        apps = (
+            "/A/Old.app",
+            "/A/Fixed.app",
+            "/A/NoPlist.app",
+            "/A/Bad.app",
+            "/A/Plain.app",
+        )
+        got = lines(ElectronApps(), apps_context(files, apps))
+        self.assertIn(
+            f"FAIL  electron app [/A/Old.app/{FRAMEWORK}] found 44.9.0, fixed 44.9.1 (update the app)",
+            got,
+        )
+        self.assertIn(
+            f"PASS  electron app [/A/Fixed.app/{FRAMEWORK}] found 44.9.1, fixed 44.9.1",
+            got,
+        )
+        self.assertIn(
+            f"PASS  electron app [/A/NoPlist.app/{FRAMEWORK}] found 43.8.1, fixed 43.8.1",
+            got,
+        )
+        self.assertIn(
+            f"WARN  electron app [/A/Bad.app/{FRAMEWORK}] version unreadable, check the app's About window",
+            got,
+        )
+        self.assertFalse(any("Plain.app" in line for line in got))
+        self.assertFalse(
+            any(line.startswith("FAIL") and "Fixed.app" in line for line in got)
+        )
+
+    def test_updater_cache_apps_are_left_to_updater_caches(self) -> None:
+        app = "/h/Library/Caches/com.x.ShipIt/update.1/Old.app"
+        ctx = apps_context(app_files(app, "43.8.0", ELF), (app,))
+        self.assertEqual(
+            lines(ElectronApps(), ctx),
+            ["INFO  electron app [scan roots] no Electron apps found"],
+        )
+        self.assertEqual(
+            lines(UpdaterCaches(), ctx),
+            [
+                f"WARN  electron update cache [{app}] found 43.8.0, fixed 43.8.1"
+                " (stale updater cache, delete the directory)"
+            ],
+        )
+
+    def test_fixed_cached_app_prints_nothing(self) -> None:
+        app = "/h/Library/Caches/com.x.ShipIt/update.1/New.app"
+        ctx = apps_context(app_files(app, "44.9.1", ELF), (app,))
+        self.assertEqual(lines(UpdaterCaches(), ctx), [])
+
+    def test_linux_layout(self) -> None:
+        files = {
+            "/opt/myapp/myapp": ELF + b"Electron/43.8.0",
+            "/opt/myapp/libffmpeg.so": ELF + b"Electron/1.0.0",
+            "/opt/myapp/resources/app.asar": b"asar",
+        }
+        got = lines(ElectronApps(), apps_context(files, ()))
+        self.assertEqual(
+            got,
+            [
+                "FAIL  electron app [/opt/myapp/myapp] found 43.8.0, fixed 43.8.1 (update the app)"
+            ],
+        )
 
 
 if __name__ == "__main__":

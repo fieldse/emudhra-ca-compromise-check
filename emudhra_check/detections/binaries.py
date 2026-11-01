@@ -3,30 +3,45 @@
 GoBinaries reads the build information of every Go program the walk classified, judges its
 toolchain and the x509roots fallback module it embeds, and scans it for the compromised roots.
 RustBinaries judges the webpki crates whose source paths a Rust program carries and scans it the
-same way. Each claims its binaries in the ledger, so a binary a runtime check already reported is
-not reported again.
+same way. BundledNodeBinaries judges the Node binaries apps ship by the release they name.
+ElectronApps judges macOS and Linux Electron apps by version, with what the framework binary holds
+as notes, and UpdaterCaches the apps left in ShipIt update caches. Each claims its binaries in the
+ledger, so a binary a runtime check already reported is not reported again.
 """
 
 from __future__ import annotations
 
 import dataclasses
+from pathlib import Path
 from typing import ClassVar, Iterator, Optional
 
 from emudhra_check.buildinfo import (
     BinaryKind,
     GoBuildInfo,
+    classify,
+    electron_app_version,
+    electron_version_string,
     go_build_info,
+    node_release_version,
     rust_crate_versions,
 )
-from emudhra_check.certificates import CertificateMatch, bundle_findings
+from emudhra_check.certificates import (
+    G3_ECC_ROOT,
+    ISRG_ROOT_X1_LINE,
+    CertificateMatch,
+    MatchKind,
+    bundle_findings,
+    match_finding,
+)
 from emudhra_check.detections.language_packages import (
     rustls_webpki_finding,
     webpki_findings,
 )
-from emudhra_check.detections.ports import Context
+from emudhra_check.detections.ports import Context, Skipped
+from emudhra_check.detections.runtimes import StoreKind, node_store_findings
 from emudhra_check.detections.shared import MATCHER, read_or_skip, release
-from emudhra_check.fixes import GO_FALLBACK_FIXED, GO_FIXED
-from emudhra_check.limits import MAX_BINARY_BYTES
+from emudhra_check.fixes import ELECTRON_FIXED, GO_FALLBACK_FIXED, GO_FIXED
+from emudhra_check.limits import MAX_BINARY_BYTES, MAX_PLIST_BYTES
 from emudhra_check.lockfiles import LockPackage
 from emudhra_check.report import Finding, Level, Subject
 from emudhra_check.scope import Executable, FileInterests
@@ -38,7 +53,15 @@ from emudhra_check.versions import (
     with_note,
 )
 
-__all__ = ["GoBinaries", "RustBinaries", "go_binary_findings"]
+__all__ = [
+    "BundledNodeBinaries",
+    "ElectronApps",
+    "GoBinaries",
+    "RustBinaries",
+    "UpdaterCaches",
+    "electron_app_findings",
+    "go_binary_findings",
+]
 
 GO_BINARY_RULE = dataclasses.replace(
     GO_FIXED, note="built with an affected toolchain, rebuild"
@@ -48,6 +71,7 @@ TOOLCHAIN_DIR = "/Cellar/go/"
 RUST_NOTE = "rebuild against the fixed crates"
 WEBPKI_CRATES = ("webpki-roots", "webpki-root-certs")
 UNPARSED = Version("", (0,))
+G3_NAME = "emSign ECC Root CA - G3"
 
 
 def fallback_finding(where: str, version: str) -> Optional[Finding]:
@@ -181,3 +205,219 @@ class RustBinaries:
                 yield with_rust_note(finding)
             if matches:
                 yield from bundle_findings(subject, matches)
+
+
+NODE_GLOBS = frozenset(
+    {
+        "Library/Application Support/Zed/node/*/bin/node",
+        "Library/Application Support/com.raycast.macos/NodeJS/runtime/*/bin/node",
+        ".local/share/httptoolkit-server/client/*/bin/node",
+        ".cache/codex-runtimes/*/payload",
+        "*.app/Contents/Resources/*/bin/node",
+    }
+)
+
+
+class BundledNodeBinaries:
+    """Node binaries that apps and tools ship outside PATH and the version managers."""
+
+    name: ClassVar[str] = "bundled-node-binaries"
+    interests: ClassVar[FileInterests] = FileInterests(
+        dir_globs=NODE_GLOBS, executables=True
+    )
+
+    def run(self, ctx: Context) -> Iterator[Finding]:
+        for entry in entries(ctx, BinaryKind.NODE):
+            if not ctx.ledger.claim(entry.file_id):
+                continue
+            where = str(entry.path)
+            subject = Subject("node", where)
+            data = read_or_skip(
+                ctx, subject, entry.path, MAX_BINARY_BYTES, entry.file_id
+            )
+            if isinstance(data, list):
+                yield from data
+                continue
+            try:
+                version = node_release_version(data) or "unknown"
+                matches = MATCHER.scan(data)
+                has_store = data.find(ISRG_ROOT_X1_LINE) >= 0
+            finally:
+                release(data)
+            g3 = any(m.label == G3_ECC_ROOT.label for m in matches)
+            store = StoreKind.BUNDLED if has_store or g3 else StoreKind.OS
+            yield from node_store_findings(subject, version, matches, store, where)
+
+
+ELECTRON_APP_RULE = dataclasses.replace(ELECTRON_FIXED, note="update the app")
+UPDATE_CACHE_RULE = dataclasses.replace(
+    ELECTRON_FIXED,
+    below=Level.WARN,
+    no_fix=Level.WARN,
+    note="stale updater cache, delete the directory",
+)
+APP_SUFFIX = ".app"
+UPDATER_CACHE_SUFFIX = ".ShipIt"
+FRAMEWORK = Path("Contents/Frameworks/Electron Framework.framework")
+FRAMEWORK_PLISTS = ("Versions/A/Resources/Info.plist", "Resources/Info.plist")
+FRAMEWORK_BINARY = "Versions/A/Electron Framework"
+ASAR = "app.asar"
+
+
+def electron_app_findings(
+    subject: Subject,
+    version: Optional[str],
+    matches: tuple[CertificateMatch, ...],
+    binary: Optional[str] = None,
+) -> list[Finding]:
+    """Judge an Electron app by its version alone, then list what its binary holds as notes."""
+    if version is None:
+        detail = "version unreadable, check the app's About window"
+        findings = [Finding(Level.WARN, subject, detail)]
+        verdict_level = Level.WARN
+    else:
+        verdict = judge_branched(subject, version, ELECTRON_APP_RULE)
+        findings = [verdict]
+        verdict_level = verdict.level
+    where = Subject(subject.name, binary or subject.where)
+    for match in matches:
+        if match.label == G3_ECC_ROOT.label and match.kind is MatchKind.FULL:
+            if verdict_level is Level.FAIL:
+                detail = f"also bundles {G3_NAME} (confirms the version FAIL)"
+            else:
+                detail = (
+                    f"bundled Node.js root store still lists {G3_NAME},"
+                    " the Electron fix blocks the compromised keys"
+                )
+            findings.append(Finding(Level.INFO, where, detail))
+        else:
+            findings.append(match_finding(where, match))
+    return findings
+
+
+def in_updater_cache(path: Path) -> bool:
+    return any(part.endswith(UPDATER_CACHE_SUFFIX) for part in path.parts[:-1])
+
+
+def app_dirs(ctx: Context, interests: FileInterests, cached: bool) -> Iterator[Path]:
+    """Yield the indexed .app directories inside or outside updater caches that hold an Electron framework."""
+    for indexed in ctx.index.dirs_for(interests):
+        path = indexed.path
+        if not path.name.endswith(APP_SUFFIX) or in_updater_cache(path) != cached:
+            continue
+        if ctx.files.is_dir(path / FRAMEWORK):
+            yield path
+
+
+def plist_version(ctx: Context, framework: Path) -> Optional[str]:
+    """Return CFBundleVersion from the first readable Info.plist of a framework."""
+    for relative in FRAMEWORK_PLISTS:
+        data = ctx.files.read_bytes(framework / relative, MAX_PLIST_BYTES)
+        if isinstance(data, Skipped):
+            continue
+        try:
+            version = electron_app_version(bytes(data[0 : len(data)]))
+        finally:
+            release(data)
+        if version is not None:
+            return version
+    return None
+
+
+class ElectronApps:
+    """Electron apps under the scan roots, macOS bundles and Linux app directories, judged by version."""
+
+    name: ClassVar[str] = "electron-apps"
+    interests: ClassVar[FileInterests] = FileInterests(
+        name_globs=frozenset({ASAR}), dir_globs=frozenset({"*" + APP_SUFFIX})
+    )
+
+    def run(self, ctx: Context) -> Iterator[Finding]:
+        found = 0
+        for app in app_dirs(ctx, self.interests, cached=False):
+            found += 1
+            yield from self.macos_app(ctx, app / FRAMEWORK)
+        for indexed in ctx.index.files_for(self.interests):
+            if indexed.path.name == ASAR and indexed.path.parent.name == "resources":
+                lines = self.linux_app(ctx, indexed.path.parent.parent)
+                found += lines is not None
+                yield from lines or []
+        if found == 0:
+            yield Finding(
+                Level.INFO,
+                Subject("electron app", "scan roots"),
+                "no Electron apps found",
+            )
+
+    def macos_app(self, ctx: Context, framework: Path) -> list[Finding]:
+        version = plist_version(ctx, framework)
+        subject = Subject("electron app", str(framework))
+        binary = framework / FRAMEWORK_BINARY
+        file_id = ctx.files.file_id(binary)
+        if file_id is None:
+            return electron_app_findings(subject, version, ())
+        if not ctx.ledger.claim(file_id):
+            return []
+        data = read_or_skip(
+            ctx, Subject("electron app", str(binary)), binary, MAX_BINARY_BYTES, file_id
+        )
+        if isinstance(data, list):
+            return data + electron_app_findings(subject, version, ())
+        try:
+            version = version or electron_version_string(data)
+            matches = MATCHER.scan(data)
+        finally:
+            release(data)
+        return electron_app_findings(subject, version, matches, str(binary))
+
+    def linux_app(self, ctx: Context, directory: Path) -> Optional[list[Finding]]:
+        """Judge the Electron executable beside resources/app.asar, or None when there is none."""
+        for name in ctx.files.list_dir(directory):
+            if "." in name:
+                continue
+            path = directory / name
+            file_id = ctx.files.file_id(path)
+            if file_id is None:
+                continue
+            data = ctx.files.read_bytes(path, MAX_BINARY_BYTES, file_id)
+            if isinstance(data, Skipped):
+                continue
+            try:
+                if classify(data) is not BinaryKind.ELECTRON:
+                    continue
+                version = electron_version_string(data)
+                matches = MATCHER.scan(data)
+            finally:
+                release(data)
+            if not ctx.ledger.claim(file_id):
+                return []
+            subject = Subject("electron app", str(path))
+            return electron_app_findings(subject, version, matches)
+        return None
+
+
+class UpdaterCaches:
+    """Electron apps left in Squirrel.Mac ShipIt update caches, judged by version only."""
+
+    name: ClassVar[str] = "updater-caches"
+    interests: ClassVar[FileInterests] = ElectronApps.interests
+
+    def run(self, ctx: Context) -> Iterator[Finding]:
+        for app in app_dirs(ctx, self.interests, cached=True):
+            framework = app / FRAMEWORK
+            version = plist_version(ctx, framework)
+            if version is None:
+                binary = framework / FRAMEWORK_BINARY
+                data = ctx.files.read_bytes(binary, MAX_BINARY_BYTES)
+                if isinstance(data, Skipped):
+                    continue
+                try:
+                    version = electron_version_string(data)
+                finally:
+                    release(data)
+            if version is None:
+                continue
+            subject = Subject("electron update cache", str(app))
+            verdict = judge_branched(subject, version, UPDATE_CACHE_RULE)
+            if verdict.level is not Level.PASS:
+                yield verdict

@@ -5,7 +5,13 @@ REGISTRY lists one instance of every detection class. Its order is the output or
 
 from __future__ import annotations
 
-from emudhra_check.detections.binaries import GoBinaries, RustBinaries
+from emudhra_check.detections.binaries import (
+    BundledNodeBinaries,
+    ElectronApps,
+    GoBinaries,
+    RustBinaries,
+    UpdaterCaches,
+)
 from emudhra_check.detections.language_packages import (
     CargoLocks,
     ComposerLocks,
@@ -46,7 +52,10 @@ REGISTRY: tuple[Detection, ...] = (
     DenoHost(),
     GoToolchain(),
     CPythonHost(),
+    ElectronApps(),
+    UpdaterCaches(),
     NodeVersionDirs(),
+    BundledNodeBinaries(),
     PythonDistInfo(),
     PythonPins(),
     HostPythonPackages(),
