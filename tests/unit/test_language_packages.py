@@ -298,6 +298,7 @@ class ElectronTest(unittest.TestCase):
                 "/f/new/node_modules/electron/package.json": b'{"name": "electron", "version": "44.9.1"}',
                 "/f/new/node_modules/other/package.json": b'{"dependencies": {"electron": "^41.0.0"}}',
                 "/f/range/package.json": b'{"devDependencies": {"electron": "^43.8.0"}}',
+                "/f/exact/package.json": b'{"devDependencies": {"electron": "=43.8.0"}}',
                 "/f/eol/package.json": b'{"dependencies": {"electron": "^41.2.0"}}',
                 "/f/open/package.json": b'{"dependencies": {"electron": ">=43.0.0"}}',
                 "/f/ws/package.json": b'{"dependencies": {"electron": "workspace:*"}}',
@@ -319,6 +320,11 @@ class ElectronTest(unittest.TestCase):
             "a range may resolve higher",
             by_path["/f/range/package.json declared range starts at"],
         )
+        self.assertEqual(
+            by_path["/f/exact/package.json declared range starts at"],
+            "FAIL  electron [/f/exact/package.json declared range starts at] found 43.8.0, fixed 43.8.1: "
+            "this version is affected",
+        )
         self.assertTrue(
             by_path["/f/open/package.json declared range starts at"].startswith("WARN")
         )
@@ -331,7 +337,7 @@ class ElectronTest(unittest.TestCase):
         self.assertTrue(
             by_path["/f/new/node_modules/electron/package.json"].startswith("PASS")
         )
-        self.assertEqual(len(got), 5)
+        self.assertEqual(len(got), 6)
 
     def test_unreadable_package_json(self) -> None:
         deep = b"[" * 1000 + b"]" * 1000
@@ -353,6 +359,31 @@ class ElectronTest(unittest.TestCase):
             electron_range_finding(subject, "^45.0.0-beta.6").level, Level.PASS
         )
         self.assertIsNone(electron_range_finding(subject, "file:../e"))
+
+    def test_exact_spec_below_the_fix_fails(self) -> None:
+        subject = Subject("electron", "x")
+        for spec in ("43.8.0", "=43.8.0", "v43.8.0", "45.0.0-beta.5"):
+            with self.subTest(spec=spec):
+                finding = electron_range_finding(subject, spec)
+                self.assertIs(finding.level, Level.FAIL)
+                self.assertIn("this version is affected", finding.detail)
+        eol = electron_range_finding(subject, "41.2.0")
+        self.assertIs(eol.level, Level.FAIL)
+        self.assertEqual(
+            eol.detail, "found 41.2.0, this version is affected (no fix on its branch)"
+        )
+        self.assertEqual(
+            electron_range_finding(subject, "=43.8.0").detail,
+            "found 43.8.0, fixed 43.8.1: this version is affected",
+        )
+        for spec in ("43.8.1", "=44.9.1", "45.0.0-beta.6"):
+            with self.subTest(spec=spec):
+                self.assertIs(electron_range_finding(subject, spec).level, Level.PASS)
+        for spec in ("^43.8.0", "~43.8.0", "43.x", "43.8"):
+            with self.subTest(spec=spec):
+                finding = electron_range_finding(subject, spec)
+                self.assertIs(finding.level, Level.WARN)
+                self.assertIn("a range may resolve higher", finding.detail)
 
 
 CARGO_WRAPPER = """\

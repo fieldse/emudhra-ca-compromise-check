@@ -17,6 +17,7 @@ from emudhra_check.lockfiles import (
     composer_versions,
     gem_versions,
     mix_versions,
+    npm_exact_version,
     npm_range_lower_bound,
     package_count,
     pipfile_versions,
@@ -377,7 +378,29 @@ class NpmRangeTest(unittest.TestCase):
         self.assertEqual(
             npm_range_lower_bound('"electron": "' * (1 << 20)), ("", False)
         )
+        self.assertIsNone(npm_exact_version("4" * (1 << 20)))
         self.assertLess(time.monotonic() - start, WATCHDOG)
+
+    def test_exact(self) -> None:
+        for spec, want in (
+            ("43.8.0", "43.8.0"),
+            ("=43.8.0", "43.8.0"),
+            (" = 43.8.0 ", "43.8.0"),
+            ("v43.8.0", "43.8.0"),
+            ("45.0.0-beta.5", "45.0.0-beta.5"),
+            ("43.8.0+build.1", "43.8.0+build.1"),
+            ("^43.8.0", None),
+            ("~43.8.0", None),
+            ("43.x", None),
+            ("43.8", None),
+            ("43", None),
+            (">=43.8.0", None),
+            ("43.8.0 || 44.9.1", None),
+            ("43.8.0 - 44.9.1", None),
+            ("", None),
+        ):
+            with self.subTest(spec=spec):
+                self.assertEqual(npm_exact_version(spec), want)
 
 
 if __name__ == "__main__":

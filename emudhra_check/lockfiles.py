@@ -325,6 +325,9 @@ def mix_versions(text: str) -> list[tuple[str, str]]:
 NPM_VERSION = re.compile(
     r"v?([0-9]{1,10})(?:\.([0-9]{1,10}|[xX*]))?(?:\.([0-9]{1,10}|[xX*]))?(-[0-9A-Za-z.]{1,64})?"
 )
+NPM_EXACT = re.compile(
+    r"=?\s{0,8}v?([0-9]{1,10}\.[0-9]{1,10}\.[0-9]{1,10}(?:-[0-9A-Za-z.]{1,64})?(?:\+[0-9A-Za-z.]{1,64})?)"
+)
 NPM_NOT_A_RANGE = (
     "workspace:",
     "file:",
@@ -357,3 +360,9 @@ def npm_range_lower_bound(spec: str) -> Optional[tuple[str, bool]]:
     parts = [major, minor or "0", patch or "0"]
     lower = ".".join("0" if p in ("x", "X", "*") else p for p in parts) + (pre or "")
     return lower, not unbounded
+
+
+def npm_exact_version(spec: str) -> Optional[str]:
+    """Return the one version an exact npm spec ("43.8.0", "=43.8.0", "v43.8.0") allows, else None."""
+    match = NPM_EXACT.fullmatch(spec.strip())
+    return match.group(1) if match else None

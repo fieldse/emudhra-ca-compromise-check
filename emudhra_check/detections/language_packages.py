@@ -45,6 +45,7 @@ from emudhra_check.lockfiles import (
     gem_versions,
     mix_versions,
     normalise,
+    npm_exact_version,
     npm_range_lower_bound,
     package_count,
     pipfile_versions,
@@ -307,11 +308,19 @@ class UvHost:
 
 
 def electron_range_finding(subject: Subject, spec: str) -> Optional[Finding]:
-    """Judge a declared Electron range by its lowest version, or None for a spec that names no release."""
+    """Judge a declared Electron spec: an exact version as installed, a range by its lowest version.
+
+    None for a spec that names no release.
+    """
     bound = npm_range_lower_bound(spec)
     if bound is None:
         return None
     lower, bounded_major = bound
+    exact = npm_exact_version(spec)
+    if exact is not None and parse_version(exact) is None:
+        exact = None
+    if exact is not None:
+        lower, bounded_major = exact, True
     found = lower or spec
     if not bounded_major or parse_version(lower) is None:
         return Finding(
@@ -324,8 +333,20 @@ def electron_range_finding(subject: Subject, spec: str) -> Optional[Finding]:
         return verdict
     fixed = dict(ELECTRON_FIXED.fixes).get(lower.split(".")[0])
     if fixed is None:
-        detail = f"found {lower}, this range can only install affected versions (no fix on its branch)"
-        return Finding(Level.FAIL, subject, detail)
+        what = (
+            "this version is affected"
+            if exact is not None
+            else "this range can only install affected versions"
+        )
+        return Finding(
+            Level.FAIL, subject, f"found {lower}, {what} (no fix on its branch)"
+        )
+    if exact is not None:
+        return Finding(
+            Level.FAIL,
+            subject,
+            f"found {lower}, fixed {fixed}: this version is affected",
+        )
     detail = f"found {lower}, fixed {fixed}: a range may resolve higher, check the installed version"
     return Finding(Level.WARN, subject, detail)
 
