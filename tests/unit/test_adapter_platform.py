@@ -68,7 +68,7 @@ def host(
 class KeychainTest(unittest.TestCase):
     def test_found(self) -> None:
         commands = FakeCommands(
-            {"security": located("/usr/bin/security")},
+            {"/usr/bin/security": located("/usr/bin/security")},
             {"security": result(0, fixture("security-found.txt"))},
         )
         self.assertTrue(host(commands).keychain_has("emSign ECC Root CA - G3"))
@@ -89,25 +89,53 @@ class KeychainTest(unittest.TestCase):
 
     def test_not_found(self) -> None:
         commands = FakeCommands(
-            {"security": located("/usr/bin/security")},
+            {"/usr/bin/security": located("/usr/bin/security")},
             {"security": result(44, "", fixture("security-notfound.txt"))},
         )
         self.assertFalse(host(commands).keychain_has("AAA Certificate Services"))
 
     def test_not_on_linux(self) -> None:
-        commands = FakeCommands({"security": located("/usr/bin/security")}, {})
+        commands = FakeCommands({"/usr/bin/security": located("/usr/bin/security")}, {})
         self.assertFalse(host(commands, "Linux").keychain_has("x"))
         self.assertEqual(commands.ran, [])
 
     def test_security_inside_an_exclude(self) -> None:
-        commands = FakeCommands({"security": located("/usr/bin/security", False)}, {})
+        commands = FakeCommands(
+            {"/usr/bin/security": located("/usr/bin/security", False)}, {}
+        )
         self.assertFalse(host(commands).keychain_has("x"))
+
+    def test_path_lookups_are_never_used(self) -> None:
+        commands = FakeCommands(
+            {
+                "security": located("/tmp/bin/security"),
+                "xcode-select": located("/tmp/bin/xcode-select"),
+            },
+            {"security": result(0), "xcode-select": result(0, "/x")},
+        )
+        local = host(commands)
+        self.assertFalse(local.keychain_has("x"))
+        self.assertFalse(local.developer_tools_installed())
+        self.assertEqual(commands.ran, [])
+
+    def test_tools_a_non_root_user_can_change_are_not_run(self) -> None:
+        writable = {
+            path: Located(Path(path), Path(path), True, None, True)
+            for path in ("/usr/bin/security", "/usr/bin/xcode-select")
+        }
+        commands = FakeCommands(
+            writable, {"security": result(0), "xcode-select": result(0, "/x")}
+        )
+        local = host(commands)
+        self.assertFalse(local.keychain_has("x"))
+        self.assertFalse(local.developer_tools_installed())
+        self.assertEqual(commands.ran, [])
 
 
 class DeveloperToolsTest(unittest.TestCase):
     def test_installed_and_asked_once(self) -> None:
         commands = FakeCommands(
-            {"xcode-select": located("/usr/bin/xcode-select")},
+            {"/usr/bin/xcode-select": located("/usr/bin/xcode-select")},
             {"xcode-select": result(0, fixture("xcode-select-p.txt"))},
         )
         local = host(commands)
@@ -117,7 +145,7 @@ class DeveloperToolsTest(unittest.TestCase):
 
     def test_not_installed(self) -> None:
         commands = FakeCommands(
-            {"xcode-select": located("/usr/bin/xcode-select")},
+            {"/usr/bin/xcode-select": located("/usr/bin/xcode-select")},
             {"xcode-select": result(2, "", "error")},
         )
         self.assertFalse(host(commands).developer_tools_installed())

@@ -1,0 +1,7 @@
+# Run as root, a uv on PATH under /tmp, which every user can write, is not run.
+# setup: mkdir -p /tmp/u/bin /tmp/r && printf '#!/bin/sh\n: >/tmp/EXECUTED-uv\necho "uv 0.13.3 (fixture)"\n' >/tmp/u/bin/uv && chmod 755 /tmp/u/bin/uv && PY=$(command -v python3) && PATH=/tmp/u/bin:$PATH && export PATH
+# args: -r /tmp/r
+INFO  uv [host] not run: uv is writable by a non-root user
+!MARKER
+!uv [host uv]
+!Traceback

@@ -168,6 +168,10 @@ def podman_images(
         raise CheckError("-c needs podman, which was not found")
     if not podman.permitted:
         raise CheckError("-c needs podman, found only inside an excluded directory")
+    if podman.writable:
+        raise CheckError(
+            "-c needs podman, and a non-root user can change the one on PATH, not run as root"
+        )
     local = LocalPodman(commands, podman, extra_env=env)
     local.preflight(images)
     return local

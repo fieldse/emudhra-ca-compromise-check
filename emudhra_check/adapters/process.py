@@ -2,7 +2,8 @@
 
 LocalCommands finds tools on the filtered PATH or at a fixed path and runs them with cwd "/", the
 allowlisted environment, stdin closed, the resolved file as the executable, a timeout and an output
-limit. On either limit the child's whole process group is killed. Output is decoded with
+limit. Run as root, it refuses a tool whose file or any directory above it a non-root user can
+change. On either limit the child's whole process group is killed. Output is decoded with
 errors="replace".
 """
 
@@ -19,7 +20,7 @@ from typing import Mapping, Optional, Sequence
 
 from emudhra_check.adapters.filesystem import LocalPathOracle
 from emudhra_check.detections.ports import CommandResult, Located
-from emudhra_check.hostenv import HostEnvironment
+from emudhra_check.hostenv import HostEnvironment, writable_by_non_root
 from emudhra_check.limits import COMMAND_TIMEOUT, MAX_COMMAND_OUTPUT
 from emudhra_check.scope import FileId, ScanScope
 
@@ -87,11 +88,13 @@ class LocalCommands:
         scope: ScanScope,
         env: Mapping[str, str],
         oracle: Optional[LocalPathOracle] = None,
+        euid: Optional[int] = None,
     ) -> None:
         self.hostenv = hostenv
         self.scope = scope
         self.env = dict(env)
         self.oracle = oracle or LocalPathOracle()
+        self.euid = os.geteuid() if euid is None else euid
 
     def located(self, path: Path) -> Optional[Located]:
         """Return a Located for an executable regular file at path, or None."""
@@ -103,7 +106,8 @@ class LocalCommands:
             return None
         real = Path(os.path.realpath(path))
         permitted = self.scope.permits_path(real, self.oracle)
-        return Located(path, real, permitted, FileId(st.st_dev, st.st_ino))
+        writable = self.euid == 0 and writable_by_non_root(real, self.oracle)
+        return Located(path, real, permitted, FileId(st.st_dev, st.st_ino), writable)
 
     def which(self, name: str) -> Optional[Located]:
         """Return the first executable named name in the filtered PATH directories."""
@@ -142,6 +146,10 @@ class LocalCommands:
         if not tool.permitted:
             raise ValueError(
                 f"refusing to run {tool.path}, it lies inside an excluded directory"
+            )
+        if tool.writable:
+            raise ValueError(
+                f"refusing to run {tool.path} as root, a non-root user can change it"
             )
         proc = subprocess.Popen(
             [str(tool.path), *args],

@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 
 from emudhra_check.adapters.filesystem import LocalPathOracle
 from emudhra_check.adapters.process import LocalCommands
@@ -46,6 +46,16 @@ def script(path: Path, body: str) -> Path:
     return path
 
 
+class Owners(LocalPathOracle):
+    """The real oracle with owner and mode from a table, root and 0755 for any path not listed."""
+
+    def __init__(self, table: dict[Path, tuple[int, int]]) -> None:
+        self.table = table
+
+    def owner_and_mode(self, path: Path) -> Optional[tuple[int, int]]:
+        return self.table.get(path, (0, 0o40755))
+
+
 class CommandsTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(os.path.realpath(tempfile.mkdtemp(dir="/tmp")))
@@ -54,7 +64,11 @@ class CommandsTest(unittest.TestCase):
         subprocess.run(["rm", "-rf", str(self.tmp)], check=False)
 
     def commands(
-        self, path_text: str = "/usr/bin:/bin", excluded: Iterable[Path] = ()
+        self,
+        path_text: str = "/usr/bin:/bin",
+        excluded: Iterable[Path] = (),
+        oracle: LocalPathOracle = ORACLE,
+        euid: int = 1000,
     ) -> LocalCommands:
         excludes = resolve_excludes(
             tuple(str(p) for p in excluded), Path("/"), self.tmp, ORACLE
@@ -65,8 +79,45 @@ class CommandsTest(unittest.TestCase):
         )
         environ = {"TMPDIR": "/tmp", "PYTHONPATH": "/evil", "SECRET": "x"}
         return LocalCommands(
-            hostenv, ScanScope((), excludes.ids), child_environment(hostenv, environ)
+            hostenv,
+            ScanScope((), excludes.ids),
+            child_environment(hostenv, environ),
+            oracle,
+            euid,
         )
+
+    def test_root_run_refuses_a_tool_a_user_can_change(self) -> None:
+        marker = self.tmp / "EXECUTED-tool"
+        tool = script(self.tmp / "bin" / "tool", f": >{marker}")
+        (self.tmp / "links").mkdir()
+        (self.tmp / "links" / "sh").symlink_to("/bin/sh")
+        rows: list[tuple[str, dict[Path, tuple[int, int]], int, bool]] = [
+            ("all root", {}, 0, False),
+            ("file owned by a user", {tool: (1000, 0o100755)}, 0, True),
+            ("directory group-writable", {tool.parent: (0, 0o40775)}, 0, True),
+            ("ancestor world-writable", {self.tmp.parent: (0, 0o41777)}, 0, True),
+            ("not root", {tool: (1000, 0o100755)}, 1000, False),
+        ]
+        for name, owners, euid, writable in rows:
+            with self.subTest(name):
+                commands = self.commands(
+                    f"{self.tmp}/bin", oracle=Owners(owners), euid=euid
+                )
+                found = commands.which("tool")
+                assert found is not None
+                self.assertIs(found.writable, writable)
+                if writable:
+                    with self.assertRaises(ValueError):
+                        commands.run(found, [])
+                else:
+                    self.assertEqual(commands.run(found, []).returncode, 0)
+                    marker.unlink()
+        self.assertFalse(marker.exists())
+        owners = {self.tmp / "links": (1000, 0o40777)}
+        commands = self.commands(f"{self.tmp}/links", oracle=Owners(owners), euid=0)
+        linked = commands.which("sh")
+        assert linked is not None
+        self.assertFalse(linked.writable)
 
     def test_true_and_exit_code(self) -> None:
         commands = self.commands()

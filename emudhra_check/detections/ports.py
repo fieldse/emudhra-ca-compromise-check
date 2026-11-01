@@ -21,12 +21,14 @@ from emudhra_check.scope import FileId, FileInterests, Index, ScanScope
 
 @dataclass(frozen=True)
 class Located:
-    """A tool found on PATH or at a fixed path."""
+    """A tool found on PATH or at a fixed path. writable is true when the check runs as root and a
+    non-root user could change the tool's file or a directory above it."""
 
     path: Path
     real: Path
     permitted: bool
     file_id: Optional[FileId]
+    writable: bool = False
 
 
 @dataclass(frozen=True)

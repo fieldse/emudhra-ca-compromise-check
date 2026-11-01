@@ -318,6 +318,15 @@ class HostPythonTest(unittest.TestCase):
             ],
         )
 
+    def test_tool_a_non_root_user_can_change_is_not_run(self) -> None:
+        commands = FakeCommands({"python3": located(PY, writable=True)})
+        ctx = make_context(FakeFiles(), commands)
+        self.assertEqual(
+            lines(HostPythonPackages(), ctx),
+            ["INFO  python3 [host] not run: python3 is writable by a non-root user"],
+        )
+        self.assertEqual(commands.calls, [])
+
     def test_macos_stub_is_not_run(self) -> None:
         commands = FakeCommands({"python3": located(PY)})
         ctx = make_context(

@@ -104,10 +104,20 @@ class FakeFiles:
         return tuple(out)
 
 
-def located(path: str, permitted: bool = True, real: str = "", ino: int = 0) -> Located:
+def located(
+    path: str,
+    permitted: bool = True,
+    real: str = "",
+    ino: int = 0,
+    writable: bool = False,
+) -> Located:
     """Return a Located tool at path, resolving to real when given."""
     return Located(
-        Path(path), Path(real or path), permitted, FileId(2, ino or hash(path) % 100000)
+        Path(path),
+        Path(real or path),
+        permitted,
+        FileId(2, ino or hash(path) % 100000),
+        writable,
     )
 
 
@@ -138,7 +148,7 @@ class FakeCommands:
     def run(
         self, tool: Located, args: Sequence[str], timeout: int = 60, limit: int = 0
     ) -> CommandResult:
-        if not tool.permitted:
+        if not tool.permitted or tool.writable:
             raise ValueError("refusing to run an unpermitted tool")
         key = (str(tool.path), *args)
         self.calls.append(key)

@@ -2,15 +2,16 @@
 
 Filters PATH to absolute directories outside every excluded directory, finds the Homebrew prefix
 from the PATH directory holding brew without running it, builds the child processes' allowlisted
-environment, lists the fixed binary directories, and decides whether a macOS /usr/bin tool is a stub.
-Pure over the PathOracle.
+environment, lists the fixed binary directories, decides whether a macOS /usr/bin tool is a stub,
+and decides whether a non-root user could change a tool a root run would execute. Pure over the
+PathOracle and the OwnerOracle.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Optional
+from typing import Mapping, Optional, Protocol
 
 from emudhra_check.scope import ExcludeSet, PathOracle, first_excluded
 from emudhra_check.versions import Version
@@ -62,6 +63,25 @@ def filter_path(
         seen.add(identity)
         kept.append(Path(entry))
     return tuple(kept), tuple(notes)
+
+
+class OwnerOracle(Protocol):
+    def owner_and_mode(self, path: Path) -> Optional[tuple[int, int]]:
+        """Return the owner's uid and the mode of path without following a final symlink, or None."""
+        ...
+
+
+def writable_by_non_root(real: Path, oracle: OwnerOracle) -> bool:
+    """Return whether a non-root user could change real: it or a directory above it is not owned by root
+    or is group- or world-writable. A path that cannot be stat'ed counts as writable."""
+    for path in (real, *real.parents):
+        facts = oracle.owner_and_mode(path)
+        if facts is None:
+            return True
+        uid, mode = facts
+        if uid != 0 or mode & 0o022:
+            return True
+    return False
 
 
 def find_brew_prefix(path_dirs: tuple[Path, ...], oracle: PathOracle) -> Optional[Path]:

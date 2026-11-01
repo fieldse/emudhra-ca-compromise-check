@@ -1,10 +1,10 @@
 """platform.py: the platform adapter, the host facts that come from macOS tools and Java homes.
 
-LocalHost answers whether the macOS developer tools are installed (xcode-select -p), whether the
-macOS system roots keychain lists a certificate (security find-certificate), and which Java homes
-exist (JAVA_HOME, the java on PATH, and /usr/libexec/java_home -V on macOS). Every tool runs through
-LocalCommands, so each one is found on the filtered PATH or at its fixed path and is skipped inside
-an excluded directory.
+LocalHost answers whether the macOS developer tools are installed (/usr/bin/xcode-select -p),
+whether the macOS system roots keychain lists a certificate (/usr/bin/security find-certificate),
+and which Java homes exist (JAVA_HOME, the java on PATH, and /usr/libexec/java_home -V on macOS).
+The three macOS tools are called by absolute path. Every tool runs through LocalCommands and is
+skipped inside an excluded directory or, in a root run, when a non-root user can change it.
 """
 
 from __future__ import annotations
@@ -13,9 +13,19 @@ from pathlib import Path
 from typing import Optional
 
 from emudhra_check.adapters.process import LocalCommands
+from emudhra_check.detections.ports import Located
 
 SYSTEM_ROOTS_KEYCHAIN = "/System/Library/Keychains/SystemRootCertificates.keychain"
 JAVA_HOME_TOOL = Path("/usr/libexec/java_home")
+XCODE_SELECT_TOOL = Path("/usr/bin/xcode-select")
+SECURITY_TOOL = Path("/usr/bin/security")
+
+
+def runnable(tool: Optional[Located]) -> Optional[Located]:
+    """Return the tool when it may run: outside every exclude and, in a root run, root's alone."""
+    if tool is None or not tool.permitted or tool.writable:
+        return None
+    return tool
 
 
 def java_home_paths(listing: str) -> list[str]:
@@ -44,9 +54,11 @@ class LocalHost:
         if self.developer_tools is None:
             self.developer_tools = False
             tool = (
-                self.commands.which("xcode-select") if self.system == "Darwin" else None
+                runnable(self.commands.locate(XCODE_SELECT_TOOL))
+                if self.system == "Darwin"
+                else None
             )
-            if tool is not None and tool.permitted:
+            if tool is not None:
                 result = self.commands.run(tool, ["-p"])
                 self.developer_tools = result.returncode == 0 and bool(
                     result.stdout.strip()
@@ -57,8 +69,8 @@ class LocalHost:
         """Return whether the macOS system roots keychain lists a certificate with this label."""
         if self.system != "Darwin":
             return False
-        tool = self.commands.which("security")
-        if tool is None or not tool.permitted:
+        tool = runnable(self.commands.locate(SECURITY_TOOL))
+        if tool is None:
             return False
         result = self.commands.run(
             tool, ["find-certificate", "-c", label, SYSTEM_ROOTS_KEYCHAIN]
@@ -76,8 +88,8 @@ class LocalHost:
         if java is not None and java.permitted:
             homes.append(java.real.parent.parent)
         if self.system == "Darwin":
-            tool = self.commands.locate(JAVA_HOME_TOOL)
-            if tool is not None and tool.permitted:
+            tool = runnable(self.commands.locate(JAVA_HOME_TOOL))
+            if tool is not None:
                 for text in java_home_paths(self.commands.run(tool, ["-V"]).stderr):
                     real = self.commands.locate_dir(Path(text))
                     if real is not None:

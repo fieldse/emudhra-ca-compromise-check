@@ -69,7 +69,10 @@ class PodmanTest(unittest.TestCase):
             Version("3.13.5", (3, 13, 5)),
         )
         commands = LocalCommands(
-            hostenv, ScanScope((), frozenset()), child_environment(hostenv, {})
+            hostenv,
+            ScanScope((), frozenset()),
+            child_environment(hostenv, {}),
+            euid=1000,
         )
         tool = commands.which("podman")
         assert tool is not None
@@ -152,7 +155,8 @@ class PodmanTest(unittest.TestCase):
             out
         ):
             with contextlib.redirect_stderr(err):
-                code = cli.main(["-r", str(self.tmp), "-i", "absent:none"])
+                with mock.patch("os.geteuid", return_value=1000):
+                    code = cli.main(["-r", str(self.tmp), "-i", "absent:none"])
         self.assertEqual(code, 2)
         self.assertEqual(out.getvalue(), "")
         self.assertIn(
@@ -167,9 +171,28 @@ class PodmanTest(unittest.TestCase):
             out
         ):
             with contextlib.redirect_stderr(err):
-                code = cli.main(["-r", str(self.tmp), "-x", str(self.bin), "-c"])
+                with mock.patch("os.geteuid", return_value=1000):
+                    code = cli.main(["-r", str(self.tmp), "-x", str(self.bin), "-c"])
         self.assertEqual(code, 2)
         self.assertIn("-c needs podman, which was not found", err.getvalue())
+        self.assertFalse((self.bin / "count").exists())
+
+    def test_root_run_refuses_a_podman_a_user_can_change(self) -> None:
+        out, err = io.StringIO(), io.StringIO()
+        self.bin.chmod(0o777)
+        env = {"PATH": f"{self.bin}:/usr/bin:/bin", "HOME": str(self.tmp)}
+        with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(
+            out
+        ):
+            with contextlib.redirect_stderr(err):
+                with mock.patch("os.geteuid", return_value=0):
+                    code = cli.main(["-r", str(self.tmp), "-c"])
+        self.assertEqual(code, 2)
+        self.assertEqual(out.getvalue(), "")
+        self.assertIn(
+            "-c needs podman, and a non-root user can change the one on PATH",
+            err.getvalue(),
+        )
         self.assertFalse((self.bin / "count").exists())
 
 

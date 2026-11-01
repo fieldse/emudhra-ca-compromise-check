@@ -17,6 +17,7 @@ from emudhra_check.hostenv import (
     find_brew_prefix,
     fixed_binary_dirs,
     is_macos_stub,
+    writable_by_non_root,
 )
 from emudhra_check.scope import ExcludeSet, PathFacts, resolve_excludes
 from emudhra_check.versions import Version
@@ -183,6 +184,39 @@ class FixedBinaryDirsTest(unittest.TestCase):
 
     def test_relative_gobin_is_ignored(self) -> None:
         self.assertEqual(fixed_binary_dirs(env_with("bin"))[0], Path("/home/u/go/bin"))
+
+
+class OwnerTable:
+    """Owner and mode by path, root and 0755 for any path not listed."""
+
+    def __init__(self, entries: dict[str, Optional[tuple[int, int]]]) -> None:
+        self.entries = {Path(p): v for p, v in entries.items()}
+
+    def owner_and_mode(self, path: Path) -> Optional[tuple[int, int]]:
+        return self.entries.get(path, (0, 0o40755))
+
+
+class WritableByNonRootTest(unittest.TestCase):
+    def test_table(self) -> None:
+        tool = Path("/opt/tools/bin/node")
+        rows: list[tuple[str, dict[str, Optional[tuple[int, int]]], bool]] = [
+            ("all root, 0755", {}, False),
+            ("file owned by a user", {"/opt/tools/bin/node": (501, 0o100755)}, True),
+            ("file group-writable", {"/opt/tools/bin/node": (0, 0o100775)}, True),
+            ("file world-writable", {"/opt/tools/bin/node": (0, 0o100757)}, True),
+            ("parent owned by a user", {"/opt/tools/bin": (501, 0o40755)}, True),
+            ("grandparent group-writable", {"/opt/tools": (0, 0o40775)}, True),
+            ("root directory world-writable", {"/": (0, 0o41777)}, True),
+            ("parent cannot be stat'ed", {"/opt": None}, True),
+            (
+                "setuid bit is not a write bit",
+                {"/opt/tools/bin/node": (0, 0o104755)},
+                False,
+            ),
+        ]
+        for name, entries, want in rows:
+            with self.subTest(name):
+                self.assertIs(writable_by_non_root(tool, OwnerTable(entries)), want)
 
 
 if __name__ == "__main__":

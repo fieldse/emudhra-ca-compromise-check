@@ -109,6 +109,13 @@ class LocalPathOracle:
             return None
         return PathFacts(file_id_of(st), stat.S_ISDIR(st.st_mode), st.st_ino != 0)
 
+    def owner_and_mode(self, path: Path) -> Optional[tuple[int, int]]:
+        try:
+            st = os.stat(path, follow_symlinks=False)
+        except (OSError, ValueError):
+            return None
+        return st.st_uid, st.st_mode
+
 
 def notice(
     name: str, path: Union[Path, str], detail: str, level: Level = Level.INFO

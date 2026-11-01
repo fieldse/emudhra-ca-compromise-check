@@ -1,6 +1,8 @@
-# setup: mkdir -p /tmp/u/bin /tmp/r && printf '#!/bin/sh\necho "uv 0.13.3 (fixture)"\nexit 0\n' >/tmp/u/bin/uv && cat /out/bundles/g3-ecc-root.der >>/tmp/u/bin/uv && chmod +x /tmp/u/bin/uv && PY=$(command -v python3) && PATH=/tmp/u/bin:$PATH && export PATH
+# The fixture lives in a root-owned directory, since a root run refuses a tool a non-root user can change.
+# setup: mkdir -p /opt/u/bin /tmp/r && chmod 755 /opt/u /opt/u/bin && printf '#!/bin/sh\necho "uv 0.13.3 (fixture)"\nexit 0\n' >/opt/u/bin/uv && cat /out/bundles/g3-ecc-root.der >>/opt/u/bin/uv && chmod 755 /opt/u/bin/uv && PY=$(command -v python3) && PATH=/opt/u/bin:$PATH && export PATH
+# caps: default
 # args: -r /tmp/r
 # exit: 1
 FAIL  uv [host uv] found 0.13.3, fixed 0.13.4 (vendors its own CA bundle)
-FAIL  uv [/tmp/u/bin/uv] contains emSign ECC Root CA - G3 (removed root)
+FAIL  uv [/opt/u/bin/uv] contains emSign ECC Root CA - G3 (removed root)
 !Traceback

@@ -1,7 +1,8 @@
 """shared.py: the read and tool helpers every detection module uses.
 
 Turns a skipped read into its line, reads a file or explains why not, gives the content verdict of a
-file, finds a tool on PATH and refuses one inside an excluded directory, and runs a tool with the
+file, finds a tool on PATH and refuses one inside an excluded directory or, in a root run, one a
+non-root user can change, and runs a tool with the
 timeout line. Holds no verdict rule of its own.
 """
 
@@ -96,6 +97,14 @@ def find_tool(ctx: Context, name: str) -> Union[Located, list[Finding]]:
                 Level.INFO,
                 Subject(name, "host"),
                 "found on PATH inside an excluded directory, not run",
+            )
+        ]
+    if tool.writable:
+        return [
+            Finding(
+                Level.INFO,
+                Subject(name, "host"),
+                f"not run: {name} is writable by a non-root user",
             )
         ]
     return tool
