@@ -1,0 +1,9 @@
+# setup: L='[[package]]\nname = "webpki-roots"\nversion = "0.25.4"\n'; for d in /tmp/k/home/registry/src/index.crates.io-1949cf8c6b5b557f/rustls-0.23.1 /tmp/k/home/git/checkouts/quinn-0123456789abcdef/a1b2c3d /tmp/k/app /tmp/k/app/src/registry; do mkdir -p $d && printf "$L" >$d/Cargo.lock; done
+# args: -r /tmp/k
+# exit: 1
+INFO  Cargo.lock [/tmp/k/home/registry/src/index.crates.io-1949cf8c6b5b557f/rustls-0.23.1/Cargo.lock] inside downloaded crate source, does not decide local builds
+INFO  Cargo.lock [/tmp/k/home/git/checkouts/quinn-0123456789abcdef/a1b2c3d/Cargo.lock] inside downloaded crate source, does not decide local builds
+FAIL  webpki-roots [/tmp/k/app/Cargo.lock] found 0.25.4, no fix, move to 1.0.10 or later
+FAIL  webpki-roots [/tmp/k/app/src/registry/Cargo.lock] found 0.25.4, no fix, move to 1.0.10 or later
+!webpki-roots [/tmp/k/home/
+!Traceback

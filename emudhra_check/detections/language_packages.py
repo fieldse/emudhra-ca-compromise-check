@@ -7,11 +7,13 @@ version and by the roots its binary holds. A certifi or pip without its own cace
 use the system store and is INFO. A package installed by a distribution is judged by the bundle it
 resolves to. ElectronPackages judges installed and declared Electron versions, and
 CargoLocks, ComposerLocks, GemfileLocks and MixLocks the Rust, PHP, Ruby and Elixir packages that
-carry their own roots.
+carry their own roots. A Cargo.lock inside downloaded crate source (a Cargo registry source tree or
+git checkout) is INFO, since it does not decide what a local build uses.
 """
 
 from __future__ import annotations
 
+import re
 from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Iterator, Optional, Union
@@ -525,10 +527,18 @@ def rustls_webpki_finding(subject: Subject, version: str) -> Finding:
 class LockDetection:
     """A detection that reads each indexed lock file of one name as text."""
 
+    def skip(self, indexed: IndexedFile) -> Optional[Finding]:
+        """Return the line for a lock file left unread, or None to read it."""
+        return None
+
     def texts(
         self, ctx: Context, interests: FileInterests
     ) -> Iterator[Union[Finding, tuple[IndexedFile, str]]]:
         for indexed in ctx.index.files_for(interests):
+            skipped = self.skip(indexed)
+            if skipped is not None:
+                yield skipped
+                continue
             text = text_of(
                 ctx,
                 Subject(indexed.path.name, str(indexed.path)),
@@ -541,13 +551,44 @@ class LockDetection:
                 yield indexed, text
 
 
+# Cargo's index and git repository directories end in "-" and a 16-digit hex hash.
+CARGO_HASHED_DIR = re.compile(r".+-[0-9a-f]{16}")
+# Cargo's download directories under CARGO_HOME, each followed by a hashed directory and one more level.
+CARGO_SOURCE_DIRS = (("registry", "src"), ("git", "checkouts"))
+CRATE_SOURCE = "inside downloaded crate source, does not decide local builds"
+
+
+def in_crate_source(path: Path) -> bool:
+    """Return whether a file lies under a Cargo registry source tree or a Cargo git checkout.
+
+    That is registry/src/INDEX-HASH/CRATE/ or git/checkouts/REPO-HASH/REV/, wherever CARGO_HOME is.
+    """
+    dirs = path.parts[:-1]
+    for i in range(len(dirs) - 3):
+        if (dirs[i], dirs[i + 1]) in CARGO_SOURCE_DIRS and CARGO_HASHED_DIR.fullmatch(
+            dirs[i + 2]
+        ):
+            return True
+    return False
+
+
 class CargoLocks(LockDetection):
-    """webpki-roots, webpki-root-certs and rustls-webpki in Cargo.lock files."""
+    """webpki-roots, webpki-root-certs and rustls-webpki in Cargo.lock files.
+
+    A Cargo.lock inside downloaded crate source gets one INFO line and is not read.
+    """
 
     name: ClassVar[str] = "cargo-locks"
     interests: ClassVar[FileInterests] = FileInterests(
         name_globs=frozenset({"Cargo.lock"})
     )
+
+    def skip(self, indexed: IndexedFile) -> Optional[Finding]:
+        if in_crate_source(indexed.path):
+            return Finding(
+                Level.INFO, Subject("Cargo.lock", str(indexed.path)), CRATE_SOURCE
+            )
+        return None
 
     def run(self, ctx: Context) -> Iterator[Finding]:
         for item in self.texts(ctx, self.interests):

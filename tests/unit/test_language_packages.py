@@ -562,6 +562,49 @@ class CargoTest(unittest.TestCase):
                 f"{level}  webpki-roots [/f/Cargo.lock] found 0.26.11, wraps {wrapped}, fixed 1.0.10",
             )
 
+    def test_lock_inside_downloaded_crate_source_is_info(self) -> None:
+        old = b'[[package]]\nname = "webpki-roots"\nversion = "0.25.4"\n'
+        for path in (
+            "/h/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustls-0.23.1/Cargo.lock",
+            "/opt/cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-1.0.0/Cargo.lock",
+            "/c/registry/src/github.com-1ecc6299db9ec823/syn-2.0.0/sub/Cargo.lock",
+            "/h/.cargo/git/checkouts/quinn-0123456789abcdef/a1b2c3d/Cargo.lock",
+            "/h/.cargo/git/checkouts/quinn-0123456789abcdef/a1b2c3d/quinn-proto/Cargo.lock",
+        ):
+            with self.subTest(path=path):
+                fake = FakeFiles({path: old})
+                got = lines(
+                    CargoLocks(), make_context(fake, indexed=fake.indexed(path))
+                )
+                self.assertEqual(
+                    got,
+                    [
+                        f"INFO  Cargo.lock [{path}] inside downloaded crate source,"
+                        " does not decide local builds"
+                    ],
+                )
+                self.assertEqual(fake.reads, [])
+
+    def test_project_lock_outside_crate_source_is_judged(self) -> None:
+        old = b'[[package]]\nname = "webpki-roots"\nversion = "0.25.4"\n'
+        for path in (
+            "/w/app/Cargo.lock",
+            "/w/app/src/Cargo.lock",
+            "/w/app/src/index.crates.io-1949cf8c6b5b557f/x/Cargo.lock",
+            "/w/registry/src/app/x/Cargo.lock",
+            "/w/registry/src/index.crates.io-1949cf8c6b5b557f/Cargo.lock",
+            "/w/git/checkouts/quinn-0123456789abcdef/Cargo.lock",
+            "/w/registry/cache/index.crates.io-1949cf8c6b5b557f/x/Cargo.lock",
+        ):
+            with self.subTest(path=path):
+                got = run_files(CargoLocks(), {path: old})
+                self.assertEqual(
+                    got,
+                    [
+                        f"FAIL  webpki-roots [{path}] found 0.25.4, no fix, move to 1.0.10 or later"
+                    ],
+                )
+
     def test_wrapper_without_dependencies_warns(self) -> None:
         text = b'[[package]]\nname = "webpki-roots"\nversion = "0.26.11"\n'
         got = run_files(CargoLocks(), {"/f/Cargo.lock": text})
