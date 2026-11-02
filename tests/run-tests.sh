@@ -129,6 +129,7 @@ function make_fixtures() {
   write_key_fixtures
   fetch_certifi
   write_bundle_fixtures
+  write_trusted_fixtures
   require_clean_system_bundles
 }
 
@@ -225,6 +226,18 @@ for blk in roots.split('-----END CERTIFICATE-----')[:-1]:
         der = ssl.PEM_cert_to_DER_cert(blk[blk.index('-----BEGIN'):] + '-----END CERTIFICATE-----')
         open('/out/bundles/g3-ecc-root.der', 'wb').write(der)
 "
+}
+
+# Write emSign ECC Root CA - G3 as OpenSSL TRUSTED CERTIFICATE blocks with rejected uses only, trusted uses only,
+# and both
+function write_trusted_fixtures() {
+  run_in "$LAB_IMAGE" sh -c 'set -e
+    mkdir -p /out/trusted
+    t() { name=$1; shift; openssl x509 -inform DER -in /out/bundles/g3-ecc-root.der "$@" -trustout -out "/out/trusted/$name"; }
+    t rejected.pem -addreject anyExtendedKeyUsage
+    t rejected-alias.pem -addreject anyExtendedKeyUsage -setalias emSign
+    t trusted.pem -addtrust serverAuth
+    t both.pem -addtrust serverAuth -addreject anyExtendedKeyUsage'
 }
 
 # Stop when YARA finds a compromised certificate in a check image's own system bundle, since every case reads it

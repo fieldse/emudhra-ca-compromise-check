@@ -415,7 +415,7 @@ python3 -I -S vuln-check-emudhra-ca-compromise.pyz --help</pre></div>
     <dl class="levels">
       <dt class="fail">FAIL</dt><dd>A bundle, keystore or binary still holds the G3 root or a compromised certificate, or a release is older than its fix.</dd>
       <dt>WARN</dt><dd>Needs manual review. The AAA Certificate Services root is reported here&nbsp;<span class="rl">[<a href="references.html#r040">R040</a>]</span>.</dd>
-      <dt>INFO</dt><dd>Context, such as a compromised key held as a blocklist entry.</dd>
+      <dt>INFO</dt><dd>Context, such as a compromised key held as a blocklist entry or a certificate held as a rejected entry.</dd>
       <dt>ERROR</dt><dd>A check that failed to run. The rest of the run continues.</dd>
     </dl>
     <p>The check exits 1 on any <code>FAIL</code>, 2 on a usage or environment error, and 0 otherwise. A <code>WARN</code> or <code>ERROR</code> alone exits 0. Pass <code>--strict</code> to exit 1 on those too when it gates CI. A stock Mac fails <code>--strict</code> on the AAA line for <code>/etc/ssl/cert.pem</code> until Apple updates that file&nbsp;<span class="rl">[<a href="references.html#r099">R099</a>, <a href="references.html#r044">R044</a>]</span>.</p>

@@ -1,8 +1,9 @@
 """test_certificates.py: unit tests of emudhra_check/certificates.py and the generated certdata.py.
 
 Checks the generated records against rules/, the matcher on every PEM wrapping, DER, bare public
-keys and hostile PEM input, the verdict levels, and that unaffected bundles give no match. The
-fixtures under /out come from tests/run-tests.sh and are skipped when it did not write them.
+keys and hostile PEM input, OpenSSL TRUSTED CERTIFICATE blocks with trusted, rejected and malformed
+trust settings, the verdict levels, and that unaffected bundles give no match. The fixtures under
+/out come from tests/run-tests.sh and are skipped when it did not write them.
 """
 
 import base64
@@ -30,6 +31,7 @@ from emudhra_check.certificates import (
     has_pem,
     keystore_kind,
     pem_blocks,
+    rejected_only,
 )
 from emudhra_check.report import Finding, Level, Subject
 
@@ -303,6 +305,153 @@ class MatcherTest(unittest.TestCase):
         path = OUT / "certifi" / "cacert-2026.7.22.pem"
         needs(path)
         self.assertIn(G3_ECC_ROOT.label, self.full(path.read_bytes()))
+
+
+# Trust settings in an OpenSSL X509_CERT_AUX: anyExtendedKeyUsage and serverAuth.
+ANY_EKU = bytes.fromhex("0604551d2500")
+SERVER_AUTH = bytes.fromhex("06082b06010505070301")
+
+
+def tlv(tag: int, content: bytes) -> bytes:
+    """Encode one DER element with a short or two-byte length."""
+    if len(content) < 0x80:
+        return bytes([tag, len(content)]) + content
+    return bytes([tag, 0x82]) + len(content).to_bytes(2, "big") + content
+
+
+def aux(*fields: bytes) -> bytes:
+    return tlv(0x30, b"".join(fields))
+
+
+REJECT_ONLY = aux(tlv(0xA0, ANY_EKU))
+TRUST_ONLY = aux(tlv(0x30, SERVER_AUTH))
+TRUST_AND_REJECT = aux(tlv(0x30, SERVER_AUTH), tlv(0xA0, ANY_EKU))
+REJECTED_LINE = (
+    f"INFO  ca-bundle [/x] holds {G3_ECC_ROOT.label} as a rejected entry, not trusted"
+)
+
+
+class RejectedEntryTest(unittest.TestCase):
+    matcher = Matcher()
+
+    def lines(self, data: bytes) -> list:
+        return [f.line() for f in bundle_findings(SUBJECT, self.matcher.scan(data))]
+
+    def test_rejected_only_aux(self) -> None:
+        alias = tlv(0x0C, b"emSign")
+        keyid = tlv(0x04, b"\x01\x02")
+        other = tlv(0xA1, tlv(0x30, tlv(0x06, b"\x2a")))
+        for value in (
+            REJECT_ONLY,
+            aux(tlv(0xA0, ANY_EKU + SERVER_AUTH)),
+            aux(tlv(0x30, b""), tlv(0xA0, ANY_EKU)),
+            aux(tlv(0xA0, ANY_EKU), alias, keyid, other),
+            aux(tlv(0xA0, ANY_EKU * 30)),
+        ):
+            with self.subTest(aux=value.hex()):
+                self.assertTrue(rejected_only(value))
+
+    def test_trusted_or_malformed_aux(self) -> None:
+        for value in (
+            b"",
+            TRUST_ONLY,
+            TRUST_AND_REJECT,
+            aux(),
+            aux(tlv(0xA0, b"")),
+            aux(tlv(0x0C, b"emSign")),
+            aux(tlv(0xA0, ANY_EKU), tlv(0x30, SERVER_AUTH)),
+            aux(tlv(0xA0, ANY_EKU), tlv(0xA0, ANY_EKU)),
+            aux(tlv(0xA0, ANY_EKU + b"\x05\x00")),
+            aux(tlv(0xA0, b"\x06\x00")),
+            aux(tlv(0xA0, ANY_EKU), tlv(0x02, b"\x01")),
+            REJECT_ONLY + b"\x00",
+            REJECT_ONLY[:-1],
+            b"\x30\x80" + REJECT_ONLY[2:] + b"\x00\x00",
+            b"\x30\x85\x00\x00\x00\x00\x08" + REJECT_ONLY[2:],
+            b"\x1f\x08" + REJECT_ONLY[2:],
+            aux(bytes([0xA0, 0x84, 0xFF, 0xFF, 0xFF, 0xFF]) + ANY_EKU),
+            b"\x31" + REJECT_ONLY[1:],
+        ):
+            with self.subTest(aux=value.hex()):
+                self.assertFalse(rejected_only(value))
+
+    def test_rejected_block_is_info_and_the_bundle_passes(self) -> None:
+        for width in (64, 76, 32):
+            with self.subTest(width=width):
+                data = trusted_pem(G3_ECC_ROOT.der + REJECT_ONLY, width)
+                self.assertEqual(
+                    self.lines(data),
+                    [
+                        REJECTED_LINE,
+                        "PASS  ca-bundle [/x] contains no compromised eMudhra certificate",
+                    ],
+                )
+
+    def test_trusted_blocks_fail(self) -> None:
+        for value in (TRUST_ONLY, TRUST_AND_REJECT, aux(tlv(0xA0, b"\x05\x00")), b""):
+            with self.subTest(aux=value.hex()):
+                data = trusted_pem(G3_ECC_ROOT.der + value, 64)
+                self.assertEqual(
+                    self.lines(data),
+                    [f"FAIL  ca-bundle [/x] contains {G3_ECC_ROOT.label}"],
+                )
+
+    def test_a_trusted_copy_beside_the_rejected_entry_fails(self) -> None:
+        rejected = trusted_pem(G3_ECC_ROOT.der + REJECT_ONLY, 64)
+        for other in (
+            pem(G3_ECC_ROOT.der),
+            trusted_pem(G3_ECC_ROOT.der + TRUST_ONLY, 64),
+            G3_ECC_ROOT.der,
+            b"cert = '" + G3_ECC_ROOT.pem_line + b"'\n",
+        ):
+            for data in (rejected + other, other + rejected):
+                with self.subTest(other=other[:30], first=data[:5]):
+                    self.assertEqual(
+                        self.lines(data),
+                        [f"FAIL  ca-bundle [/x] contains {G3_ECC_ROOT.label}"],
+                    )
+
+    def test_plain_certificate_block_is_unchanged(self) -> None:
+        self.assertEqual(
+            self.lines(pem(G3_ECC_ROOT.der)),
+            [f"FAIL  ca-bundle [/x] contains {G3_ECC_ROOT.label}"],
+        )
+
+    def test_rejected_aaa_is_info(self) -> None:
+        data = trusted_pem(AAA.der + REJECT_ONLY, 64)
+        self.assertEqual(
+            self.lines(data),
+            [
+                f"INFO  ca-bundle [/x] holds {AAA.label} as a rejected entry, not trusted",
+                "PASS  ca-bundle [/x] contains no compromised eMudhra certificate",
+            ],
+        )
+
+    def test_openssl_fixtures(self) -> None:
+        needs(OUT / "trusted" / "rejected.pem")
+        rows = (
+            (
+                "rejected.pem",
+                [
+                    REJECTED_LINE,
+                    "PASS  ca-bundle [/x] contains no compromised eMudhra certificate",
+                ],
+            ),
+            (
+                "rejected-alias.pem",
+                [
+                    REJECTED_LINE,
+                    "PASS  ca-bundle [/x] contains no compromised eMudhra certificate",
+                ],
+            ),
+            ("trusted.pem", [f"FAIL  ca-bundle [/x] contains {G3_ECC_ROOT.label}"]),
+            ("both.pem", [f"FAIL  ca-bundle [/x] contains {G3_ECC_ROOT.label}"]),
+        )
+        for name, want in rows:
+            with self.subTest(name=name):
+                data = (OUT / "trusted" / name).read_bytes()
+                self.assertIn(b"-----BEGIN TRUSTED CERTIFICATE-----", data)
+                self.assertEqual(self.lines(data), want)
 
 
 class BundleFindingsTest(unittest.TestCase):

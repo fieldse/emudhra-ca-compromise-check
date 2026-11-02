@@ -124,6 +124,8 @@ def newest_formula(names: tuple[str, ...]) -> Optional[str]:
 
 def is_stale_hit(match: CertificateMatch) -> bool:
     """Return whether a bundle match is one the fixed formula removes."""
+    if match.kind is MatchKind.REJECTED:
+        return False
     return not (
         match.role is Role.COMPROMISED_INTERMEDIATE and match.kind is MatchKind.KEY_ONLY
     )

@@ -2,13 +2,15 @@
 
 Builds the known certificates and keys from certdata.py, finds them in PEM bundles, keystores and
 binaries by SHA-256 of each PEM block, by DER, by the first base64 line and by the public key, and
-turns the matches into findings. Every scan is a bytes.find loop over the buffer, so the cost is
-linear in its size.
+turns the matches into findings. An OpenSSL TRUSTED CERTIFICATE block whose trust settings list only
+rejected uses is a distrust entry and gives INFO, not FAIL. Every scan is a bytes.find loop over the
+buffer, so the cost is linear in its size.
 """
 
 from __future__ import annotations
 
 import binascii
+import bisect
 import hashlib
 from dataclasses import dataclass
 from enum import Enum
@@ -55,6 +57,7 @@ class Role(Enum):
 class MatchKind(Enum):
     FULL = "full"
     KEY_ONLY = "key only"
+    REJECTED = "rejected"
 
 
 @dataclass(frozen=True)
@@ -131,10 +134,79 @@ def first_der_element(der: bytes) -> Optional[bytes]:
     return der[: header + length] if header + length <= len(der) else None
 
 
-def pem_blocks(
+def der_header(data: bytes, pos: int, end: int) -> Optional[tuple[int, int, int]]:
+    """Return the tag, content start and content end of the DER element at pos, or None when it does
+    not fit before end or uses a form DER forbids."""
+    if end - pos < 2 or data[pos] & 0x1F == 0x1F:
+        return None
+    first = data[pos + 1]
+    if first < 0x80:
+        start, length = pos + 2, first
+    else:
+        width = first & 0x7F
+        if not 1 <= width <= 4 or end - pos < 2 + width:
+            return None
+        start = pos + 2 + width
+        length = int.from_bytes(data[pos + 2 : start], "big")
+    if start + length > end:
+        return None
+    return data[pos], start, start + length
+
+
+def oid_count(data: bytes, start: int, end: int) -> Optional[int]:
+    """Return how many OBJECT IDENTIFIERs fill data[start:end] exactly, or None when anything else is there."""
+    count = 0
+    while start < end:
+        header = der_header(data, start, end)
+        if header is None or header[0] != 0x06 or header[1] == header[2]:
+            return None
+        count += 1
+        start = header[2]
+    return count
+
+
+# X509_CERT_AUX fields in order: trust SEQUENCE OF OID, reject [0], alias UTF8String, keyid OCTET STRING, other [1].
+AUX_FIELDS = (0x30, 0xA0, 0x0C, 0x04, 0xA1)
+
+
+def rejected_only(aux: bytes) -> bool:
+    """Return whether an OpenSSL X509_CERT_AUX lists one or more rejected uses and no trusted use.
+
+    Anything that does not parse as exactly one well-formed aux structure counts as trusted.
+    """
+    header = der_header(aux, 0, len(aux))
+    if header is None or header[0] != 0x30 or header[2] != len(aux):
+        return False
+    pos, end = header[1], header[2]
+    trusted = rejected = 0
+    field = 0
+    while pos < end:
+        element = der_header(aux, pos, end)
+        if element is None:
+            return False
+        tag, start, stop = element
+        while field < len(AUX_FIELDS) and AUX_FIELDS[field] != tag:
+            field += 1
+        if field == len(AUX_FIELDS):
+            return False
+        field += 1
+        if tag in (0x30, 0xA0):
+            count = oid_count(aux, start, stop)
+            if count is None:
+                return False
+            if tag == 0x30:
+                trusted = count
+            else:
+                rejected = count
+        pos = stop
+    return rejected > 0 and trusted == 0
+
+
+def pem_spans(
     data: Buffer, begin_marker: bytes = PEM_BEGIN, end_marker: bytes = PEM_END
-) -> Iterator[bytes]:
-    """Yield the DER of each decodable PEM block, skipping a BEGIN with no END nearby.
+) -> Iterator[tuple[int, int, bytes]]:
+    """Yield the body start, END offset and DER of each decodable PEM block, skipping a BEGIN with no
+    END nearby.
 
     A block runs from the last BEGIN before its END, so a truncated block cannot swallow the next one.
     """
@@ -159,9 +231,29 @@ def pem_blocks(
         if body.translate(None, BASE64_ALPHABET):
             continue
         try:
-            yield binascii.a2b_base64(body)
+            yield start, end, binascii.a2b_base64(body)
         except binascii.Error:
             continue
+
+
+def pem_blocks(
+    data: Buffer, begin_marker: bytes = PEM_BEGIN, end_marker: bytes = PEM_END
+) -> Iterator[bytes]:
+    """Yield the DER of each decodable PEM block."""
+    for _, _, der in pem_spans(data, begin_marker, end_marker):
+        yield der
+
+
+def found_outside(data: Buffer, needle: bytes, spans: list[tuple[int, int]]) -> bool:
+    """Return whether needle occurs in data at an offset outside every one of the sorted spans."""
+    starts = [start for start, _ in spans]
+    pos = data.find(needle)
+    while pos >= 0:
+        index = bisect.bisect_right(starts, pos) - 1
+        if index < 0 or pos >= spans[index][1]:
+            return True
+        pos = data.find(needle, spans[index][1])
+    return False
 
 
 class Matcher:
@@ -178,13 +270,20 @@ class Matcher:
     def scan(self, data: Buffer) -> tuple[CertificateMatch, ...]:
         """Return each known certificate or key found in data once, with its strongest kind."""
         full: set[bytes] = set()
+        rejected: set[bytes] = set()
+        rejected_spans: list[tuple[int, int]] = []
         ders: list[bytes] = []
         if data.find(PEM_BEGIN) >= 0:
             ders += pem_blocks(data)
         if data.find(TRUSTED_BEGIN) >= 0:
-            for trusted in pem_blocks(data, TRUSTED_BEGIN, TRUSTED_END):
+            for start, end, trusted in pem_spans(data, TRUSTED_BEGIN, TRUSTED_END):
                 der = first_der_element(trusted)
-                if der is not None:
+                if der is None:
+                    continue
+                if rejected_only(trusted[len(der) :]):
+                    rejected.add(hashlib.sha256(der).digest())
+                    rejected_spans.append((start, end))
+                else:
                     ders.append(der)
         for der in ders:
             certificate = BY_SHA256.get(hashlib.sha256(der).digest())
@@ -193,12 +292,19 @@ class Matcher:
         for certificate in self.certificates:
             if certificate.sha256 in full:
                 continue
-            if data.find(certificate.der) >= 0 or data.find(certificate.pem_line) >= 0:
+            if data.find(certificate.der) >= 0 or found_outside(
+                data, certificate.pem_line, rejected_spans
+            ):
                 full.add(certificate.sha256)
         matches = [
             (ORDER[c.label], CertificateMatch(c.label, c.role, MatchKind.FULL))
             for c in self.certificates
             if c.sha256 in full
+        ]
+        matches += [
+            (ORDER[c.label], CertificateMatch(c.label, c.role, MatchKind.REJECTED))
+            for c in self.certificates
+            if c.sha256 in rejected and c.sha256 not in full
         ]
         for key in self.keys:
             if any(c.sha256 in full for c in key.certificates):
@@ -248,6 +354,12 @@ def keystore_kind(data: Buffer) -> KeystoreKind:
 
 def match_finding(subject: Subject, match: CertificateMatch) -> Finding:
     """Return the finding for one certificate or key match."""
+    if match.kind is MatchKind.REJECTED:
+        return Finding(
+            Level.INFO,
+            subject,
+            f"holds {match.label} as a rejected entry, not trusted",
+        )
     if match.role is Role.CROSS_SIGN_ISSUER_ROOT:
         return Finding(AAA_LEVEL, subject, AAA_DETAIL)
     if match.kind is MatchKind.FULL:

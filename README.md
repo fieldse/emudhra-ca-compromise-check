@@ -47,7 +47,7 @@ The supported run line is `python3 -I -S vuln-check-emudhra-ca-compromise.pyz`. 
 
 ## What the check reads
 
-- **Certificates and keys inside files.** CA bundles, Java keystores (JKS, JCEKS and PKCS12, read directly without `keytool`), and the Node.js, Bun, Deno, Go and Rust binaries and Electron apps it finds. It matches each certificate and its public key, in PEM or DER, so bundles without comments are covered. A compromised key held as a blocklist entry is reported as `INFO`.
+- **Certificates and keys inside files.** CA bundles, Java keystores (JKS, JCEKS and PKCS12, read directly without `keytool`), and the Node.js, Bun, Deno, Go and Rust binaries and Electron apps it finds. It matches each certificate and its public key, in PEM or DER, so bundles without comments are covered. A compromised key held as a blocklist entry is reported as `INFO`. So is an OpenSSL `TRUSTED CERTIFICATE` entry whose trust settings list only rejected uses, since it distrusts the certificate.
 - **Trust stores.** The OS bundle files, Homebrew's bundle and its `ca-certificates` formula version, notes on the macOS system roots keychain, and the `cacerts` of each Java home (`JAVA_HOME`, the `java` on `PATH`, and `java_home` on macOS).
 - **OS packages.** `ca-certificates` through dpkg, apk, rpm and pacman.
 - **Runtimes.** Node.js (including nvm, volta, asdf, fnm and mise installs and Node binaries that apps ship), Bun, Deno, Go and CPython.
@@ -67,7 +67,7 @@ Run as root, the check does not run a tool whose file, or any directory above it
 
 - `FAIL`: a bundle, keystore or binary still holds `emSign ECC Root CA - G3` or a compromised certificate, or a release is older than its fix.
 - `WARN`: needs manual review. `AAA Certificate Services` is reported here.
-- `INFO`: context, such as a compromised key held as a blocklist entry.
+- `INFO`: context, such as a compromised key held as a blocklist entry or a certificate held as a rejected entry.
 - `ERROR`: a check that failed to run. The rest of the run continues.
 
 The check exits 1 on any `FAIL`, 2 on a usage or environment error, and 0 otherwise. A `WARN` or `ERROR` alone leaves the exit code at 0, so a check that failed to run does not fail the run. Pass `--strict` to exit 1 on `WARN` and `ERROR` as well, for a CI gate that must notice them. The last line is `SUMMARY pass=N fail=N warn=N info=N skip=N error=N`.

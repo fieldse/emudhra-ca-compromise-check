@@ -1,7 +1,8 @@
 """test_containers.py: unit tests of emudhra_check/detections/containers.py.
 
 Runs PodmanImages over a fake Images port: the recorded probe of a vulnerable Debian image, Node,
-runtime, Python and package records, keystores and bundles, and the no-shell, failed, timed-out and
+runtime, Python and package records, keystores and bundles (including a rejected-only TRUSTED
+CERTIFICATE block), and the no-shell, failed, timed-out and
 overrun statuses, which judge nothing from the image.
 """
 
@@ -16,7 +17,12 @@ from emudhra_check.detections.containers import PodmanImages
 from emudhra_check.detections.ports import ProbeRun, ProbeStatus
 from emudhra_check.report import Level
 from tests.unit.fakes import lines, make_context
-from tests.unit.test_certificates import pem
+from tests.unit.test_certificates import (
+    REJECT_ONLY,
+    TRUST_ONLY,
+    pem,
+    trusted_pem,
+)
 from tests.unit.test_probe import RECORDED, file_record
 
 IMAGE = "localhost/x:1"
@@ -161,6 +167,22 @@ class PodmanImagesTest(unittest.TestCase):
             [
                 f"FAIL  java keystore [{WHERE} /opt/jdk/lib/security/cacerts] contains {G3_LABEL}",
                 f"PASS  ca-bundle [{WHERE} /etc/ssl/cert.pem] contains no compromised eMudhra certificate",
+            ],
+        )
+
+    def test_rejected_trusted_certificate_file(self) -> None:
+        rejected = trusted_pem(G3_ECC_ROOT.der + REJECT_ONLY, 64)
+        trusted = trusted_pem(G3_ECC_ROOT.der + TRUST_ONLY, 64)
+        stream = file_record(b"/etc/ssl/rejected.pem", rejected) + file_record(
+            b"/etc/ssl/trusted.pem", trusted
+        )
+        self.assertEqual(
+            image_lines(stream),
+            [
+                f"INFO  ca-bundle [{WHERE} /etc/ssl/rejected.pem] holds {G3_LABEL} as a rejected entry,"
+                " not trusted",
+                f"PASS  ca-bundle [{WHERE} /etc/ssl/rejected.pem] contains no compromised eMudhra certificate",
+                f"FAIL  ca-bundle [{WHERE} /etc/ssl/trusted.pem] contains {G3_LABEL}",
             ],
         )
 

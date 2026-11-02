@@ -1,0 +1,9 @@
+# setup: mkdir -p /tmp/t && cp /out/trusted/rejected.pem /out/trusted/trusted.pem /out/trusted/both.pem /tmp/t/
+# args: -r /tmp/t
+# exit: 1
+INFO  ca-bundle [/tmp/t/rejected.pem] holds emSign ECC Root CA - G3 (removed root) as a rejected entry, not trusted
+PASS  ca-bundle [/tmp/t/rejected.pem] contains no compromised eMudhra certificate
+FAIL  ca-bundle [/tmp/t/trusted.pem] contains emSign ECC Root CA - G3 (removed root)
+FAIL  ca-bundle [/tmp/t/both.pem] contains emSign ECC Root CA - G3 (removed root)
+!FAIL  ca-bundle [/tmp/t/rejected.pem]
+!Traceback
