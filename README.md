@@ -27,8 +27,8 @@
 
 - **Read-only:** it reads files and changes nothing on your system.
 - **No network for images:** it checks container images with `--network=none` and never pulls an image.
-- **Runs only a fixed list of commands,** such as `node --version` for tools on your PATH. [Commands it runs](#commands-it-runs) has the full list.
-- **Reads binaries without running them:** it never runs a binary it finds while scanning.
+- **Runs only a fixed list of programs:** `node`, `bun`, `deno`, `go`, `python3`, `uv` and `perl` from `PATH` to read their versions, `podman` with `-c`, and on macOS `/usr/bin/security`, `/usr/bin/xcode-select` and `/usr/libexec/java_home` by absolute path. [Commands it runs](#commands-it-runs) gives the details.
+- **Runs nothing else it finds:** every other binary it comes across while scanning is read as data and never run.
 - **Skips user-writable tools as root:** run as root, it does not run a PATH tool that a non-root user could change.
 - **Needs Python 3.9 or later** and no packages. No root needed.
 
@@ -57,7 +57,7 @@ If you start it any other way, such as `./vuln-check-emudhra-ca-compromise.pyz` 
 
 Each output line reads `LEVEL subject [location] detail`. The last line is `SUMMARY pass=N fail=N warn=N info=N skip=N error=N`.
 
-- `FAIL`: a bundle, keystore or binary still holds the G3 root (`emSign ECC Root CA - G3`) or a compromised certificate, or a release is older than its fix.
+- `FAIL`: a bundle, keystore or binary still holds one of the three G3 roots (`emSign ECC Root CA - G3`, `emSign Root TLS CA - G3` or `emSign Root CS CA - G3`) or a compromised intermediate, or a release is older than its fix.
 - `WARN`: needs a manual look, such as a store that holds `AAA Certificate Services`.
 - `INFO`: context, such as a compromised key on a blocklist or a certificate marked as rejected.
 - `PASS`: fixed, or no compromised certificate found.
@@ -110,10 +110,13 @@ It reads the OS CA bundle files at their standard paths. It reads the `cacerts` 
 
 ### Commands it runs
 
-- To read versions it runs `node`, `bun`, `deno`, `go`, `python3`, `uv` and `perl` from `PATH`.
-- With `-c` it also runs `podman` from `PATH`.
+- From `PATH` it runs `node`, `bun`, `deno`, `go`, `python3`, `uv` and `perl` to read their versions (`--version`, or `go version`).
+  - `node -p process.execPath` names the binary the check then reads.
+  - `python3 -I -S -c` runs a short script that reads certifi and pip from package metadata.
+  - `perl -MMozilla::CA -e` prints the module's version and the bundle path it hands out.
+- With `-c` or `-i` it runs `podman` from `PATH`, which starts a probe in each image with `--network=none`.
 - On macOS it runs `/usr/bin/security`, `/usr/bin/xcode-select` and `/usr/libexec/java_home` by absolute path.
-- It never runs a binary it finds while scanning.
+- It runs nothing else. Every other binary it finds while scanning is read as data.
 
 ### Running as root
 
@@ -187,7 +190,7 @@ Electron's advisory gives the first fixed release on each branch: 42.11.16, 43.8
 - An exact version in `package.json` below its branch's fix (`"43.8.0"` or `"=43.8.0"`) is `FAIL`, because it can install only that version.
 - A range (`^`, `~`, `N.x`) that starts below the fix is `WARN`, because it may resolve to a fixed release.
 
-Every fixed Electron release checked still carries the G3 root, because the fix blocks the intermediates and leaves the root in place. On a fixed app the check reports that root as `INFO`.
+Every fixed Electron release checked still lists `emSign ECC Root CA - G3` in its bundled Node.js roots, because the fix blocks the compromised keys and leaves the root list alone. On a fixed app the check reports that root as `INFO`.
 
 ## Limitations
 
@@ -289,7 +292,7 @@ The zipapp replaces an earlier Bash script and keeps its output line format. Its
 - The line for an Electron version declared in `package.json` names the file's path, and its detail starts with `pins V` for an exact spec or `range starts at V` for a range.
 - rpm package lines print the full VERSION-RELEASE as `rpm -q` shows it, for example `found 2025.2.80_v9.0.304-6.fc44, fixed 2026.2.92_v9.0.319-2`.
 - The `checked N PEM files` count includes linked files, so `/etc/ssl/certs` counts each certificate a link points to.
-- `rustls-webpki` below 0.103.16 in a Rust binary is `WARN` when the same binary holds neither the G3 root nor a compromised intermediate.
+- `rustls-webpki` below 0.103.16 in a Rust binary is `WARN` when the same binary holds none of the three G3 roots and no compromised intermediate.
   - It stays `FAIL` when the binary holds one of those certificates.
   - Those versions lack the blocklist of compromised keys, which matters only when the binary uses the system trust store.
   - uv 0.13.4, which uv's advisory calls fixed, gets this `WARN`.
