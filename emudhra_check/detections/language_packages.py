@@ -372,7 +372,8 @@ class UvHost:
 def electron_range_finding(subject: Subject, spec: str) -> Optional[Finding]:
     """Judge a declared Electron spec: an exact version as installed, a range by its lowest version.
 
-    None for a spec that names no release.
+    The detail opens with "pins V" for an exact spec and "range starts at V" for a range. None for a
+    spec that names no release.
     """
     bound = npm_range_lower_bound(spec)
     if bound is None:
@@ -383,16 +384,19 @@ def electron_range_finding(subject: Subject, spec: str) -> Optional[Finding]:
         exact = None
     if exact is not None:
         lower, bounded_major = exact, True
-    found = lower or spec
+    declared = f"pins {lower}" if exact is not None else f"range starts at {lower}"
     if not bounded_major or parse_version(lower) is None:
+        opening = declared if lower else f"declares {spec}"
         return Finding(
             Level.WARN,
             subject,
-            f"found {found}, unbounded range, check the installed version",
+            f"{opening}, unbounded range, check the installed version",
         )
     verdict = judge_branched(subject, lower, ELECTRON_FIXED)
     if verdict.level is Level.PASS:
-        return verdict
+        return Finding(
+            Level.PASS, subject, declared + verdict.detail[len(f"found {lower}") :]
+        )
     fixed = dict(ELECTRON_FIXED.fixes).get(lower.split(".")[0])
     if fixed is None:
         what = (
@@ -401,15 +405,15 @@ def electron_range_finding(subject: Subject, spec: str) -> Optional[Finding]:
             else "this range can only install affected versions"
         )
         return Finding(
-            Level.FAIL, subject, f"found {lower}, {what} (no fix on its branch)"
+            Level.FAIL, subject, f"{declared}, {what} (no fix on its branch)"
         )
     if exact is not None:
         return Finding(
             Level.FAIL,
             subject,
-            f"found {lower}, fixed {fixed}: this version is affected",
+            f"{declared}, fixed {fixed}: this version is affected",
         )
-    detail = f"found {lower}, fixed {fixed}: a range may resolve higher, check the installed version"
+    detail = f"{declared}, fixed {fixed}: a range may resolve higher, check the installed version"
     return Finding(Level.WARN, subject, detail)
 
 
@@ -452,12 +456,11 @@ class ElectronPackages:
                 if isinstance(version, str):
                     yield judge_branched(subject, version, ELECTRON_FIXED)
                 continue
-            declared = Subject("electron", f"{indexed.path} declared range starts at")
             for section in ("dependencies", "devDependencies", "optionalDependencies"):
                 entries = data.get(section)
                 spec = entries.get("electron") if isinstance(entries, dict) else None
                 if isinstance(spec, str):
-                    finding = electron_range_finding(declared, spec)
+                    finding = electron_range_finding(subject, spec)
                     if finding is not None:
                         yield finding
 

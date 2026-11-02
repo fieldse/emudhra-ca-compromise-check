@@ -85,7 +85,7 @@ A stock Mac fails `--strict` on the `AAA Certificate Services` line for `/etc/ss
 The zipapp replaces the earlier Bash script. Its output keeps the same line format, with these changes a user will see:
 
 - `AAA Certificate Services` is `WARN`, not `INFO`, so `--strict` fails on it.
-- An exact Electron version below its branch's fix (`"43.8.0"` or `"=43.8.0"` in `package.json`) is `FAIL`, because it can install only that version. Ranges (`^`, `~`, `N.x`) below the fix stay `WARN`.
+- An exact Electron version below its branch's fix (`"43.8.0"` or `"=43.8.0"` in `package.json`) is `FAIL`, because it can install only that version. Ranges (`^`, `~`, `N.x`) below the fix stay `WARN`. A declared Electron line names the `package.json` path and opens its detail with `pins V` for an exact spec or `range starts at V` for a range.
 - rpm package lines print the full VERSION-RELEASE as `rpm -q` shows it, for example `found 2025.2.80_v9.0.304-6.fc44, fixed 2026.2.92_v9.0.319-2`.
 - The `checked N PEM files` count includes linked files, so `/etc/ssl/certs` counts each certificate a link points to.
 - A Rust binary's `rustls-webpki` below 0.103.16 is `WARN` when the same binary holds neither the G3 root nor a compromised intermediate. That crate lacks the key blocklist, which matters only when the binary uses the system trust store. It stays `FAIL` when the binary holds one of those certificates. uv 0.13.4, which uv's advisory calls fixed, gets this `WARN`.

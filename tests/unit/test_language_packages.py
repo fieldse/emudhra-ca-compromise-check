@@ -456,31 +456,23 @@ class ElectronTest(unittest.TestCase):
             },
         )
         by_path = {line.split("]")[0].split("[")[1]: line for line in got}
-        self.assertTrue(
-            by_path["/f/eol/package.json declared range starts at"].startswith("FAIL")
-        )
+        self.assertTrue(by_path["/f/eol/package.json"].startswith("FAIL"))
         self.assertIn(
             "can only install affected versions",
-            by_path["/f/eol/package.json declared range starts at"],
+            by_path["/f/eol/package.json"],
         )
-        self.assertTrue(
-            by_path["/f/range/package.json declared range starts at"].startswith("WARN")
-        )
+        self.assertTrue(by_path["/f/range/package.json"].startswith("WARN"))
         self.assertIn(
             "a range may resolve higher",
-            by_path["/f/range/package.json declared range starts at"],
+            by_path["/f/range/package.json"],
         )
         self.assertEqual(
-            by_path["/f/exact/package.json declared range starts at"],
-            "FAIL  electron [/f/exact/package.json declared range starts at] found 43.8.0, fixed 43.8.1: "
+            by_path["/f/exact/package.json"],
+            "FAIL  electron [/f/exact/package.json] pins 43.8.0, fixed 43.8.1: "
             "this version is affected",
         )
-        self.assertTrue(
-            by_path["/f/open/package.json declared range starts at"].startswith("WARN")
-        )
-        self.assertIn(
-            "unbounded range", by_path["/f/open/package.json declared range starts at"]
-        )
+        self.assertTrue(by_path["/f/open/package.json"].startswith("WARN"))
+        self.assertIn("unbounded range", by_path["/f/open/package.json"])
         self.assertTrue(
             by_path["/f/old/node_modules/electron/package.json"].startswith("FAIL")
         )
@@ -520,11 +512,11 @@ class ElectronTest(unittest.TestCase):
         eol = electron_range_finding(subject, "41.2.0")
         self.assertIs(eol.level, Level.FAIL)
         self.assertEqual(
-            eol.detail, "found 41.2.0, this version is affected (no fix on its branch)"
+            eol.detail, "pins 41.2.0, this version is affected (no fix on its branch)"
         )
         self.assertEqual(
             electron_range_finding(subject, "=43.8.0").detail,
-            "found 43.8.0, fixed 43.8.1: this version is affected",
+            "pins 43.8.0, fixed 43.8.1: this version is affected",
         )
         for spec in ("43.8.1", "=44.9.1", "45.0.0-beta.6"):
             with self.subTest(spec=spec):
@@ -534,6 +526,43 @@ class ElectronTest(unittest.TestCase):
                 finding = electron_range_finding(subject, spec)
                 self.assertIs(finding.level, Level.WARN)
                 self.assertIn("a range may resolve higher", finding.detail)
+
+    def test_declared_lines_name_the_file_and_word_the_spec(self) -> None:
+        subject = Subject("electron", "/f/package.json")
+        rows = (
+            (
+                "^43.8.0",
+                "WARN  electron [/f/package.json] range starts at 43.8.0, fixed 43.8.1:"
+                " a range may resolve higher, check the installed version",
+            ),
+            (
+                "^41.2.0",
+                "FAIL  electron [/f/package.json] range starts at 41.2.0,"
+                " this range can only install affected versions (no fix on its branch)",
+            ),
+            (
+                "^44.9.1",
+                "PASS  electron [/f/package.json] range starts at 44.9.1, fixed 44.9.1",
+            ),
+            ("=44.9.1", "PASS  electron [/f/package.json] pins 44.9.1, fixed 44.9.1"),
+            (
+                "^99.0.0",
+                "PASS  electron [/f/package.json] range starts at 99.0.0, newer than highest listed fix 45.0.0-beta.6",
+            ),
+            (
+                ">=43.0.0",
+                "WARN  electron [/f/package.json] range starts at 43.0.0, unbounded range, check the installed version",
+            ),
+            (
+                "latest",
+                "WARN  electron [/f/package.json] declares latest, unbounded range, check the installed version",
+            ),
+        )
+        for spec, want in rows:
+            with self.subTest(spec=spec):
+                finding = electron_range_finding(subject, spec)
+                assert finding is not None
+                self.assertEqual(finding.line(), want)
 
 
 CARGO_WRAPPER = """\
