@@ -303,7 +303,7 @@ p.more a { font-weight: 600; font-size: 15px; }
 <header class="band">
   <div class="wrap">
     <a class="back" href="./">← Back to the guide</a>
-    <p class="ids"><b>eMudhra G3</b> &nbsp;·&nbsp; <a href="./">Guide</a> &nbsp;·&nbsp; Checks &nbsp;·&nbsp; <a href="references.html">References</a></p>
+    <p class="ids"><b>eMudhra G3</b> &nbsp;·&nbsp; <a href="./">Guide</a> &nbsp;·&nbsp; Checks &nbsp;·&nbsp; <a href="detections.html">Detections</a> &nbsp;·&nbsp; <a href="references.html">References</a></p>
     <h1>Checks <span class='hl'>by item</span></h1>
     <p>One row per trust store, runtime, package, app and image: where it keeps its certificates, a read-only check, the vulnerable and fixed versions, and whether it still trusts the AAA Certificate Services path. Checked 2026-10-31.</p>
   </div>
@@ -318,7 +318,7 @@ p.more a { font-weight: 600; font-size: 15px; }
       <div><b>10</b><span>partly fixed</span></div>
       <div><b>24</b><span>no fix yet</span></div>
     </div>
-    <p class="read">Run the check for each item you use, on every host and in every image you ship. Each row links its sources on the <a href="references.html">references page</a>. 11 items keep no store of their own and follow the OS store, so check the OS rows for them. The check <code>vuln-check-emudhra-ca-compromise.pyz</code> runs most of these in one pass. See the <a href="./#helper">automated checker</a>.</p>
+    <p class="read">Run the check for each item you use, on every host and in every image you ship. Each row links its sources on the <a href="references.html">references page</a>. 11 items keep no store of their own and follow the OS store, so check the OS rows for them. The check <code>vuln-check-emudhra-ca-compromise.pyz</code> runs most of these in one pass. See the <a href="./#helper">automated checker</a>, and the <a href="detections.html">detections page</a> for every rule it applies.</p>
   </section>
 
   <nav class='toc read' aria-label='Contents'><h2>Contents</h2><ol><li><a href='#g-os'>OS trust stores</a><small>30 rows</small></li><li><a href='#g-java'>Java</a><small>21 rows</small></li><li><a href='#g-python'>Python</a><small>19 rows</small></li><li><a href='#g-js'>JavaScript runtimes</a><small>5 rows</small></li><li><a href='#g-langs'>Other languages</a><small>19 rows</small></li><li><a href='#g-apps'>Browsers and apps</a><small>27 rows</small></li><li><a href='#g-images'>Container images</a><small>9 rows</small></li></ol></nav>

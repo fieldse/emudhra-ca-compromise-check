@@ -5,6 +5,7 @@
 - **Check by hand:** use the guide pages.
   - The [guide](https://fieldse.github.io/emudhra-ca-compromise-check/) covers what happened and what to fix first.
   - The [checks page](https://fieldse.github.io/emudhra-ca-compromise-check/checks.html) gives a read-only command and the fixed version for each item.
+  - The [detections page](https://fieldse.github.io/emudhra-ca-compromise-check/detections.html) lists every rule the check applies, with its sources and verification status.
   - The [references page](https://fieldse.github.io/emudhra-ca-compromise-check/references.html) gives the sources for every claim.
 - **Check automatically:** run the read-only check in [Quickstart](#quickstart).
 
@@ -161,6 +162,8 @@ The check works through this list in order and prints its lines in the same orde
 | 26 | Perl `Mozilla::CA` for the `perl` on PATH: its version and the bundle it hands out |
 | 27 | Local Podman images, one at a time, with `-c` or `-i` |
 
+The [detections page](https://fieldse.github.io/emudhra-ca-compromise-check/detections.html) gives each of these checks with every rule it applies: the condition, the level it reports, the value it compares, the sources and the rule's verification status. The rules live in `rules/detection-rules.csv`, and `tools/build_detections.py` builds the page from that file.
+
 ### How it reads files
 
 - It identifies each certificate by its content and its public key, in PEM or DER, so it finds certificates in bundles that have no comments.
@@ -298,10 +301,12 @@ The Bash script is still in commit `354e951` as `scripts/vuln-check-emudhra-ca-c
 
 | Path | Holds |
 |---|---|
-| `index.html`, `checks.html`, `references.html` | The guide, the checks page and the references page |
+| `index.html`, `checks.html`, `detections.html`, `references.html` | The guide, the checks page, the detections page and the references page |
+| `rules/detection-rules.csv` | The rule register: every rule the check applies, with its code line, sources and verification status |
 | `scripts/vuln-check-emudhra-ca-compromise.pyz` | The read-only check, a Python zipapp, with its `.sha256` file |
 | `emudhra_check/` | The check's source, which the zipapp holds |
 | `tools/build_pyz.py`, `tools/pyz_main.py` | The reproducible archive build and the archive's entry point |
+| `tools/build_detections.py` | Builds `detections.html` from the rule register |
 | `rules/iocs.csv`, `rules/certs/` | The 16 compromised certificates and the G3 roots, with fingerprints |
 | `rules/yara/`, `rules/sigma/` | A YARA rule for the certificates in files, and a Sigma rule for a G3 certificate added to a trusted store |
 | `tests/` | Unit tests and container tests for the check, the archive and the rules |
@@ -310,7 +315,7 @@ The Bash script is still in commit `354e951` as `scripts/vuln-check-emudhra-ca-c
 ## Sources
 
 Every claim in the guide and the checks page, including each fixed version, comes from a vendor, project or tracker document.
-The [references page](https://fieldse.github.io/emudhra-ca-compromise-check/references.html) lists each claim with its sources, checked 2026-10-31.
+The [references page](https://fieldse.github.io/emudhra-ca-compromise-check/references.html) lists each claim with its sources, checked 2026-10-31. Rows R304 to R348 were added on 2026-11-02, when every detection rule was checked against its sources.
 
 ## Contribution
 
