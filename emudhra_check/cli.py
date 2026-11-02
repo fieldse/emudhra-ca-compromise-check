@@ -59,9 +59,9 @@ Usage: {prog} [-r|--root ROOT]... [-x|--exclude DIR]... [-c|--containers] [-i|--
 Read-only check for the eMudhra intermediate CA key compromise (October 2026).
 
 Options:
-  -r, --root ROOT   Directory to scan for CA bundles, keystores and package files (repeatable,
-                    default $HOME). Also accepts --root=ROOT. On macOS, /Applications and the
-                    Homebrew etc and Caskroom directories are always added
+  -r, --root ROOT   Directory to scan for CA bundles, keystores, binaries and package files
+                    (repeatable, default $HOME). Also accepts --root=ROOT. On macOS, /Applications,
+                    ~/Applications and the Homebrew etc and Caskroom directories are always added
   -x, --exclude DIR Never enter this directory (repeatable). Also accepts --exclude=DIR
   -c, --containers  Also probe local Podman images (runs a probe with --network=none)
   -i, --image IMAGE Probe only this local image (repeatable, implies -c)
@@ -69,8 +69,8 @@ Options:
   -s, --strict      Exit 1 on WARN and ERROR as well as FAIL
   -h, --help        Show this help
 
-A FAIL on a bundle, keystore or binary means it still contains emSign ECC Root CA - G3 or a
-compromised certificate, so software using it trusts certificates anyone can now issue.
+A FAIL on a bundle, keystore or binary means it still contains one of the three emSign G3 roots
+or a compromised intermediate, so software using it trusts certificates anyone can now issue.
 Version FAILs mean a release older than the fix. AAA Certificate Services is reported as WARN.
 Exit codes: 0 no FAIL, 1 any FAIL, 2 usage or environment error. A WARN or ERROR alone exits 0
 unless --strict is given, which makes it exit 1.
