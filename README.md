@@ -1,8 +1,11 @@
 # eMudhra G3 CA compromise check
 
-**Does your stack still trust the compromised eMudhra G3 certificates?** Eight eMudhra G3 intermediate CAs have private keys below 256, so anyone can compute the keys and issue certificates under them, and Sectigo cross-signed all eight under its `AAA Certificate Services` root with the same keys. Browsers on default settings block the chains, but anything with its own trust store needs its own update.
+**Does your stack still trust the compromised eMudhra G3 certificates?** Eight eMudhra G3 intermediate CAs have private keys below 256, so anyone can compute the keys and issue certificates under them. Sectigo cross-signed all eight under its `AAA Certificate Services` root with the same keys. Browsers on default settings block chains through these intermediates, but anything with its own trust store needs its own update.
 
-- **Check by hand:** [read the guide](https://fieldse.github.io/emudhra-ca-compromise-check/) for what happened and what to fix first. The [checks page](https://fieldse.github.io/emudhra-ca-compromise-check/checks.html) gives a read-only command and the fixed version for each item. The [references page](https://fieldse.github.io/emudhra-ca-compromise-check/references.html) gives the sources for every claim.
+- **Check by hand:** use the guide pages.
+  - The [guide](https://fieldse.github.io/emudhra-ca-compromise-check/) covers what happened and what to fix first.
+  - The [checks page](https://fieldse.github.io/emudhra-ca-compromise-check/checks.html) gives a read-only command and the fixed version for each item.
+  - The [references page](https://fieldse.github.io/emudhra-ca-compromise-check/references.html) gives the sources for every claim.
 - **Check automatically:** run the read-only check in [Quickstart](#quickstart).
 
 ## Contents
@@ -22,9 +25,10 @@
 ## Safety
 
 - **Read-only:** it reads files and changes nothing on your system.
-- **No network for images:** image probes run with `--network=none` and never pull an image.
-- **Runs only lookups,** such as `node --version`, for tools on your PATH. It never runs a binary it finds in the scan. [Commands it runs](#commands-it-runs) has the full list.
-- **Refuses replaceable tools as root:** run as root, it does not run a PATH tool that a non-root user could change.
+- **No network for images:** it checks container images with `--network=none` and never pulls an image.
+- **Runs only a fixed list of commands,** such as `node --version` for tools on your PATH. [Commands it runs](#commands-it-runs) has the full list.
+- **Reads binaries without running them:** it never runs a binary it finds while scanning.
+- **Skips user-writable tools as root:** run as root, it does not run a PATH tool that a non-root user could change.
 - **Needs Python 3.9 or later** and no packages. No root needed.
 
 ## Quickstart
@@ -42,9 +46,9 @@ python3 -I -S vuln-check-emudhra-ca-compromise.pyz --root=/opt --containers     
 python3 -I -S vuln-check-emudhra-ca-compromise.pyz --help                       # all options
 ```
 
-The supported run line is `python3 -I -S vuln-check-emudhra-ca-compromise.pyz`. `-I -S` keeps the scanned machine's Python settings, `site` and `.pth` files out of the check.
+Always start the check with `python3 -I -S vuln-check-emudhra-ca-compromise.pyz`. `-I -S` keeps the scanned machine's Python settings, `site` and `.pth` files out of the check.
 
-Run any other way, such as `./vuln-check-emudhra-ca-compromise.pyz` through its shebang or `python3` without the flags, and Python imports `site` and runs the machine's `.pth` files before the check starts. The archive then re-executes itself under `-I -S` and prints a note, but only after that startup.
+If you start it any other way, such as `./vuln-check-emudhra-ca-compromise.pyz` through its shebang or `python3` without the flags, Python imports `site` and runs the machine's `.pth` files before the check starts. The archive then re-executes itself under `-I -S` and prints a note, but by then those files have already run.
 
 ## Usage
 
@@ -52,18 +56,20 @@ Run any other way, such as `./vuln-check-emudhra-ca-compromise.pyz` through its 
 
 Each output line reads `LEVEL subject [location] detail`. The last line is `SUMMARY pass=N fail=N warn=N info=N skip=N error=N`.
 
-- `FAIL`: a bundle, keystore or binary still holds `emSign ECC Root CA - G3` or a compromised certificate, or a release is older than its fix.
-- `WARN`: needs manual review. `AAA Certificate Services` is reported here.
-- `INFO`: context, such as a compromised key held as a blocklist entry or a certificate held as a rejected entry.
+- `FAIL`: a bundle, keystore or binary still holds the G3 root (`emSign ECC Root CA - G3`) or a compromised certificate, or a release is older than its fix.
+- `WARN`: needs a manual look, such as a store that holds `AAA Certificate Services`.
+- `INFO`: context, such as a compromised key on a blocklist or a certificate marked as rejected.
 - `PASS`: fixed, or no compromised certificate found.
-- `ERROR`: a check that failed to run. The rest of the run continues.
+- `ERROR`: a check failed to run, and the run carried on without it.
 - `SKIP`: an image with no shell, not inspected.
 
 Exit codes:
 
-- `0`: no `FAIL`. A `WARN` or `ERROR` alone leaves the exit code at 0, so a check that failed to run does not fail the run.
-- `1`: any `FAIL`, or any `WARN` or `ERROR` with `--strict`. Use `--strict` for a CI gate that must notice them.
+- `0`: no `FAIL`, even with `WARN` or `ERROR` lines.
+- `1`: any `FAIL`, or any `WARN` or `ERROR` with `--strict`.
 - `2`: usage or environment error.
+
+Use `--strict` for a CI gate that must also catch warnings and checks that failed to run.
 
 A stock Mac fails `--strict` on the `AAA Certificate Services` line for `/etc/ssl/cert.pem` until Apple updates that file. Apple has said only that a future macOS update will fix it.
 
@@ -75,7 +81,7 @@ With no `-r`, the check scans `$HOME`. On macOS it always adds these, with or wi
 - `~/Applications`
 - Homebrew's `etc` and `Caskroom`
 
-It also reads programs in these directories:
+It also reads the programs in these directories:
 
 - `GOBIN` and each `GOPATH/bin`
 - `~/.cargo/bin`
@@ -83,59 +89,60 @@ It also reads programs in these directories:
 - `/usr/local/bin`
 - Homebrew's `bin`
 
-It reads the OS bundle files at their fixed paths, and the `cacerts` of each Java home: `JAVA_HOME`, the `java` on `PATH`, and `java_home` on macOS.
+It reads the OS CA bundle files at their standard paths. It reads the `cacerts` of each Java home it finds through `JAVA_HOME`, the `java` on `PATH`, and `java_home` on macOS.
 
 ### Options
 
 - `-r`, `--root ROOT`: directory to scan for CA bundles, keystores, binaries and package files. Repeatable. Default `$HOME`.
 - `-x`, `--exclude DIR`: never enter this directory. Repeatable.
-- `-c`, `--containers`: also probe every local Podman image, with networking off.
-- `-i`, `--image IMAGE`: probe only this local image. Repeatable, implies `-c`.
+- `-c`, `--containers`: also check every local Podman image, with networking off.
+- `-i`, `--image IMAGE`: check only this local image. Repeatable, implies `-c`.
 - `-q`, `--quiet`: print only `FAIL`, `WARN` and `ERROR` lines plus the summary.
 - `-s`, `--strict`: exit 1 on `WARN` and `ERROR` as well as `FAIL`.
 - `--help`: every option.
 
 ### Excluding a directory (`-x`)
 
-- An exclude matches the excluded directory itself, so case, symlinks and glob characters do not matter.
+- `-x` matches the directory by its identity on disk, so letter case, symlinks and glob characters in the path don't change what it excludes.
 - A tool in an excluded directory is skipped and not run.
-- A subdirectory of it that is bind-mounted at another path under a scan root is walked at that path. Exclude the mount point as well.
+- If a subdirectory of an excluded directory is bind-mounted at another path inside a scanned directory, the check scans it at that path unless you exclude the mount point too.
 
 ### Commands it runs
 
-- For version answers it runs `node`, `bun`, `deno`, `go`, `python3`, `uv` and `perl` from `PATH`.
+- To read versions it runs `node`, `bun`, `deno`, `go`, `python3`, `uv` and `perl` from `PATH`.
 - With `-c` it also runs `podman` from `PATH`.
 - On macOS it runs `/usr/bin/security`, `/usr/bin/xcode-select` and `/usr/libexec/java_home` by absolute path.
-- It never runs a binary it judges.
+- It never runs a binary it finds while scanning.
 
 ### Running as root
 
-Run as root, the check does not run a tool whose file, or any directory above it, is not owned by root or is group- or world-writable.
+Run as root, the check does not run a tool if the tool's file, or any directory above it, is not owned by root or is group- or world-writable.
 
 - A sticky directory such as `/nix/store` counts as safe when the entries below it are owned by root.
 - For such a tool it prints `WARN  TOOL [host] not run: TOOL is writable by a non-root user`.
-- It still reads that tool's binary for the compromised certificates, and takes Node's version from the binary.
-- With `-c`, such a `podman` stops the run with exit 2.
+- It still reads that tool's binary for the compromised certificates.
+- For `node`, it takes the version from the binary instead of running it.
+- With `-c`, a `podman` that fails this test stops the run with exit 2.
 - On a machine whose `PATH` tools you don't trust, scan from a clean account or pass `-x` for those directories.
 
 ## What it checks
 
-Browsers on default settings block the chains through pushed revocation data. The gaps are a startup window in new Firefox ESR 115 profiles, and forks that drop OneCRL, such as GNU IceCat built from ESR 153.5.1. Everything that carries its own trust store needs its own update: OS `ca-certificates` packages, JDK `cacerts`, Python, Node.js, Bun and Deno, Go, Rust, PHP, Ruby, Perl and Elixir packages, Electron apps, developer tools and container images.
+Browsers on default settings block chains through the compromised intermediates with pushed revocation data. The gaps are a startup window in new Firefox ESR 115 profiles, and forks that drop OneCRL, such as GNU IceCat built from ESR 153.5.1. Everything that carries its own trust store needs its own update: OS `ca-certificates` packages, JDK `cacerts`, Python, Node.js, Bun and Deno, Go, Rust, PHP, Ruby, Perl and Elixir packages, Electron apps, developer tools and container images.
 
-The check runs these detections in this order, and prints their lines in the same order.
+The check works through this list in order and prints its lines in the same order.
 
 | # | Check |
 |---|---|
-| 1 | OS CA bundle files at their fixed paths |
+| 1 | OS CA bundle files at their standard paths |
 | 2 | OS `ca-certificates` package, through dpkg, apk, rpm and pacman |
-| 3 | Homebrew's CA bundles, its `ca-certificates` formula version, and notes on the macOS system roots keychain it copies |
+| 3 | Homebrew's CA bundles, its `ca-certificates` formula version, and notes on the macOS system roots keychain that formula copies |
 | 4 | `bun` on PATH: its version and the roots its binary holds |
 | 5 | `node` on PATH, by version and by the binary `process.execPath` names |
 | 6 | `deno` on PATH: its version, and the roots and blocked keys its binary holds |
 | 7 | `go` on PATH, and the toolchain minimums `go.mod` files declare |
 | 8 | `python3` on PATH, and the interpreter running the check when it differs |
-| 9 | Electron apps, as macOS bundles and Linux app directories, judged by their Electron version (see [Electron](#electron)) |
-| 10 | Electron apps left in Squirrel.Mac ShipIt updater caches, judged by version only |
+| 9 | Electron apps, as macOS bundles and Linux app directories, by their Electron version (see [Electron](#electron)) |
+| 10 | Electron apps left in Squirrel.Mac ShipIt updater caches, by version only |
 | 11 | Node.js installs from nvm, volta, asdf, fnm and mise |
 | 12 | Node binaries that apps and tools ship outside PATH and the version managers |
 | 13 | certifi, pip and uv `dist-info` directories |
@@ -149,48 +156,49 @@ The check runs these detections in this order, and prints their lines in the sam
 | 21 | `composer/ca-bundle` in `composer.lock` |
 | 22 | `excon` in `Gemfile.lock` |
 | 23 | `castore` and Hex `certifi` in `mix.lock` |
-| 24 | PEM bundles under the scan roots, listed only when they hold a match |
-| 25 | The `cacerts` of each Java home, and every `cacerts` file under the scan roots |
+| 24 | PEM bundles in the scanned directories, listed only when they hold a certificate the check looks for |
+| 25 | The `cacerts` of each Java home, and every `cacerts` file in the scanned directories |
 | 26 | Perl `Mozilla::CA` for the `perl` on PATH: its version and the bundle it hands out |
 | 27 | Local Podman images, one at a time, with `-c` or `-i` |
 
 ### How it reads files
 
-- It matches each certificate and its public key, in PEM or DER, so bundles without comments are covered.
+- It identifies each certificate by its content and its public key, in PEM or DER, so it finds certificates in bundles that have no comments.
 - It reads Java keystores in JKS, JCEKS and PKCS12 directly, without `keytool`.
 - A compromised key held as a blocklist entry is `INFO`.
-- An OpenSSL `TRUSTED CERTIFICATE` entry whose trust settings list only rejected uses is `INFO`, since it distrusts the certificate.
+- An OpenSSL `TRUSTED CERTIFICATE` entry whose trust settings list only rejected uses is `INFO`, because that entry distrusts the certificate.
 - A certifi or pip with no `cacert.pem` of its own, as Debian ships them, uses the system store and is `INFO`.
-- A `Cargo.lock` inside downloaded crate source, under Cargo's `registry/src` or `git/checkouts` directories, is `INFO` and is not read. It does not decide what a local build uses.
+- A `Cargo.lock` inside downloaded crate source, under Cargo's `registry/src` or `git/checkouts` directories, is `INFO` and is not read, because it does not decide what a local build uses.
 - Inside each container image it reads runtimes, Python packages, the `ca-certificates` package, CA bundles and Java keystores.
 
-### The AAA cross-sign path
+### AAA cross-sign path
 
 Sectigo's cross-signed copies of the compromised intermediates reuse the same weak keys. A store that has dropped `emSign ECC Root CA - G3` but still holds `AAA Certificate Services` can still trust a forged chain through those copies. The check reports the AAA root as `WARN`, and the checks page has an AAA column for every item.
 
 ### Electron
 
-Electron's advisory gives the first fixed release on each branch: 42.11.16, 43.8.1, 44.9.1 and 45.0.0-beta.6. The check judges each Electron version against its own branch's fix.
+Electron's advisory gives the first fixed release on each branch: 42.11.16, 43.8.1, 44.9.1 and 45.0.0-beta.6. The check compares each Electron version with the fixed release on its own branch.
 
 - An installed Electron below its branch's fix is `FAIL`.
 - An Electron on a branch older than 42, which has no fix, is `FAIL`.
-- An exact spec in `package.json` below its branch's fix (`"43.8.0"` or `"=43.8.0"`) is `FAIL`, because it can install only that version.
-- A range (`^`, `~`, `N.x`) below the fix is `WARN`, because it may resolve to a fixed release.
-- Every fixed Electron release checked still carries the G3 root, because the fix blocks the intermediates and leaves the root in place. On a fixed app the check reports that root as `INFO`.
+- An exact version in `package.json` below its branch's fix (`"43.8.0"` or `"=43.8.0"`) is `FAIL`, because it can install only that version.
+- A range (`^`, `~`, `N.x`) that starts below the fix is `WARN`, because it may resolve to a fixed release.
+
+Every fixed Electron release checked still carries the G3 root, because the fix blocks the intermediates and leaves the root in place. On a fixed app the check reports that root as `INFO`.
 
 ## Limitations
 
 - The [guide](https://fieldse.github.io/emudhra-ca-compromise-check/#helper) lists what the check doesn't cover yet.
-- A file above 32 MiB is read through `mmap`. If another process truncates it during the read, the run ends with `SIGBUS`.
-- Run as root, the tool ownership check reads owner and mode bits only. An ACL that lets a non-root user change a tool or a directory above it is not seen.
+- A file above 32 MiB is read through `mmap`, so if another process truncates it during the read, the run ends with `SIGBUS`.
+- Run as root, the check decides whether a tool is safe to run from its owner and mode bits only, so it misses an ACL that lets a non-root user change the tool or a directory above it.
 
 ## Verification
 
 The test suite runs the check against real CA bundles and JDK keystores, and against test binaries, from before and after each fix.
 
-- Each check case runs in a container with networking off, under Python 3.13 and Python 3.9.
+- Each test case runs in a container with networking off, under Python 3.13 and Python 3.9.
 - The suite needs the network only to build and pull its images and download certifi.
-- It uses Docker if it responds, else Podman. `-e` picks one.
+- It uses Docker if Docker responds, else Podman. Its `-e` option picks one.
 
 ```bash
 git clone https://github.com/fieldse/emudhra-ca-compromise-check.git
@@ -220,7 +228,7 @@ PASS  java keystore [/out/java/jdk-fixed/cacerts] contains no compromised eMudhr
 
 ### Debian ca-certificates
 
-The first two lines come from recorded probe output of a Debian 12 image with `ca-certificates` 20230311+deb12u1, in `tests/unit/test_containers.py`. The third is the Debian 13 test image with 20250419+deb13u1, case `tests/expect/a1-os-trust-store.txt`.
+The first two lines are recorded output from checking a Debian 12 image with `ca-certificates` 20230311+deb12u1, in `tests/unit/test_containers.py`. The third is the Debian 13 test image with 20250419+deb13u1, case `tests/expect/a1-os-trust-store.txt`.
 
 ```text
 FAIL  ca-certificates [image:localhost/x:1] found 20230311+deb12u1
@@ -266,29 +274,31 @@ docker run --rm --network=none -v "$PWD":/repo:ro -v "$PWD/rebuild":/out \
 cmp rebuild/check.pyz scripts/vuln-check-emudhra-ca-compromise.pyz && echo identical
 ```
 
-That digest is `python:3.9-slim` (Python 3.9.25). The Python 3.13 build runs in the test image from `tests/Containerfile`: Debian trixie at `docker.io/library/debian@sha256:4c25275446ca371766b8b093c696782eabce06263fccacb8d5d813b3dc44b308` with Debian's `python3` (3.13.5).
+The image digest above is `python:3.9-slim` (Python 3.9.25). The Python 3.13 build runs in the test image from `tests/Containerfile`: Debian trixie at `docker.io/library/debian@sha256:4c25275446ca371766b8b093c696782eabce06263fccacb8d5d813b3dc44b308` with Debian's `python3` (3.13.5).
 
 ## Changes from the Bash script
 
-The zipapp replaces the earlier Bash script and keeps its line format. Changes you will see:
+The zipapp replaces an earlier Bash script and keeps its output line format. Its output differs in these ways:
 
-- `AAA Certificate Services` is `WARN`, not `INFO`, so `--strict` fails on it.
-- An exact Electron version below its branch's fix is `FAIL`. Ranges below the fix stay `WARN`. See [Electron](#electron).
-- A declared Electron line names the `package.json` path and opens its detail with `pins V` for an exact spec or `range starts at V` for a range.
+- `AAA Certificate Services` is now `WARN` (it was `INFO`), so `--strict` fails on it.
+- An exact Electron version below its branch's fix is now `FAIL` (see [Electron](#electron)).
+- Ranges below the fix stay `WARN`.
+- The line for an Electron version declared in `package.json` names the file's path, and its detail starts with `pins V` for an exact spec or `range starts at V` for a range.
 - rpm package lines print the full VERSION-RELEASE as `rpm -q` shows it, for example `found 2025.2.80_v9.0.304-6.fc44, fixed 2026.2.92_v9.0.319-2`.
 - The `checked N PEM files` count includes linked files, so `/etc/ssl/certs` counts each certificate a link points to.
-- A Rust binary's `rustls-webpki` below 0.103.16 is `WARN` when the same binary holds neither the G3 root nor a compromised intermediate. It stays `FAIL` when the binary holds one of those certificates.
-  - That crate lacks the key blocklist, which matters only when the binary uses the system trust store.
+- `rustls-webpki` below 0.103.16 in a Rust binary is `WARN` when the same binary holds neither the G3 root nor a compromised intermediate.
+  - It stays `FAIL` when the binary holds one of those certificates.
+  - Those versions lack the blocklist of compromised keys, which matters only when the binary uses the system trust store.
   - uv 0.13.4, which uv's advisory calls fixed, gets this `WARN`.
-- `ERROR` lines can appear, and `SUMMARY` gains ` error=N`.
+- `ERROR` lines are new, and `SUMMARY` gains ` error=N`.
 
-The Bash script is still in commit `354e951` as `scripts/vuln-check-emudhra-ca-compromise.sh`, for anyone who needs a shell-only check. It has no `-x` and misses the binaries, Electron apps and keystores the zipapp reads.
+The Bash script is still in commit `354e951` as `scripts/vuln-check-emudhra-ca-compromise.sh`, for anyone who needs a shell-only check. It has no `-x`, and it misses the binaries, Electron apps and keystores the zipapp reads.
 
 ## Repository layout
 
 | Path | Holds |
 |---|---|
-| `index.html`, `checks.html`, `references.html` | The guide, the checks table and the claim references |
+| `index.html`, `checks.html`, `references.html` | The guide, the checks page and the references page |
 | `scripts/vuln-check-emudhra-ca-compromise.pyz` | The read-only check, a Python zipapp, with its `.sha256` file |
 | `emudhra_check/` | The check's source, which the zipapp holds |
 | `tools/build_pyz.py`, `tools/pyz_main.py` | The reproducible archive build and the archive's entry point |
@@ -299,7 +309,7 @@ The Bash script is still in commit `354e951` as `scripts/vuln-check-emudhra-ca-c
 
 ## Sources
 
-Every claim in the guide and the checks table, including each fixed version, rests on a vendor, project or tracker document.
+Every claim in the guide and the checks page, including each fixed version, comes from a vendor, project or tracker document.
 The [references page](https://fieldse.github.io/emudhra-ca-compromise-check/references.html) lists each claim with its sources, checked 2026-10-31.
 
 ## Contribution
