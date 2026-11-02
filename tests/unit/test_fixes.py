@@ -29,8 +29,12 @@ class FixesTest(unittest.TestCase):
         self.assertGreater(len(finals), 25)
         for node in finals:
             assert isinstance(node.target, ast.Name)
+            # The claim comment trails the first line or fills the comment lines just above it.
+            first = node.lineno - 1
+            while first > 0 and lines[first - 1].startswith("#"):
+                first -= 1
             with self.subTest(name=node.target.id):
-                self.assertRegex(lines[node.lineno - 1], CLAIM)
+                self.assertRegex("\n".join(lines[first : node.lineno]), CLAIM)
 
     def test_branch_keys_match_fixed_versions(self) -> None:
         rules = {
