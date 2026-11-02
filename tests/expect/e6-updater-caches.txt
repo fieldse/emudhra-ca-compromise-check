@@ -1,8 +1,10 @@
-# Two Electron apps left in ShipIt update caches, 43.8.0 below the fix and 44.9.1 at it.
+# Three Electron apps left in ShipIt update caches, 43.8.0 below the fix, 44.9.1 at it, and 45.0.0-beta.5 read
+# from the binary.
 # setup: python3 -I /repo/tests/fixtures/make_binaries.py caches
 # args: -r /tmp/home
 # exit: 0
 WARN  electron update cache [/tmp/home/Library/Caches/com.example.app.ShipIt/update.x/Old.app] found 43.8.0, fixed 43.8.1 (stale updater cache, delete the directory)
+WARN  electron update cache [/tmp/home/Library/Caches/com.example.beta.ShipIt/update.z/Beta.app] found 45.0.0-beta.5, fixed 45.0.0-beta.6 (stale updater cache, delete the directory)
 ![/tmp/home/Library/Caches/com.example.other.ShipIt
 !electron app [/tmp/home
 INFO  electron app [scan roots] no Electron apps found

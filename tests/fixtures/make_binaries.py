@@ -148,6 +148,7 @@ def apps_set(base: str) -> None:
     app(f"{base}/Old.app", version_plist("44.9.0"), MACHO + g3)
     app(f"{base}/Fixed.app", version_plist("44.9.1"), MACHO + g3)
     app(f"{base}/NoPlist.app", None, MACHO + b"Chrome/140 Electron/43.8.1 Safari")
+    app(f"{base}/Beta.app", None, MACHO + b"Chrome/140 Electron/45.0.0-beta.5 Safari")
     entities = (
         b'<?xml version="1.0"?><!DOCTYPE plist [<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;&a;">'
         + b'<!ENTITY c "&b;&b;&b;&b;&b;">]><plist><dict><key>CFBundleVersion</key><string>&c;</string>'
@@ -159,10 +160,12 @@ def apps_set(base: str) -> None:
         app(f"{base}/BadPlist{number}.app", plist, MACHO)
     write(f"{base}/linux/myapp", ELF + b"Chrome/140 Electron/43.8.0 Safari")
     write(f"{base}/linux/resources/app.asar", b"asar archive", 0o644)
+    write(f"{base}/linux-beta/beta", ELF + b"Chrome/140 Electron/45.0.0-beta.5 Safari")
+    write(f"{base}/linux-beta/resources/app.asar", b"asar archive", 0o644)
 
 
 def caches_set(home: str) -> None:
-    """Electron apps left in two ShipIt update caches, one below the fix and one at it."""
+    """Electron apps left in ShipIt update caches: below the fix, at it, and a pre-release read from the binary."""
     caches = f"{home}/Library/Caches"
     app(
         f"{caches}/com.example.app.ShipIt/update.x/Old.app",
@@ -173,6 +176,11 @@ def caches_set(home: str) -> None:
         f"{caches}/com.example.other.ShipIt/update.y/New.app",
         version_plist("44.9.1"),
         MACHO,
+    )
+    app(
+        f"{caches}/com.example.beta.ShipIt/update.z/Beta.app",
+        None,
+        MACHO + b"Chrome/140 Electron/45.0.0-beta.5 Safari",
     )
 
 

@@ -174,6 +174,16 @@ class ReleaseStringsTest(unittest.TestCase):
         self.assertEqual(electron_version_string(b"x Electron/43.8.1 y"), "43.8.1")
         self.assertIsNone(electron_version_string(b"Electron/43.8"))
 
+    def test_electron_version_keeps_the_pre_release(self) -> None:
+        self.assertEqual(
+            electron_version_string(b"x Electron/45.0.0-beta.5 y"), "45.0.0-beta.5"
+        )
+        self.assertEqual(
+            electron_version_string(b"Electron/46.0.0-nightly.20261015\x00"),
+            "46.0.0-nightly.20261015",
+        )
+        self.assertEqual(electron_version_string(b"Electron/43.8.1-\x00"), "43.8.1")
+
 
 def xml_plist(body: str) -> bytes:
     return (

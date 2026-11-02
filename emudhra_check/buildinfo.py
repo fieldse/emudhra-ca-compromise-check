@@ -49,7 +49,8 @@ GO_SENTINEL_BYTES = 16
 VARINT_MAX_BYTES = 10
 NUMBER = rb"[0-9]{1,10}"
 DOTTED = NUMBER + rb"\." + NUMBER + rb"\." + NUMBER
-ELECTRON_VERSION = re.compile(rb"Electron/(" + DOTTED + rb")")
+# Electron writes a pre-release as N.N.N-SUFFIX, such as 45.0.0-beta.5 or 46.0.0-nightly.20261015.
+ELECTRON_VERSION = re.compile(rb"Electron/(" + DOTTED + rb"(?:-[0-9A-Za-z.]{1,64})?)")
 NODE_RELEASE = re.compile(
     rb"nodejs\.org/download/release/v(" + DOTTED + rb")/node-v(" + DOTTED + rb")"
 )
@@ -215,7 +216,7 @@ def node_release_version(data: Buffer) -> Optional[str]:
 
 
 def electron_version_string(data: Buffer) -> Optional[str]:
-    """Return the version an Electron binary carries in its Electron/N.N.N user agent part."""
+    """Return the version an Electron binary carries in its Electron/N.N.N[-SUFFIX] user agent part."""
     match = ELECTRON_VERSION.search(as_bytes(data))
     return match.group(1).decode() if match else None
 

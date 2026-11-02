@@ -324,9 +324,9 @@ dl.levels dt.unv { color: var(--muted); }
   <section>
     <div class="facts">
       <div><b>183</b><span>rules</span></div>
-      <div><b>96</b><span>verified</span></div>
-      <div><b>69</b><span>weak</span></div>
-      <div><b>16</b><span>under review</span></div>
+      <div><b>98</b><span>verified</span></div>
+      <div><b>68</b><span>weak</span></div>
+      <div><b>15</b><span>under review</span></div>
     </div>
     <ul class="plain read">
       <li><strong>A rule</strong> is one decision the check makes: a condition it looks for and the level it
@@ -339,7 +339,7 @@ dl.levels dt.unv { color: var(--muted); }
         <a href="references.html">references page</a> that back it.</li>
       <li><strong>Level:</strong> <code>matcher</code> means the certificate matcher's levels apply, and
         <code>rules</code> means the levels of the rules the condition names.</li>
-      <li><strong>Rules with problems are shown here too.</strong> 16 rules are under review
+      <li><strong>Rules with problems are shown here too.</strong> 15 rules are under review
         because a source contradicts them, and 2 could not be checked. A rule under
         review shows no source link until it is fixed.</li>
     </ul>
@@ -558,10 +558,10 @@ dl.levels dt.unv { color: var(--muted); }
 <tr id='el-04'><td class='rid'><a href='#el-04'>EL-04</a></td><td class='cond'>Electron 45 below fix (UpdaterCaches WARN)</td><td class='lvl'>FAIL</td><td class='val'>45.0.0-beta.6</td><td class='rf'><a href='references.html#r270'>R270</a><a href='references.html#r271'>R271</a></td><td><span class='badge ok'>verified</span></td></tr>
 <tr id='el-05'><td class='rid'><a href='#el-05'>EL-05</a></td><td class='cond'>Electron major with no listed fix below the highest listed fix (41 and older) (UpdaterCaches WARN)</td><td class='lvl'>FAIL</td><td class='val'>highest listed fix 45.0.0-beta.6</td><td class='rf'><a href='references.html#r270'>R270</a><a href='references.html#r271'>R271</a></td><td><span class='badge ok'>verified</span></td></tr>
 <tr id='el-06'><td class='rid'><a href='#el-06'>EL-06</a></td><td class='cond'>Electron major with no listed fix at or above 45.0.0-beta.6 (46 and later)</td><td class='lvl'>PASS</td><td class='val'>&gt;= 45.0.0-beta.6</td><td class='rf'><a href='references.html#r346'>R346</a></td><td><span class='badge ok'>verified</span></td></tr>
-<tr id='el-07'><td class='rid'><a href='#el-07'>EL-07</a></td><td class='cond'>Version source: a macOS app&#x27;s CFBundleVersion in the Electron Framework Info.plist, else the Electron/N.N.N string in the framework binary. A Linux app&#x27;s executable beside resources/app.asar holding Electron/N.N.N</td><td class='lvl'>–</td><td class='val'>Versions/A/Resources/Info.plist, Resources/Info.plist, Versions/A/Electron Framework</td><td class='rf'><span class='muted'>under review</span></td><td><span class='badge bad'>under review</span></td></tr>
+<tr id='el-07'><td class='rid'><a href='#el-07'>EL-07</a></td><td class='cond'>Version source: a macOS app&#x27;s CFBundleVersion in the Electron Framework Info.plist, else the Electron/N.N.N[-SUFFIX] string in the framework binary. A Linux app&#x27;s executable beside resources/app.asar holding Electron/N.N.N[-SUFFIX]. The pre-release suffix is kept, so 45.0.0-beta.5 sorts below 45.0.0-beta.6 and a nightly is not comparable (WARN)</td><td class='lvl'>–</td><td class='val'>Versions/A/Resources/Info.plist, Resources/Info.plist, Versions/A/Electron Framework, Electron/N.N.N[-SUFFIX]</td><td class='rf'><a href='references.html#r273'>R273</a><a href='references.html#r274'>R274</a><a href='references.html#r349'>R349</a></td><td><span class='badge ok'>verified</span></td></tr>
 <tr id='el-08'><td class='rid'><a href='#el-08'>EL-08</a></td><td class='cond'>App version unreadable, reported as &#x27;check the app&#x27;s About window&#x27;<span class='muted'>Design: an app whose version the check cannot read gets a manual check</span></td><td class='lvl'>WARN</td><td class='val'>n/a</td><td class='rf'><span class='muted'>decision</span></td><td><span class='badge weak'>weak</span></td></tr>
 <tr id='el-09'><td class='rid'><a href='#el-09'>EL-09</a></td><td class='cond'>Version FAIL and binary holds the full G3 root, reported as &#x27;confirms the version FAIL&#x27;<span class='muted'>Design: the root confirms a version FAIL and adds no new verdict</span></td><td class='lvl'>INFO</td><td class='val'>n/a</td><td class='rf'><a href='references.html#r331'>R331</a></td><td><span class='badge weak'>weak</span></td></tr>
-<tr id='el-10'><td class='rid'><a href='#el-10'>EL-10</a></td><td class='cond'>Fixed Electron (version not FAIL) whose binary holds the full G3 root, reported as &#x27;bundled Node.js root store still lists G3, the Electron fix blocks the compromised keys&#x27; (not FAIL, unlike Node RT-NODE-07)</td><td class='lvl'>INFO</td><td class='val'>n/a</td><td class='rf'><a href='references.html#r270'>R270</a><a href='references.html#r331'>R331</a><a href='references.html#r346'>R346</a></td><td><span class='badge weak'>weak</span></td></tr>
+<tr id='el-10'><td class='rid'><a href='#el-10'>EL-10</a></td><td class='cond'>Electron at or above its branch fix (PASS) whose binary holds the full G3 root, reported as &#x27;bundled Node.js root store still lists G3, the Electron fix blocks the compromised keys&#x27; (not FAIL, unlike Node RT-NODE-07). With an unreadable or uncomparable version (WARN) the note says only a fixed Electron blocks the root</td><td class='lvl'>INFO</td><td class='val'>n/a</td><td class='rf'><a href='references.html#r270'>R270</a><a href='references.html#r331'>R331</a><a href='references.html#r346'>R346</a></td><td><span class='badge ok'>verified</span></td></tr>
 <tr id='el-11'><td class='rid'><a href='#el-11'>EL-11</a></td><td class='cond'>Other matches in an Electron binary take the matcher levels. No Electron apps is INFO. An exhausted Linux binary budget is INFO<span class='muted'>Design: other matches in an Electron binary take the matcher levels</span></td><td class='lvl'>matcher/INFO</td><td class='val'>n/a</td><td class='rf'><span class='muted'>decision</span></td><td><span class='badge weak'>weak</span></td></tr>
 </tbody></table></div>
   </section>

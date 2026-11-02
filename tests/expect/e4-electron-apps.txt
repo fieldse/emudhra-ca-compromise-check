@@ -1,6 +1,6 @@
-# Electron apps: 44.9.0 and 44.9.1 both with the G3 root in the framework binary, a version found only in the
-# binary, four unreadable Info.plist files (random bytes, nested entities, an integer version, a near-1 MiB
-# integer), and a Linux app directory with resources/app.asar.
+# Electron apps: 44.9.0 and 44.9.1 both with the G3 root in the framework binary, a version and a pre-release
+# found only in the binary, four unreadable Info.plist files (random bytes, nested entities, an integer version,
+# a near-1 MiB integer), and Linux app directories with resources/app.asar, one holding a pre-release.
 # setup: python3 -I /repo/tests/fixtures/make_binaries.py apps
 # args: -r /tmp/apps
 # timeout: 120
@@ -11,10 +11,12 @@ PASS  electron app [/tmp/apps/Fixed.app/Contents/Frameworks/Electron Framework.f
 INFO  electron app [/tmp/apps/Fixed.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework] bundled Node.js root store still lists emSign ECC Root CA - G3, the Electron fix blocks the compromised keys
 !FAIL  electron app [/tmp/apps/Fixed.app
 PASS  electron app [/tmp/apps/NoPlist.app/Contents/Frameworks/Electron Framework.framework] found 43.8.1, fixed 43.8.1
+FAIL  electron app [/tmp/apps/Beta.app/Contents/Frameworks/Electron Framework.framework] found 45.0.0-beta.5, fixed 45.0.0-beta.6 (update the app)
 WARN  electron app [/tmp/apps/BadPlist1.app/Contents/Frameworks/Electron Framework.framework] version unreadable, check the app's About window
 WARN  electron app [/tmp/apps/BadPlist2.app/Contents/Frameworks/Electron Framework.framework] version unreadable, check the app's About window
 WARN  electron app [/tmp/apps/BadPlist3.app/Contents/Frameworks/Electron Framework.framework] version unreadable, check the app's About window
 WARN  electron app [/tmp/apps/BadPlist4.app/Contents/Frameworks/Electron Framework.framework] version unreadable, check the app's About window
 FAIL  electron app [/tmp/apps/linux/myapp] found 43.8.0, fixed 43.8.1 (update the app)
+FAIL  electron app [/tmp/apps/linux-beta/beta] found 45.0.0-beta.5, fixed 45.0.0-beta.6 (update the app)
 !ERROR
 !Traceback

@@ -306,10 +306,15 @@ def electron_app_findings(
         if match.label == G3_ECC_ROOT.label and match.kind is MatchKind.FULL:
             if verdict_level is Level.FAIL:
                 detail = f"also bundles {G3_NAME} (confirms the version FAIL)"
-            else:
+            elif verdict_level is Level.PASS:
                 detail = (
                     f"bundled Node.js root store still lists {G3_NAME},"
                     " the Electron fix blocks the compromised keys"
+                )
+            else:
+                detail = (
+                    f"bundled Node.js root store lists {G3_NAME},"
+                    " which only a fixed Electron blocks"
                 )
             findings.append(Finding(Level.INFO, where, detail))
         else:

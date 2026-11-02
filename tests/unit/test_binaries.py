@@ -334,6 +334,22 @@ class ElectronAppFindingsTest(unittest.TestCase):
         )
         self.assertEqual(len(fixed), 2)
 
+    def test_g3_note_claims_the_fix_only_on_pass(self) -> None:
+        subject = Subject("electron app", "/A/fw")
+        matches = MATCHER.scan(G3_PEM_LINE)
+        for version in (None, "46.0.0-nightly.20261015"):
+            with self.subTest(version=version):
+                got = [
+                    f.line()
+                    for f in electron_app_findings(subject, version, matches, "/A/bin")
+                ]
+                self.assertTrue(got[0].startswith("WARN  electron app [/A/fw]"))
+                self.assertEqual(
+                    got[1],
+                    "INFO  electron app [/A/bin] bundled Node.js root store lists"
+                    " emSign ECC Root CA - G3, which only a fixed Electron blocks",
+                )
+
     def test_no_version(self) -> None:
         got = electron_app_findings(Subject("electron app", "/A/fw"), None, ())
         self.assertEqual(
@@ -413,6 +429,35 @@ class ElectronAppsTest(unittest.TestCase):
             got,
             [
                 "FAIL  electron app [/opt/myapp/myapp] found 43.8.0, fixed 43.8.1 (update the app)"
+            ],
+        )
+
+    def test_pre_release_in_the_binary_is_judged_with_its_suffix(self) -> None:
+        files = {
+            **app_files("/A/Beta.app", None, ELF + b"Electron/45.0.0-beta.5 x"),
+            "/opt/beta/beta": ELF + b"Electron/45.0.0-beta.5 x",
+            "/opt/beta/resources/app.asar": b"asar",
+        }
+        got = lines(ElectronApps(), apps_context(files, ("/A/Beta.app",)))
+        self.assertIn(
+            f"FAIL  electron app [/A/Beta.app/{FRAMEWORK}] found 45.0.0-beta.5,"
+            " fixed 45.0.0-beta.6 (update the app)",
+            got,
+        )
+        self.assertIn(
+            "FAIL  electron app [/opt/beta/beta] found 45.0.0-beta.5,"
+            " fixed 45.0.0-beta.6 (update the app)",
+            got,
+        )
+        app = "/h/Library/Caches/com.x.ShipIt/update.1/Beta.app"
+        ctx = apps_context(
+            app_files(app, None, ELF + b"Electron/45.0.0-beta.5"), (app,)
+        )
+        self.assertEqual(
+            lines(UpdaterCaches(), ctx),
+            [
+                f"WARN  electron update cache [{app}] found 45.0.0-beta.5, fixed 45.0.0-beta.6"
+                " (stale updater cache, delete the directory)"
             ],
         )
 
