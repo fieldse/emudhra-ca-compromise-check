@@ -249,8 +249,11 @@ class HomebrewTrustStoreTest(unittest.TestCase):
         )
         self.assertFalse(any("keychain still lists AAA" in line for line in got))
         got = brew_lines(("2026-10-20",), keychain=("AAA Certificate Services",))
-        self.assertTrue(
-            any("keychain still lists AAA Certificate Services" in line for line in got)
+        self.assertIn(
+            "INFO  homebrew ca-certificates [keychain] macOS system roots keychain still lists"
+            " AAA Certificate Services, the root that Sectigo's cross-signs of the compromised"
+            " intermediates chain to",
+            got,
         )
 
     def test_keychain_not_listed_gives_no_line(self) -> None:

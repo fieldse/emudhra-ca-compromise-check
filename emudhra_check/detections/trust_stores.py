@@ -90,7 +90,7 @@ KEYCHAIN_ROOTS = (
     ),
     (
         "AAA Certificate Services",
-        "which cross-signed all eight compromised intermediates",
+        "the root that Sectigo's cross-signs of the compromised intermediates chain to",
     ),
 )
 STALE_DETAIL = (

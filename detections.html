@@ -324,9 +324,9 @@ dl.levels dt.unv { color: var(--muted); }
   <section>
     <div class="facts">
       <div><b>185</b><span>rules</span></div>
-      <div><b>114</b><span>verified</span></div>
+      <div><b>115</b><span>verified</span></div>
       <div><b>68</b><span>weak</span></div>
-      <div><b>1</b><span>under review</span></div>
+      <div><b>0</b><span>under review</span></div>
     </div>
     <ul class="plain read">
       <li><strong>A rule</strong> is one decision the check makes: a condition it looks for and the level it
@@ -339,7 +339,7 @@ dl.levels dt.unv { color: var(--muted); }
         <a href="references.html">references page</a> that back it.</li>
       <li><strong>Level:</strong> <code>matcher</code> means the certificate matcher's levels apply, and
         <code>rules</code> means the levels of the rules the condition names.</li>
-      <li><strong>Rules with problems are shown here too.</strong> 1 rules are under review
+      <li><strong>Rules with problems are shown here too.</strong> 0 rules are under review
         because a source contradicts them, and 2 could not be checked. A rule under
         review shows no source link until it is fixed.</li>
     </ul>
@@ -471,7 +471,7 @@ dl.levels dt.unv { color: var(--muted); }
 <tr id='os-brew-03'><td class='rid'><a href='#os-brew-03'>OS-BREW-03</a></td><td class='cond'>Homebrew bundles are judged by the certificate matcher</td><td class='lvl'>matcher</td><td class='val'>$(brew --prefix)/etc/ca-certificates/cert.pem, $(brew --prefix)/etc/openssl*/cert.pem</td><td class='rf'><a href='references.html#r096'>R096</a><a href='references.html#r319'>R319</a></td><td><span class='badge ok'>verified</span></td></tr>
 <tr id='os-brew-04'><td class='rid'><a href='#os-brew-04'>OS-BREW-04</a></td><td class='cond'>Formula PASS but a bundle still holds a match other than a key-only intermediate or a rejected entry, stale, run brew postinstall ca-certificates<span class='muted'>Design: the fixed formula filters the roots in its post-install step, so a bundle written before the upgrade can be stale</span></td><td class='lvl'>WARN</td><td class='val'>n/a</td><td class='rf'><a href='references.html#r093'>R093</a></td><td><span class='badge weak'>weak</span></td></tr>
 <tr id='os-brew-05'><td class='rid'><a href='#os-brew-05'>OS-BREW-05</a></td><td class='cond'>macOS: SystemRootCertificates keychain lists emSign ECC Root CA - G3 (Apple blocks it for its own frameworks since 2026-10-23)<span class='muted'>Design: the keychain entry is context, since Apple blocks the root for its own frameworks</span></td><td class='lvl'>INFO</td><td class='val'>keychain label &#x27;emSign ECC Root CA - G3&#x27;, date 2026-10-23</td><td class='rf'><a href='references.html#r097'>R097</a><a href='references.html#r101'>R101</a></td><td><span class='badge weak'>weak</span></td></tr>
-<tr id='os-brew-06'><td class='rid'><a href='#os-brew-06'>OS-BREW-06</a></td><td class='cond'>macOS: SystemRootCertificates keychain lists AAA Certificate Services<span class='muted'>Design: the keychain entry is context, since the AAA path is reported on each bundle</span></td><td class='lvl'>INFO</td><td class='val'>keychain label &#x27;AAA Certificate Services&#x27;</td><td class='rf'><span class='muted'>under review</span></td><td><span class='badge bad'>under review</span></td></tr>
+<tr id='os-brew-06'><td class='rid'><a href='#os-brew-06'>OS-BREW-06</a></td><td class='cond'>macOS: SystemRootCertificates keychain lists AAA Certificate Services, reported as &#x27;the root that Sectigo&#x27;s cross-signs of the compromised intermediates chain to&#x27;<span class='muted'>Design: the keychain entry is context, since the AAA path is reported on each bundle</span></td><td class='lvl'>INFO</td><td class='val'>keychain label &#x27;AAA Certificate Services&#x27;</td><td class='rf'><a href='references.html#r040'>R040</a><a href='references.html#r101'>R101</a></td><td><span class='badge ok'>verified</span></td></tr>
 <tr id='os-brew-07'><td class='rid'><a href='#os-brew-07'>OS-BREW-07</a></td><td class='cond'>macOS: formula FAIL and keychain lists the G3 root, the formula&#x27;s post_install copies the root from the keychain into its bundle</td><td class='lvl'>WARN</td><td class='val'>below 2026-09-25_1</td><td class='rf'><a href='references.html#r096'>R096</a><a href='references.html#r320'>R320</a></td><td><span class='badge weak'>weak</span></td></tr>
 </tbody></table></div>
   </section>
