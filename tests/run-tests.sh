@@ -526,6 +526,24 @@ for finding in image_findings('linked', parse_probe_output(open('/out/probe-link
   got=$(grep -cFx -e "INFO  certifi [image:linked] found $CERTIFI_OLD, its cacert.pem links outside the package, judged by the bundle it resolves to" \
     -e "FAIL  ca-bundle [image:linked /opt/corp/ca.pem] contains emSign ECC Root CA - G3 (removed root)" <<<"$judged" || true)
   check "probe dumps the affected bundle a certifi cacert.pem links to" "2" "$got"
+  # A certifi laid out as Debian bookworm ships it: the upstream cacert.pem beside a core.py whose where() is patched
+  run_in "$LAB_IMAGE" sh -c "P=\$(python3 -I -c 'import sysconfig; print(sysconfig.get_paths()[\"purelib\"])') \
+    && mkdir -p \$P/certifi \$P/certifi-2022.9.24.dist-info \
+    && printf 'Metadata-Version: 2.1\nName: certifi\nVersion: 2022.9.24\n' >\$P/certifi-2022.9.24.dist-info/METADATA \
+    && printf '%s\n' \"DEBIAN_CA_CERTS_PATH = '/etc/ssl/certs/ca-certificates.crt'\" 'def where() -> str:' \
+      '    return DEBIAN_CA_CERTS_PATH' >\$P/certifi/core.py \
+    && cp /out/certifi/cacert-$CERTIFI_OLD.pem \$P/certifi/cacert.pem && sh /out/probe.sh" >"$OUT/probe-patched.txt"
+  judged=$(run_in "$LAB_IMAGE" python3 -I -c "
+import sys
+sys.path.insert(0, '/repo')
+from emudhra_check.detections.containers import image_findings
+from emudhra_check.probe import parse_probe_output
+for finding in image_findings('patched', parse_probe_output(open('/out/probe-patched.txt', 'rb').read())):
+    print(finding.line())
+")
+  got=$(grep -cFx "INFO  certifi [image:patched] found 2022.9.24, where() patched to return the system store (Debian), its cacert.pem is not used" \
+    <<<"$judged" || true)
+  check "probe reads Debian's patched where() in certifi's core.py" "1" "$got"
 }
 
 # Lint the test scripts, the probe and the fake podman

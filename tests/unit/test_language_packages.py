@@ -51,6 +51,17 @@ OLD_BUNDLE = (
 )
 
 
+# certifi/core.py as Debian's certifi-debian-ca-certificates patch leaves it.
+DEBIAN_CORE = (
+    b'"""\ncertifi.py\n"""\n\nDEBIAN_CA_CERTS_PATH = \'/etc/ssl/certs/ca-certificates.crt\'\n\n\n'
+    b"def where() -> str:\n    return DEBIAN_CA_CERTS_PATH\n"
+)
+UPSTREAM_CORE = b"def where() -> str:\n    return _CACERT_PATH\n"
+PATCHED = (
+    "where() patched to return the system store (Debian), its cacert.pem is not used"
+)
+
+
 def dist_dir(name: str) -> IndexedDir:
     return IndexedDir(Path(f"{SITE}/{name}"), FileId(3, hash(name) % 1000))
 
@@ -90,21 +101,25 @@ class VerdictTest(unittest.TestCase):
                 self.assertEqual(got[0].level, Level.INFO)
                 self.assertIn("judged by the bundle it resolves to", got[0].detail)
 
-    def test_no_own_bundle_is_never_a_version_fail(self) -> None:
+    def test_debian_patched_where_is_never_a_version_fail(self) -> None:
         for installer in ("pip", "unknown", "debian"):
             with self.subTest(installer=installer):
                 got = python_package_finding(
                     Subject("certifi", "x"),
                     "2026.7.22",
                     installer=installer,
-                    bundle=Bundle.ABSENT,
+                    bundle=Bundle.PATCHED,
                 )
                 self.assertEqual(
                     [f.line() for f in got],
-                    [
-                        "INFO  certifi [x] found 2026.7.22, no bundled cacert.pem, patched to use the system store"
-                    ],
+                    [f"INFO  certifi [x] found 2026.7.22, {PATCHED}"],
                 )
+
+    def test_a_missing_bundle_alone_keeps_the_version_verdict(self) -> None:
+        got = python_package_finding(
+            Subject("certifi", "x"), "2026.7.22", installer="pip", bundle=Bundle.ABSENT
+        )
+        self.assertEqual(got[0].level, Level.FAIL)
 
     def test_pip_and_uv(self) -> None:
         self.assertIs(
@@ -148,32 +163,54 @@ class DistInfoTest(unittest.TestCase):
 
     def test_debian_certifi_without_a_bundle(self) -> None:
         files = FakeFiles(
-            {f"{SITE}/certifi-2025.1.31.dist-info/INSTALLER": b"debian\n"}
-        )
-        ctx = make_context(files, dirs=[dist_dir("certifi-2025.1.31.dist-info")])
-        self.assertEqual(
-            lines(PythonDistInfo(), ctx),
-            [
-                f"INFO  certifi [{SITE}/certifi-2025.1.31.dist-info] found 2025.1.31, no bundled cacert.pem,"
-                " patched to use the system store"
-            ],
-        )
-
-    def test_debian_certifi_with_a_bundle(self) -> None:
-        files = FakeFiles(
             {
                 f"{SITE}/certifi-2025.1.31.dist-info/INSTALLER": b"debian\n",
-                f"{SITE}/certifi/cacert.pem": OLD_BUNDLE,
+                f"{SITE}/certifi/core.py": DEBIAN_CORE,
             }
         )
         ctx = make_context(files, dirs=[dist_dir("certifi-2025.1.31.dist-info")])
         self.assertEqual(
             lines(PythonDistInfo(), ctx),
             [
-                f"INFO  certifi [{SITE}/certifi-2025.1.31.dist-info] found 2025.1.31, installed by debian,"
-                " judged by the bundle it resolves to",
-                f"FAIL  certifi bundle [{SITE}/certifi/cacert.pem] contains emSign ECC Root CA - G3 (removed root)",
+                f"INFO  certifi [{SITE}/certifi-2025.1.31.dist-info] found 2025.1.31, {PATCHED}"
             ],
+        )
+
+    def test_debian_certifi_with_a_bundle(self) -> None:
+        # Debian bookworm and Ubuntu noble ship the upstream cacert.pem beside the patched core.py.
+        for installer in (b"debian\n", None):
+            with self.subTest(installer=installer):
+                content = {
+                    f"{SITE}/certifi/cacert.pem": OLD_BUNDLE,
+                    f"{SITE}/certifi/core.py": DEBIAN_CORE,
+                }
+                if installer is not None:
+                    content[f"{SITE}/certifi-2022.9.24.dist-info/INSTALLER"] = installer
+                files = FakeFiles(content)
+                ctx = make_context(
+                    files, dirs=[dist_dir("certifi-2022.9.24.dist-info")]
+                )
+                self.assertEqual(
+                    lines(PythonDistInfo(), ctx),
+                    [
+                        f"INFO  certifi [{SITE}/certifi-2022.9.24.dist-info] found 2022.9.24, {PATCHED}",
+                        f"FAIL  certifi bundle [{SITE}/certifi/cacert.pem] contains emSign ECC Root CA - G3"
+                        " (removed root)",
+                    ],
+                )
+
+    def test_upstream_core_with_a_bundle_is_judged_by_version(self) -> None:
+        files = FakeFiles(
+            {
+                f"{SITE}/certifi/cacert.pem": OLD_BUNDLE,
+                f"{SITE}/certifi/core.py": UPSTREAM_CORE,
+            }
+        )
+        ctx = make_context(files, dirs=[dist_dir("certifi-2026.7.22.dist-info")])
+        self.assertEqual(
+            lines(PythonDistInfo(), ctx)[0],
+            f"FAIL  certifi [{SITE}/certifi-2026.7.22.dist-info] found 2026.7.22, fixed 2026.10.18"
+            " (vendors its own CA bundle)",
         )
 
     def test_brew_certifi_is_judged_by_its_bundle(self) -> None:
@@ -219,8 +256,18 @@ class DistInfoTest(unittest.TestCase):
         self.assertEqual(
             lines(PythonDistInfo(), ctx),
             [
-                f"INFO  pip [{SITE}/pip-26.2.1.dist-info] found 26.2.1, no bundled cacert.pem, patched to use"
-                " the system store"
+                f"INFO  pip [{SITE}/pip-26.2.1.dist-info] found 26.2.1, installed by brew, judged by the"
+                " bundle it resolves to"
+            ],
+        )
+
+    def test_unpatched_package_without_a_bundle_is_judged_by_version(self) -> None:
+        files = FakeFiles({f"{SITE}/pip-26.2.1.dist-info/INSTALLER": b"pip\n"})
+        ctx = make_context(files, dirs=[dist_dir("pip-26.2.1.dist-info")])
+        self.assertEqual(
+            lines(PythonDistInfo(), ctx),
+            [
+                f"FAIL  pip [{SITE}/pip-26.2.1.dist-info] found 26.2.1, fixed 26.2.2 (vendors its own CA bundle)"
             ],
         )
 
@@ -300,7 +347,7 @@ class HostPythonTest(unittest.TestCase):
             [
                 "FAIL  certifi [host python] found 2026.7.22, fixed 2026.10.18 (vendors its own CA bundle)",
                 f"FAIL  certifi bundle [{site}/certifi/cacert.pem] contains emSign ECC Root CA - G3 (removed root)",
-                "INFO  pip [host python] found 26.2.2, no bundled cacert.pem, patched to use the system store",
+                "INFO  pip [host python] found 26.2.2, installed by dpkg, judged by the bundle it resolves to",
             ],
         )
 
@@ -346,6 +393,8 @@ class HostPythonTest(unittest.TestCase):
         )
 
     def test_debian_and_egg_info_records(self) -> None:
+        # Debian trixie certifi has no cacert.pem, and Debian pip keeps its vendored one, both with where()
+        # patched.
         site = "/usr/lib/python3/dist-packages"
         local = "/usr/local/lib/python3.13/dist-packages"
         out = (
@@ -353,13 +402,22 @@ class HostPythonTest(unittest.TestCase):
             f"pip\t23.0.1\tunknown\t{site}\n"
             f"certifi\t2026.7.22\tunknown\t{local}\n"
         )
-        files = FakeFiles({f"{local}/certifi/cacert.pem": OLD_BUNDLE})
+        files = FakeFiles(
+            {
+                f"{site}/certifi/core.py": DEBIAN_CORE,
+                f"{site}/pip/_vendor/certifi/core.py": DEBIAN_CORE,
+                f"{site}/pip/_vendor/certifi/cacert.pem": OLD_BUNDLE,
+                f"{local}/certifi/cacert.pem": OLD_BUNDLE,
+            }
+        )
         ctx, _ = host_context(out, files=files)
         self.assertEqual(
             lines(HostPythonPackages(), ctx),
             [
-                "INFO  certifi [host python] found 2025.1.31, no bundled cacert.pem, patched to use the system store",
-                "INFO  pip [host python] found 23.0.1, no bundled cacert.pem, patched to use the system store",
+                f"INFO  certifi [host python] found 2025.1.31, {PATCHED}",
+                f"INFO  pip [host python] found 23.0.1, {PATCHED}",
+                f"FAIL  pip bundle [{site}/pip/_vendor/certifi/cacert.pem] contains emSign ECC Root CA - G3"
+                " (removed root)",
                 "FAIL  certifi [host python] found 2026.7.22, fixed 2026.10.18 (vendors its own CA bundle)",
                 f"FAIL  certifi bundle [{local}/certifi/cacert.pem] contains emSign ECC Root CA - G3 (removed root)",
             ],

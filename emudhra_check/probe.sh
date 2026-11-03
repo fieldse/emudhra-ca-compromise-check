@@ -1,6 +1,7 @@
 # probe.sh: the in-image probe of the eMudhra CA compromise check, POSIX sh, run with no network.
 # It prints one record per line for the host to judge: runtimes, Python packages, the OS id, the
 # ca-certificates package, and every CA bundle and Java keystore as od hex lines between FILE and END.
+# A PY record marks P when certifi's core.py carries Debian's patched where().
 # The host fills in the placeholders between @ signs before the run.
 G='@G3_LINE@'
 I='@ISRG_LINE@'
@@ -53,6 +54,8 @@ else:
     paths = list(site.getsitepackages())
 paths.append(site.getusersitepackages())
 bundles = {"certifi": "certifi/cacert.pem", "pip": "pip/_vendor/certifi/cacert.pem"}
+cores = {"certifi": "certifi/core.py", "pip": "pip/_vendor/certifi/core.py"}
+debian = (b"DEBIAN_CA_CERTS_PATH = \x27/etc/ssl/certs/ca-certificates.crt\x27", b"return DEBIAN_CA_CERTS_PATH")
 for dist in metadata.distributions(path=paths):
     name = (dist.metadata["Name"] or "").lower()
     if name in ("certifi", "pip", "uv"):
@@ -70,6 +73,13 @@ for dist in metadata.distributions(path=paths):
                     bundled = "L" + os.fsencode(target).hex()
                     if "\n" not in target:
                         sys.stdout.write("LINK " + target + "\n")
+            try:
+                with open(os.path.join(location, cores[name]), "rb") as f:
+                    core = f.read(65536)
+            except OSError:
+                core = b""
+            if all(m in core for m in debian):
+                bundled = "P"
         fields = (name, dist.version, installer[0] if installer else "unknown", bundled, location)
         sys.stdout.write("PY " + " ".join(fields) + "\n")
 ' "$(command -v python3)" 2>/dev/null)

@@ -39,6 +39,11 @@ class FakeImages:
         return self.runs[name]
 
 
+PATCHED = (
+    "where() patched to return the system store (Debian), its cacert.pem is not used"
+)
+
+
 def image_lines(output: bytes, status: ProbeStatus = ProbeStatus.OK) -> list[str]:
     ctx = dataclasses.replace(
         make_context(), images=FakeImages({IMAGE: ProbeRun(status, output)})
@@ -92,10 +97,11 @@ class PodmanImagesTest(unittest.TestCase):
             ],
         )
 
-    def test_python_packages_without_their_own_bundle(self) -> None:
+    def test_python_packages_patched_to_the_system_store(self) -> None:
+        # P marks a core.py with Debian's patched where(), whether or not cacert.pem is there.
         stream = (
-            b"PY certifi 2025.1.31 debian 0 /usr/lib/python3/dist-packages\n"
-            b"PY pip 23.0.1 unknown 0 /usr/lib/python3/dist-packages\n"
+            b"PY certifi 2025.1.31 debian P /usr/lib/python3/dist-packages\n"
+            b"PY pip 23.0.1 unknown P /usr/lib/python3/dist-packages\n"
             b"PY certifi 2026.7.22 unknown 1 /usr/local/lib/python3.13/site-packages\n"
             b"PY uv 0.13.3 unknown - /usr/local/lib/python3.13/site-packages\n"
             b"PY certifi 2026.7.22 pip L /opt/lib/site-packages\n"
@@ -103,11 +109,25 @@ class PodmanImagesTest(unittest.TestCase):
         self.assertEqual(
             image_lines(stream),
             [
-                f"INFO  certifi [{WHERE}] found 2025.1.31, no bundled cacert.pem, patched to use the system store",
-                f"INFO  pip [{WHERE}] found 23.0.1, no bundled cacert.pem, patched to use the system store",
+                f"INFO  certifi [{WHERE}] found 2025.1.31, {PATCHED}",
+                f"INFO  pip [{WHERE}] found 23.0.1, {PATCHED}",
                 f"FAIL  certifi [{WHERE}] found 2026.7.22, fixed 2026.10.18 (vendors its own CA bundle)",
                 f"FAIL  uv [{WHERE}] found 0.13.3, fixed 0.13.4 (vendors its own CA bundle)",
                 f"FAIL  certifi [{WHERE}] found 2026.7.22, fixed 2026.10.18 (vendors its own CA bundle)",
+            ],
+        )
+
+    def test_missing_bundle_without_the_patch_keeps_the_version_verdict(self) -> None:
+        stream = (
+            b"PY pip 23.0.1 unknown 0 /usr/lib/python3/dist-packages\n"
+            b"PY certifi 2025.1.31 debian 0 /usr/lib/python3/dist-packages\n"
+        )
+        self.assertEqual(
+            image_lines(stream),
+            [
+                f"FAIL  pip [{WHERE}] found 23.0.1, fixed 26.2.2 (vendors its own CA bundle)",
+                f"INFO  certifi [{WHERE}] found 2025.1.31, installed by debian, judged by the bundle it"
+                " resolves to",
             ],
         )
 

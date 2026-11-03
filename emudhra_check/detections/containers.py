@@ -2,7 +2,7 @@
 
 PodmanImages probes each image the preflight listed and judges what the probe reports with the
 host's own verdict functions: Node, Bun, Deno and Go by version, certifi, pip and uv by version or
-bundle (INFO when the package has no cacert.pem of its own), the ca-certificates package by its
+bundle (INFO when Debian patched where() to the system store), the ca-certificates package by its
 family, and every bundle and keystore by its bytes. An image whose probe did not finish is a WARN
 and nothing from it is judged.
 """
@@ -75,7 +75,8 @@ def python_finding(
     """Judge one PY record. A linked cacert.pem defers to its target only when the probe dumped and the
     host judged that target, else the version decides."""
     installer = python.installer
-    bundle = Bundle.ABSENT if python.bundled == "0" else Bundle.OWN
+    bundles = {"0": Bundle.ABSENT, "P": Bundle.PATCHED}
+    bundle = bundles.get(python.bundled, Bundle.OWN)
     target = python.link_target
     if target is not None:
         if target in report.judged_paths:

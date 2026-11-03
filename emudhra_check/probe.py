@@ -27,7 +27,7 @@ HEX_LINE = re.compile(
     rb"[ \t]{0,16}[0-9a-f]{2}(?:[ \t]{1,8}[0-9a-f]{2}){0,63}[ \t]{0,16}"
 )
 SIZE_DIGITS = MAX_VERSION_COMPONENT_DIGITS
-BUNDLED_FIELD = re.compile(r"[01-]|L[0-9a-f]*")
+BUNDLED_FIELD = re.compile(r"[01P-]|L[0-9a-f]*")
 KINDS = frozenset(
     {b"NODE", b"RT", b"PY", b"NOPY", b"OS", b"PKG", b"CHG", b"NOOD", b"FILE", b"BIG"}
 )
@@ -67,8 +67,9 @@ class ProbeRuntime:
 
 @dataclass(frozen=True)
 class ProbePython:
-    """A PY record. bundled is 1 when the package's own cacert.pem exists, L and the hex of the real path
-    when it links out of the package, 0 when it is absent, and - for uv."""
+    """A PY record. bundled is P when core.py carries Debian's patched where(), 1 when the package's own
+    cacert.pem exists, L and the hex of the real path when it links out of the package, 0 when it is
+    absent, and - for uv."""
 
     name: str
     version: str

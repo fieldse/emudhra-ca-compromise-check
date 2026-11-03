@@ -14,6 +14,7 @@ import unittest
 from pathlib import Path
 
 from emudhra_check.certificates import G3_ECC_ROOT
+from emudhra_check.detections.language_packages import DEBIAN_WHERE
 from emudhra_check.limits import (
     MAX_FIELD_CHARS,
     MAX_PROBE_FILE,
@@ -53,6 +54,13 @@ class RenderTest(unittest.TestCase):
         self.assertIn(f"G='{G3_ECC_ROOT.pem_line.decode()}'", script)
         self.assertIn(f"BIG={MAX_PROBE_FILE}\n", script)
         self.assertIn(f"head -n {MAX_PROBE_FILES} |", script)
+
+    def test_probe_looks_for_the_same_debian_patch(self) -> None:
+        script = render(TEMPLATE.read_text())
+        for marker in DEBIAN_WHERE:
+            with self.subTest(marker=marker):
+                # The probe's python runs inside single quotes, so it writes a quote as \x27.
+                self.assertIn(marker.decode().replace("'", "\\x27"), script)
 
 
 class RecordedTest(unittest.TestCase):
@@ -147,6 +155,10 @@ class HostileStreamTest(unittest.TestCase):
         )
         self.assertEqual(report.old_pythons, ("3.7.17",))
         self.assertEqual(report.dropped, 2)
+
+    def test_debian_patched_record(self) -> None:
+        report = parse_probe_output(b"PY certifi 2022.9.24 unknown P /site\n")
+        self.assertEqual([p.bundled for p in report.pythons], ["P"])
 
     def test_link_targets_and_judged_paths(self) -> None:
         target = "/opt/corp/ca bundle.pem"

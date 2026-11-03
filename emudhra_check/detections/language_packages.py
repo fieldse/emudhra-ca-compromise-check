@@ -3,12 +3,13 @@
 PythonDistInfo judges certifi, pip and uv from installed dist-info directories, PythonPins the certifi
 pins in requirements files and locks, HostPythonPackages the certifi and pip the host python3 sees
 (read from metadata in a child python3 -I -S that imports no package), and UvHost the uv on PATH by
-version and by the roots its binary holds. A certifi or pip without its own cacert.pem is patched to
-use the system store and is INFO. A package installed by a distribution is judged by the bundle it
-resolves to. ElectronPackages judges installed and declared Electron versions, and
-CargoLocks, ComposerLocks, GemfileLocks and MixLocks the Rust, PHP, Ruby and Elixir packages that
-carry their own roots. A Cargo.lock inside downloaded crate source (a Cargo registry source tree or
-git checkout) is INFO, since it does not decide what a local build uses.
+version and by the roots its binary holds. A certifi or pip whose core.py carries Debian's patched
+where() uses the system store and is INFO, with its unused cacert.pem judged by content. A package
+installed by a distribution is judged by the bundle it resolves to. ElectronPackages judges installed
+and declared Electron versions, and CargoLocks, ComposerLocks, GemfileLocks and MixLocks the Rust,
+PHP, Ruby and Elixir packages that carry their own roots. A Cargo.lock inside downloaded crate source
+(a Cargo registry source tree or git checkout) is INFO, since it does not decide what a local build
+uses.
 """
 
 from __future__ import annotations
@@ -69,6 +70,7 @@ from emudhra_check.versions import judge, judge_branched, parse_version
 
 __all__ = [
     "Bundle",
+    "DEBIAN_WHERE",
     "CargoLocks",
     "ComposerLocks",
     "ElectronPackages",
@@ -86,9 +88,17 @@ __all__ = [
 
 RULES = {"certifi": CERTIFI_FIXED, "pip": PIP_FIXED, "uv": UV_FIXED}
 BUNDLES = {"certifi": "certifi/cacert.pem", "pip": "pip/_vendor/certifi/cacert.pem"}
+CORES = {"certifi": "certifi/core.py", "pip": "pip/_vendor/certifi/core.py"}
+# Debian's certifi and pip patches make where() return this constant (R354).
+DEBIAN_WHERE = (
+    b"DEBIAN_CA_CERTS_PATH = '/etc/ssl/certs/ca-certificates.crt'",
+    b"return DEBIAN_CA_CERTS_PATH",
+)
 DISTRO_INSTALLERS = frozenset({"dpkg", "rpm", "apk", "brew", "debian"})
 TOML_LOCKS = frozenset({"poetry.lock", "uv.lock"})
-NO_BUNDLE = "no bundled cacert.pem, patched to use the system store"
+PATCHED_WHERE = (
+    "where() patched to return the system store (Debian), its cacert.pem is not used"
+)
 LINKED_BUNDLE = (
     "its cacert.pem links outside the package, judged by the bundle it resolves to"
 )
@@ -128,20 +138,22 @@ for dist in metadata.distributions(path=paths):
 
 
 class Bundle(Enum):
-    """Where a certifi or pip cacert.pem stands: inside the package, absent, or a link out of it."""
+    """Where a certifi or pip cacert.pem stands: inside the package, absent, a link out of it, or unused
+    because where() is patched to return the system store."""
 
     OWN = "own"
     ABSENT = "absent"
     LINKED = "linked"
+    PATCHED = "patched"
 
 
 def python_package_finding(
     subject: Subject, version: str, *, installer: str, bundle: Bundle = Bundle.OWN
 ) -> list[Finding]:
-    """Judge certifi, pip or uv: INFO when its cacert.pem is absent or links out of the package, deferred
-    to the bundle for a distro install, else by version."""
-    if bundle is Bundle.ABSENT:
-        return [Finding(Level.INFO, subject, f"found {version}, {NO_BUNDLE}")]
+    """Judge certifi, pip or uv: INFO when where() is patched to the system store or its cacert.pem links
+    out of the package, deferred to the bundle for a distro install, else by version."""
+    if bundle is Bundle.PATCHED:
+        return [Finding(Level.INFO, subject, f"found {version}, {PATCHED_WHERE}")]
     if bundle is Bundle.LINKED:
         return [Finding(Level.INFO, subject, f"found {version}, {LINKED_BUNDLE}")]
     if installer in DISTRO_INSTALLERS:
@@ -172,18 +184,33 @@ def package_bundle(
 ) -> tuple[Optional[Path], Union[FoundFile, Skipped, None], Bundle]:
     """Look up a package's cacert.pem: its path, what the lookup found, and where it stands.
 
-    A bundle that exists but was not read (refused or unreadable) counts as the package's own.
+    A core.py with Debian's patched where() makes the bundle unused, whether or not it exists. A bundle
+    that exists but was not read (refused or unreadable) counts as the package's own.
     """
     if name not in BUNDLES:
         return None, None, Bundle.OWN
     bundle = location / BUNDLES[name]
     found = ctx.files.lookup(bundle)
+    if debian_patched(ctx, location / CORES[name]):
+        return bundle, found, Bundle.PATCHED
     if isinstance(found, Skipped):
         return bundle, found, Bundle.ABSENT if found.reason == MISSING else Bundle.OWN
     package = ctx.files.lookup(location / name)
     if isinstance(package, FoundFile) and package.real not in found.real.parents:
         return bundle, found, Bundle.LINKED
     return bundle, found, Bundle.OWN
+
+
+def debian_patched(ctx: Context, core: Path) -> bool:
+    """Return whether a certifi core.py holds Debian's patched where(). An unreadable file does not."""
+    data = ctx.files.read_bytes(core, MAX_TEXT_BYTES)
+    if isinstance(data, Skipped):
+        return False
+    try:
+        text = data[0 : len(data)]
+    finally:
+        release(data)
+    return all(marker in text for marker in DEBIAN_WHERE)
 
 
 def bundle_lines(
@@ -229,7 +256,10 @@ class PythonDistInfo:
             yield from python_package_finding(
                 subject, version, installer=installer, bundle=kind
             )
-            judged = installer in DISTRO_INSTALLERS or kind is Bundle.LINKED
+            judged = installer in DISTRO_INSTALLERS or kind in (
+                Bundle.LINKED,
+                Bundle.PATCHED,
+            )
             if judged and bundle is not None and found is not None:
                 yield from bundle_lines(ctx, name, bundle, found)
 
