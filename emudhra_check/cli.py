@@ -60,8 +60,9 @@ Read-only check for the eMudhra intermediate CA key compromise (October 2026).
 
 Options:
   -r, --root ROOT   Directory to scan for CA bundles, keystores, binaries and package files
-                    (repeatable, default $HOME). Also accepts --root=ROOT. On macOS, /Applications,
-                    ~/Applications and the Homebrew etc and Caskroom directories are always added
+                    (repeatable, default $HOME). Also accepts --root=ROOT. On macOS, /Applications
+                    and ~/Applications are always added, and Homebrew's etc and Caskroom when brew
+                    is on PATH beside a Cellar
   -x, --exclude DIR Never enter this directory (repeatable). Also accepts --exclude=DIR
   -c, --containers  Also probe local Podman images (runs a probe with --network=none)
   -i, --image IMAGE Probe only this local image (repeatable, implies -c)

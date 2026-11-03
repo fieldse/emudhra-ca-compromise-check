@@ -27,7 +27,7 @@
 
 - **Read-only:** it reads files and changes nothing on your system.
 - **No network for images:** it checks container images with `--network=none` and never pulls an image.
-- **Runs only a fixed list of programs:** `node`, `bun`, `deno`, `go`, `python3`, `uv` and `perl` from `PATH` to read their versions, `podman` with `-c`, and on macOS `/usr/bin/security`, `/usr/bin/xcode-select` and `/usr/libexec/java_home` by absolute path. [Commands it runs](#commands-it-runs) gives the details.
+- **Runs only a fixed list of programs:** `node`, `bun`, `deno`, `go`, `python3`, `uv` and `perl` from `PATH` to read their versions, `dpkg-query`, `apk`, `rpm` and `pacman` from `PATH` to read the installed `ca-certificates` package, `podman` with `-c` or `-i`, and on macOS `/usr/bin/security`, `/usr/bin/xcode-select` and `/usr/libexec/java_home` by absolute path. [Commands it runs](#commands-it-runs) gives the details.
 - **Runs nothing else it finds:** every other binary it comes across while scanning is read as data and never run.
 - **Skips user-writable tools as root:** run as root, it does not run a PATH tool that a non-root user could change.
 - **Needs Python 3.9 or later** and no packages. No root needed.
@@ -80,7 +80,7 @@ With no `-r`, the check scans `$HOME`. On macOS it always adds these, with or wi
 
 - `/Applications`
 - `~/Applications`
-- Homebrew's `etc` and `Caskroom`
+- Homebrew's `etc` and `Caskroom`, when `brew` is on `PATH` in a directory beside a `Cellar`
 
 It also reads the programs in these directories:
 
@@ -114,6 +114,7 @@ It reads the OS CA bundle files at their standard paths. It reads the `cacerts` 
   - `node -p process.execPath` names the binary the check then reads.
   - `python3 -I -S -c` runs a short script that reads certifi and pip from package metadata.
   - `perl -MMozilla::CA -e` prints the module's version and the bundle path it hands out.
+- From `PATH` it runs the package managers it finds to read the installed `ca-certificates` package: `dpkg-query -W`, `apk info -v`, `rpm -q` (with `rpm -q --changelog ca-certificates` for the CVE, or `ca-certificates-mozilla` on SUSE) and `pacman -Q`.
 - With `-c` or `-i` it runs `podman` from `PATH`, which starts a probe in each image with `--network=none`.
 - On macOS it runs `/usr/bin/security`, `/usr/bin/xcode-select` and `/usr/libexec/java_home` by absolute path.
 - It runs nothing else. Every other binary it finds while scanning is read as data.
@@ -292,7 +293,7 @@ The zipapp replaces an earlier Bash script and keeps its output line format. Its
 - The line for an Electron version declared in `package.json` names the file's path, and its detail starts with `pins V` for an exact spec or `range starts at V` for a range.
 - rpm package lines print the full VERSION-RELEASE as `rpm -q` shows it, for example `found 2025.2.80_v9.0.304-6.fc44, fixed 2026.2.92_v9.0.319-2`.
 - The `checked N PEM files` count includes linked files, so `/etc/ssl/certs` counts each certificate a link points to.
-- `rustls-webpki` below 0.103.16 in a Rust binary is `WARN` when the same binary holds none of the three G3 roots and no compromised intermediate.
+- `rustls-webpki` below 0.103.16 in a Rust binary is `WARN` when the same binary holds none of the three G3 roots or their two cross-certificates and no compromised intermediate.
   - It stays `FAIL` when the binary holds one of those certificates.
   - Those versions lack the blocklist of compromised keys, which matters only when the binary uses the system trust store.
   - uv 0.13.4, which uv's advisory calls fixed, gets this `WARN`.
