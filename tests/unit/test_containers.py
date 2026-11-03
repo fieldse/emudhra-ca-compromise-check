@@ -83,6 +83,15 @@ class PodmanImagesTest(unittest.TestCase):
         for line, start in zip(got, expected_starts):
             self.assertTrue(line.startswith(start), (line, start))
 
+    def test_node_without_a_bundled_list_is_judged_by_version(self) -> None:
+        self.assertEqual(
+            image_lines(b"NODE 0 0 v24.22.0\n"),
+            [
+                f"FAIL  node [{WHERE}] found 24.22.0, fixed 24.22.1",
+                f"INFO  node [{WHERE}] binary bundles no Node.js root list (a patched build), judged by its version",
+            ],
+        )
+
     def test_python_packages_without_their_own_bundle(self) -> None:
         stream = (
             b"PY certifi 2025.1.31 debian 0 /usr/lib/python3/dist-packages\n"

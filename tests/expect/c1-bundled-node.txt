@@ -7,5 +7,6 @@ PASS  node [/tmp/fx/bin/bundled-node-g3] found 24.22.1, fixed 24.22.1
 FAIL  node [/tmp/fx/bin/bundled-node-g3] binary still bundles emSign ECC Root CA - G3 (removed root)
 PASS  node [/tmp/fx/bin/bundled-node-isrg] found 24.22.1, fixed 24.22.1
 !FAIL  node [/tmp/fx/bin/bundled-node-isrg]
-INFO  node [/tmp/fx/bin/bundled-node-none] 24.22.1 bundles no root store (distro build using the OS CA store); the trust-store check decides
+PASS  node [/tmp/fx/bin/bundled-node-none] found 24.22.1, fixed 24.22.1
+INFO  node [/tmp/fx/bin/bundled-node-none] binary bundles no Node.js root list (a patched build), judged by its version
 !Traceback

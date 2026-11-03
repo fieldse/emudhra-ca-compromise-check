@@ -84,7 +84,7 @@ NODE_BINARIES = ("bin/node", "installation/bin/node")
 
 
 class StoreKind(Enum):
-    """Where a Node binary takes its roots from."""
+    """Whether a Node binary holds its own root list. Upstream Node always compiles one in."""
 
     BUNDLED = "bundled"
     OS = "os"
@@ -140,18 +140,15 @@ def node_store_findings(
     store: StoreKind,
     binary: Optional[str] = None,
 ) -> list[Finding]:
-    """Judge a Node binary: no bundled store defers to the OS store, else the version, then the bundled G3 root."""
-    if store is StoreKind.OS:
-        detail = (
-            f"{version} bundles no root store (distro build using the OS CA store);"
-            " the trust-store check decides"
-        )
-        return [Finding(Level.INFO, subject, detail)]
+    """Judge a Node binary by its version, then note the bundled G3 root or a missing bundled root list."""
     verdict = judge_branched(subject, version, NODE_FIXED)
     findings = [verdict]
     where = Subject(subject.name, binary or subject.where)
     g3 = any(m.label == G3_ECC_ROOT.label and m.kind is MatchKind.FULL for m in matches)
-    if g3 and verdict.level is not Level.FAIL:
+    if store is StoreKind.OS:
+        detail = "binary bundles no Node.js root list (a patched build), judged by its version"
+        findings.append(Finding(Level.INFO, where, detail))
+    elif g3 and verdict.level is not Level.FAIL:
         detail = f"binary still bundles {G3_ECC_ROOT.label}"
         findings.append(Finding(Level.FAIL, where, detail))
     elif g3:

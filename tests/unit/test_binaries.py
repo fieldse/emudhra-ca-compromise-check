@@ -272,11 +272,17 @@ class BundledNodeBinariesTest(unittest.TestCase):
             ["PASS  node [/fx/bin/n] found 24.22.1, fixed 24.22.1"],
         )
 
-    def test_os_store_build_is_info(self) -> None:
-        got = self.node_lines(b"")
-        self.assertEqual(len(got), 1)
-        self.assertTrue(
-            got[0].startswith("INFO  node [/fx/bin/n] 24.22.1 bundles no root store")
+    def test_no_bundled_list_is_judged_by_version(self) -> None:
+        note = "INFO  node [/fx/bin/n] binary bundles no Node.js root list (a patched build), judged by its version"
+        self.assertEqual(
+            self.node_lines(b""),
+            ["PASS  node [/fx/bin/n] found 24.22.1, fixed 24.22.1", note],
+        )
+        old = NODE_URL.replace(b"24.22.1", b"24.22.0")
+        ctx = binaries_context(BinaryKind.NODE, {"/fx/bin/n": ELF + old})
+        self.assertEqual(
+            lines(BundledNodeBinaries(), ctx),
+            ["FAIL  node [/fx/bin/n] found 24.22.0, fixed 24.22.1", note],
         )
 
     def test_glob_candidates(self) -> None:

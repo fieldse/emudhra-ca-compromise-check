@@ -279,8 +279,11 @@ class NodeStoreTest(unittest.TestCase):
             self.levels(b"\x7fELF" + ISRG_ROOT_X1_LINE), [(Level.PASS, "host")]
         )
 
-    def test_no_store_is_info(self) -> None:
-        self.assertEqual(self.levels(b"\x7fELF plain"), [(Level.INFO, "host")])
+    def test_no_bundled_list_is_judged_by_version(self) -> None:
+        self.assertEqual(
+            self.levels(b"\x7fELF plain"),
+            [(Level.PASS, "host"), (Level.INFO, "/fx/bin/node")],
+        )
 
     def test_old_version_with_root_is_confirmed(self) -> None:
         g3 = CertificateMatch(G3_ECC_ROOT.label, Role.G3_ROOT, MatchKind.FULL)
