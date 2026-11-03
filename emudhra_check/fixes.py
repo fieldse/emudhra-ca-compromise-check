@@ -93,7 +93,7 @@ DEB_FIX_DATE: Final = "20260816"  # OS-005 (R052), OS-011 (R056), OS-013 (R056, 
 APK_FIXED: Final = "20261020-r0"  # OS-017 (R059)
 WOLFI_FIXED: Final = "20260909-r3"  # OS-019 (R060)
 # OS-022 (R062), OS-025 (R065), OS-026 (R066), OS-027 (R067), OS-028 (R068),
-# OS-032 to OS-040 (R071–R078, R300, R301), OS-RPM-12 and OS-RPM-13 (R317), OS-RPM-14 (R355)
+# OS-032 to OS-040 (R071–R078, R300, R301), OS-RPM-12 and OS-RPM-13 (R317), OS-RPM-14 (R355), OS-RPM-08 (R356)
 RPM_FIXED_BUILDS: Final = (
     ("amazon linux 2023", "*amzn2023*", "2025.2.76-1.0.amzn2023.0.4"),
     ("amazon linux 2", "*.amzn2.*", "2025.2.76-1.amzn2.0.3"),
@@ -103,7 +103,7 @@ RPM_FIXED_BUILDS: Final = (
     ("oracle linux 7", "*.0.[0-9]*.el7*", "2025.2.80_v9.0.304-71.0.2.el7_9"),
     ("fedora", "*.fc[0-9]*", "2026.2.92_v9.0.319-2"),
     ("centos stream 9", "*.el9", "2026.2.92_v9.0.319-91.3.el9"),
-    ("centos stream 10", "*.el10", "2026.2.92_v9.0.319-100.1.el10"),
+    ("centos stream 10", "*.el10", "2026.2.92_v9.0.319-100.3.el10"),
     ("rhel 10.0 eus", "*.el10_0", "2026.2.92_v9.0.319-100.3.el10_0"),
     ("rhel 9.6 eus", "*.el9_6", "2026.2.92_v9.0.319-90.3.el9_6"),
     ("rhel 9.4 e4s", "*.el9_4", "2026.2.92_v9.0.319-90.3.el9_4"),
@@ -117,7 +117,7 @@ RPM_FIXED_BUILDS: Final = (
     ("rhel 7", "*.el7_*", "2026.2.92_v9.0.319-70.3.el7_9"),
     ("rhel 6", "*.el6_*", "2026.2.92_v9.0.319-60.3.el6_10"),
 )
-RPM_TLS_ONLY_BUILDS: Final = (  # OS-023 (R063), OS-033 (R072)
+RPM_TLS_ONLY_BUILDS: Final = (  # OS-023 (R063), OS-033 (R072), OS-RPM-17 (R356)
     ("fedora", "2026.2.92_v9.0.319-1"),
     ("centos stream 10", "2026.2.92_v9.0.319-100.1.el10"),
 )
