@@ -73,12 +73,16 @@ GO_TOOLCHAIN_MINIMUM = dataclasses.replace(
     note="a minimum, not a pin; the installed go and the built binaries decide",
 )
 CPYTHON_OLDEST_FIXED_BRANCH = (3, 11)
+# Each manager's install directories, including nvm's layout for Node below 0.12.0, fnm's ~/.fnm and mise --system.
 VERSION_MANAGERS = (
     ((".nvm", "versions", "node"), "v"),
+    ((".nvm",), "v"),
     ((".volta", "tools", "image", "node"), ""),
     ((".asdf", "installs", "nodejs"), ""),
     (("fnm", "node-versions"), "v"),
+    ((".fnm", "node-versions"), "v"),
     ((".local", "share", "mise", "installs", "node"), ""),
+    (("local", "share", "mise", "installs", "node"), ""),
 )
 NODE_BINARIES = ("bin/node", "installation/bin/node")
 
@@ -411,10 +415,13 @@ class NodeVersionDirs:
         dir_globs=frozenset(
             {
                 ".nvm/versions/node/v*",
+                ".nvm/v*",
                 ".volta/tools/image/node/*",
                 ".asdf/installs/nodejs/*",
                 "fnm/node-versions/v*",
+                ".fnm/node-versions/v*",
                 ".local/share/mise/installs/node/*",
+                "local/share/mise/installs/node/*",
             }
         )
     )

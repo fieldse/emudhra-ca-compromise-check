@@ -353,6 +353,23 @@ class VersionDirsTest(unittest.TestCase):
             got[4],
         )
 
+    def test_legacy_and_system_layouts(self) -> None:
+        dirs = [
+            "/root/.fnm/node-versions/v24.22.0",
+            "/root/.nvm/v0.10.48",
+            "/usr/local/share/mise/installs/node/24.22.0",
+            "/root/.nvm/versions",
+        ]
+        for d in dirs[:3]:
+            with self.subTest(path=d):
+                self.assertTrue(NodeVersionDirs.interests.matches(Path(d)))
+        indexed = [IndexedDir(Path(d), FileId(4, i)) for i, d in enumerate(dirs)]
+        got = lines(NodeVersionDirs(), make_context(FakeFiles(), dirs=indexed))
+        self.assertEqual(
+            [line.split(" found ")[0] for line in got],
+            [f"FAIL  node [{d}]" for d in dirs[:3]],
+        )
+
     def test_none_found(self) -> None:
         self.assertEqual(
             lines(NodeVersionDirs(), make_context()),

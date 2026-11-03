@@ -324,9 +324,9 @@ dl.levels dt.unv { color: var(--muted); }
   <section>
     <div class="facts">
       <div><b>183</b><span>rules</span></div>
-      <div><b>101</b><span>verified</span></div>
+      <div><b>102</b><span>verified</span></div>
       <div><b>68</b><span>weak</span></div>
-      <div><b>12</b><span>under review</span></div>
+      <div><b>11</b><span>under review</span></div>
     </div>
     <ul class="plain read">
       <li><strong>A rule</strong> is one decision the check makes: a condition it looks for and the level it
@@ -339,7 +339,7 @@ dl.levels dt.unv { color: var(--muted); }
         <a href="references.html">references page</a> that back it.</li>
       <li><strong>Level:</strong> <code>matcher</code> means the certificate matcher's levels apply, and
         <code>rules</code> means the levels of the rules the condition names.</li>
-      <li><strong>Rules with problems are shown here too.</strong> 12 rules are under review
+      <li><strong>Rules with problems are shown here too.</strong> 11 rules are under review
         because a source contradicts them, and 2 could not be checked. A rule under
         review shows no source link until it is fixed.</li>
     </ul>
@@ -595,7 +595,7 @@ dl.levels dt.unv { color: var(--muted); }
 <tr><td class='rid'><a href='#rt-node-07'>RT-NODE-07</a></td><td class='cond'>Node version not FAIL but binary still holds the full emSign ECC Root CA - G3</td><td class='lvl'>FAIL</td><td class='val'>G3 ECC root SHA-256 86A1ECBA...BE6B</td><td class='rf'><a href='references.html#r191'>R191</a><a href='references.html#r331'>R331</a></td><td><span class='badge ok'>verified</span></td></tr>
 <tr><td class='rid'><a href='#rt-node-08'>RT-NODE-08</a></td><td class='cond'>Node version FAIL and binary holds the G3 root, reported as &#x27;confirms the version FAIL&#x27;<span class='muted'>Design: the root confirms a version FAIL and adds no new verdict</span></td><td class='lvl'>INFO</td><td class='val'>n/a</td><td class='rf'><span class='muted'>decision</span></td><td><span class='badge weak'>weak</span></td></tr>
 <tr><td class='rid'><a href='#rt-node-09'>RT-NODE-09</a></td><td class='cond'>Node version FAIL and a read binary lacks the G3 root, reported as &#x27;custom build or system CA store, upgrade anyway&#x27;<span class='muted'>Design: a FAIL version without the root still needs the upgrade</span></td><td class='lvl'>INFO</td><td class='val'>n/a</td><td class='rf'><span class='muted'>decision</span></td><td><span class='badge weak'>weak</span></td></tr>
-<tr id='rt-node-12'><td class='rid'><a href='#rt-node-12'>RT-NODE-12</a></td><td class='cond'>nvm, volta, asdf, fnm and mise Node directories are judged by the version in the directory name with the Node rules, and the binary is scanned when present. None found is INFO</td><td class='lvl'>rules/INFO</td><td class='val'>.nvm/versions/node/v*, .volta/tools/image/node/*, .asdf/installs/nodejs/*, fnm/node-versions/v*, .local/share/mise/installs/node/*</td><td class='rf'><span class='muted'>under review</span></td><td><span class='badge bad'>under review</span></td></tr>
+<tr id='rt-node-12'><td class='rid'><a href='#rt-node-12'>RT-NODE-12</a></td><td class='cond'>nvm, volta, asdf, fnm and mise Node directories are judged by the version in the directory name with the Node rules, and the binary is scanned when present. Includes nvm&#x27;s layout for Node below 0.12.0, fnm&#x27;s legacy ~/.fnm base and mise --system installs at their default directory. None found is INFO</td><td class='lvl'>rules/INFO</td><td class='val'>.nvm/versions/node/v*, .nvm/v*, .volta/tools/image/node/*, .asdf/installs/nodejs/*, fnm/node-versions/v*, .fnm/node-versions/v*, .local/share/mise/installs/node/*, local/share/mise/installs/node/*</td><td class='rf'><a href='references.html#r192'>R192</a><a href='references.html#r193'>R193</a><a href='references.html#r194'>R194</a><a href='references.html#r195'>R195</a><a href='references.html#r275'>R275</a><a href='references.html#r276'>R276</a><a href='references.html#r353'>R353</a></td><td><span class='badge ok'>verified</span></td></tr>
 </tbody></table></div>
   </section>
 
