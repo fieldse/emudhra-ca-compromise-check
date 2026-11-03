@@ -269,7 +269,10 @@ table.list.rules { min-width: 900px; }
 .badge.weak { color: var(--limit); }
 .badge.unv { color: var(--muted); }
 .badge.bad { color: var(--bad); }
-.facts div:nth-child(4) b { color: var(--bad); }
+.facts { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 640px) { .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.facts div:nth-child(4) b { color: var(--muted); }
+.facts div:nth-child(5) b { color: var(--bad); }
 dl.levels dt.ok { color: var(--good); }
 dl.levels dt.weak { color: var(--limit); }
 dl.levels dt.unv { color: var(--muted); }
@@ -308,6 +311,8 @@ def sources_cell(rule: dict[str, str]) -> str:
     """Return the sources cell: links to references.html, or a note when there are none to show."""
     if rule["status"] == "WRONG":
         return "<td class='rf'><span class='muted'>under review</span></td>"
+    if rule["status"] == "UNVERIFIABLE":
+        return "<td class='rf'><span class='muted'>not reached</span></td>"
     refs = rule["refs"].split()
     if not refs:
         word = "decision" if rule["kind"] == "decision" else "none"
@@ -406,6 +411,7 @@ def build(repo: Path) -> str:
       <div><b>{len(rules)}</b><span>rules</span></div>
       <div><b>{counts["VERIFIED"]}</b><span>verified</span></div>
       <div><b>{counts["WEAK"]}</b><span>weak</span></div>
+      <div><b>{counts["UNVERIFIABLE"]}</b><span>unverified</span></div>
       <div><b>{counts["WRONG"]}</b><span>under review</span></div>
     </div>
     <ul class="plain read">
@@ -415,13 +421,15 @@ def build(repo: Path) -> str:
       <li><strong>Facts and decisions:</strong> {kinds["fact"]} rules are facts, such as a fixed version, taken
         from a vendor, project or tracker document. {kinds["decision"]} are decisions the project made, such
         as which level a case gets, and each says the reason under its condition.</li>
-      <li><strong>Sources:</strong> every rule links the rows of the
-        <a href="references.html">references page</a> that back it.</li>
+      <li><strong>Sources:</strong> a verified or weak rule links the rows of the
+        <a href="references.html">references page</a> that back it. A decision with no outside source says
+        so. An unverified rule and a rule under review show no links.</li>
       <li><strong>Level:</strong> <code>matcher</code> means the certificate matcher's levels apply, and
         <code>rules</code> means the levels of the rules the condition names.</li>
       <li><strong>Rules with problems are shown here too.</strong> {counts["WRONG"]} rules are under review
         because a source contradicts them, and {counts["UNVERIFIABLE"]} could not be checked. A rule under
-        review shows no source link until it is fixed.</li>
+        review shows no source link until it is fixed, and an unverified rule none until a source is
+        reached.</li>
     </ul>
     <dl class="levels read">
       <dt class="ok">verified</dt>
