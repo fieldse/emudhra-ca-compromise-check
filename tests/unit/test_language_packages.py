@@ -485,6 +485,23 @@ class UvTest(unittest.TestCase):
             ],
         )
 
+    def test_unreadable_version_warns_and_still_scans(self) -> None:
+        uv = located("/usr/local/bin/uv", real="/opt/uv/uv", ino=77)
+        files = FakeFiles(
+            {"/opt/uv/uv": b"\x7fELF" + G3_ECC_ROOT.der},
+            ids={"/opt/uv/uv": FileId(2, 77)},
+        )
+        commands = FakeCommands(
+            {"uv": uv}, {("/usr/local/bin/uv", "--version"): result("garbage\n")}
+        )
+        self.assertEqual(
+            lines(UvHost(), make_context(files, commands)),
+            [
+                "WARN  uv [host uv] version unreadable",
+                "FAIL  uv [/opt/uv/uv] contains emSign ECC Root CA - G3 (removed root)",
+            ],
+        )
+
     def test_claimed_binary_prints_nothing(self) -> None:
         uv = located("/usr/local/bin/uv", ino=5)
         ctx = make_context(FakeFiles(), FakeCommands({"uv": uv}))

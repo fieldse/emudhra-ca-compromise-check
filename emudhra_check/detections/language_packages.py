@@ -386,7 +386,11 @@ class UvHost:
             yield from result
         else:
             version = uv_version(result.stdout)
-            if version is not None:
+            if version is None:
+                yield Finding(
+                    Level.WARN, Subject("uv", "host uv"), "version unreadable"
+                )
+            else:
                 yield from python_package_finding(
                     Subject("uv", "host uv"), version, installer=""
                 )

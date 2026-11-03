@@ -272,6 +272,9 @@ class NodeHost:
         lines, version = version_of(ctx, tool, "node", ["--version"], node_version)
         yield from lines
         if version is None:
+            yield from scan_node_binary(
+                ctx, Subject("node", "host"), None, tool.real, tool.file_id
+            )
             return
         binary, file_id = tool.real, tool.file_id
         result = run_tool(ctx, tool, "node", ["-p", "process.execPath"])

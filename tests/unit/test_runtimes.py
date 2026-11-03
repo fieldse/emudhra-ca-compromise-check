@@ -299,6 +299,29 @@ class NodeStoreTest(unittest.TestCase):
         ctx = make_context(files, commands)
         return [(f.level, f.subject.where) for f in NodeHost().run(ctx)]
 
+    def test_unreadable_version_still_scans_the_binary(self) -> None:
+        url = (
+            b"https://nodejs.org/download/release/v24.22.0/node-v24.22.0-headers.tar.gz"
+        )
+        files = FakeFiles(
+            {"/fx/bin/node": b"\x7fELF" + url + ISRG_ROOT_X1_LINE + G3_PEM_LINE},
+            ids={"/fx/bin/node": FileId(2, 1000)},
+        )
+        commands = FakeCommands(
+            {"node": located("/fx/bin/node", ino=1000)},
+            {("/fx/bin/node", "--version"): result("garbage\n")},
+        )
+        got = lines(NodeHost(), make_context(files, commands))
+        self.assertEqual(
+            got,
+            [
+                "WARN  node [host] version unreadable",
+                "FAIL  node [host] found 24.22.0, fixed 24.22.1",
+                "INFO  node [/fx/bin/node] binary bundles emSign ECC Root CA - G3 (removed root)"
+                " (confirms the version FAIL)",
+            ],
+        )
+
     def test_fixed_version_with_the_g3_root_fails(self) -> None:
         got = self.levels(b"\x7fELF" + ISRG_ROOT_X1_LINE + G3_PEM_LINE)
         self.assertEqual(got, [(Level.PASS, "host"), (Level.FAIL, "/fx/bin/node")])
