@@ -78,7 +78,10 @@ RPM = (
     ("2026.2.92_v9.0.319-90.2.el9_8", FAIL),
     ("2026.2.92_v9.0.319-90.3.el9_6", PASS),
     ("2026.2.92_v9.0.319-90.2.el9_6", FAIL),
-    ("2026.2.92_v9.0.319-90.3.el9_4", FAIL),
+    ("2026.2.92_v9.0.319-90.3.el9_4", PASS),  # OS-RPM-12
+    ("2026.2.92_v9.0.319-90.2.el9_4", FAIL),
+    ("2026.2.92_v9.0.319-90.3.el9_2", PASS),
+    ("2026.2.92_v9.0.319-90.2.el9_2", FAIL),
     ("2024.2.69_v8.0.303-91.4.el9_4", FAIL),
     ("2026.2.92_v9.0.319-81.3.el8_10", PASS),  # OS-027
     ("2026.2.92_v9.0.319-81.2.el8_10", FAIL),
@@ -148,7 +151,7 @@ class VerdictTest(unittest.TestCase):
         found = PackageObservation("rpm", "2024.2.69_v8.0.303-91.4.el9_4", "rhel")
         self.assertEqual(
             ca_package_finding(SUBJECT, found).line(),
-            "FAIL  ca-certificates [host] found 2024.2.69_v8.0.303-91.4.el9_4, fixed 2026.2.92_v9.0.319-90.3.el9_8",
+            "FAIL  ca-certificates [host] found 2024.2.69_v8.0.303-91.4.el9_4, fixed 2026.2.92_v9.0.319-90.3.el9_4",
         )
 
     def test_suse(self) -> None:  # OS-051 to OS-053
