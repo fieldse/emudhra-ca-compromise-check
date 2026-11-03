@@ -2,9 +2,10 @@ title: eMudhra G3 Compromised or Removed Certificate Added to a Trusted Windows 
 id: 3024161f-c27d-445c-8a18-eed782f67dbd
 status: experimental
 description: |
-  A compromised eMudhra G3 intermediate, or emSign ECC Root CA - G3 or a G3 issuing root, was written to a Windows
-  certificate store other than Disallowed. Anyone can issue certificates under the intermediates since October 2026,
-  so a host that trusts one accepts forged TLS and code-signing certificates.
+  A compromised eMudhra G3 intermediate, or emSign ECC Root CA - G3, a G3 issuing root or its cross-certificate from
+  emSign ECC Root CA - G3, was written to a Windows certificate store other than Disallowed. Anyone can issue
+  certificates under the intermediates since October 2026, so a host that trusts one accepts forged TLS and
+  code-signing certificates.
 references:
   - https://github.com/fieldse/emudhra-ca-compromise-check
   - https://bugzilla.mozilla.org/show_bug.cgi?id=2083449
@@ -40,6 +41,8 @@ detection:
       - '\Certificates\3043FA4FF257DCA0C380EE2E58EA78B23FE6BBC1'
       - '\Certificates\39D3236E4A609AB6190CBFA1AD02B3CC61DFC2C3'
       - '\Certificates\1F74B6010A219FD9CA058D07AA053D15EFD9300D'
+      - '\Certificates\1A1A03E05D574805B548D93014302256EFB1E242'
+      - '\Certificates\14F499149991C6668EEFB94EDAAAA671B20D2BC3'
   filter_disallowed:
     TargetObject|contains: '\Disallowed\'
   condition: selection_store and selection_thumbprint and not filter_disallowed

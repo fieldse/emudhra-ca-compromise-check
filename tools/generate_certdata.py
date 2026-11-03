@@ -102,7 +102,10 @@ def label_for(row: dict[str, str]) -> str:
     """Return the output label of one IOC row."""
     name = row["name"]
     if row["role"] == "G3 root":
-        return ROOT_LABELS[name]
+        if row["issuer"] == name:
+            return ROOT_LABELS[name]
+        root, _, purpose = ROOT_LABELS[name].partition(" (")
+        return f"{root}, cross-certificate from {row['issuer']} ({purpose}"
     if row["role"] == "cross-sign issuer root":
         return name
     cross = ", Sectigo cross-sign" if row["issuer"] == AAA else ""

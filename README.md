@@ -57,7 +57,7 @@ If you start it any other way, such as `./vuln-check-emudhra-ca-compromise.pyz` 
 
 Each output line reads `LEVEL subject [location] detail`. The last line is `SUMMARY pass=N fail=N warn=N info=N skip=N error=N`.
 
-- `FAIL`: a bundle, keystore or binary still holds one of the three G3 roots (`emSign ECC Root CA - G3`, `emSign Root TLS CA - G3` or `emSign Root CS CA - G3`) or a compromised intermediate, or a release is older than its fix.
+- `FAIL`: a bundle, keystore or binary still holds one of the three G3 roots (`emSign ECC Root CA - G3`, `emSign Root TLS CA - G3` or `emSign Root CS CA - G3`), as a self-signed certificate or as the cross-certificate `emSign ECC Root CA - G3` issued to the TLS or CS root, or a compromised intermediate, or a release is older than its fix.
 - `WARN`: needs a manual look, such as a store that holds `AAA Certificate Services`.
 - `INFO`: context, such as a compromised key on a blocklist or a certificate marked as rejected.
 - `PASS`: fixed, or no compromised certificate found.
@@ -310,7 +310,7 @@ The Bash script is still in commit `354e951` as `scripts/vuln-check-emudhra-ca-c
 | `emudhra_check/` | The check's source, which the zipapp holds |
 | `tools/build_pyz.py`, `tools/pyz_main.py` | The reproducible archive build and the archive's entry point |
 | `tools/build_detections.py` | Builds `detections.html` from the rule register |
-| `rules/iocs.csv`, `rules/certs/` | The 16 compromised certificates and the G3 roots, with fingerprints |
+| `rules/iocs.csv`, `rules/certs/` | The 16 compromised certificates, the three G3 roots and their two cross-certificates, and AAA Certificate Services, with fingerprints |
 | `rules/yara/`, `rules/sigma/` | A YARA rule for the certificates in files, and a Sigma rule for a G3 certificate added to a trusted store |
 | `tests/` | Unit tests and container tests for the check, the archive and the rules |
 | `LICENSE` | The MIT license |

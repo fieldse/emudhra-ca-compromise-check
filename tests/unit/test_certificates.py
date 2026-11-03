@@ -82,8 +82,8 @@ def levels(findings: list) -> list:
 
 class CertdataTest(unittest.TestCase):
     def test_counts(self) -> None:
-        self.assertEqual(len(certdata.RECORDS), 20)
-        self.assertEqual(len(KNOWN_CERTIFICATES), 20)
+        self.assertEqual(len(certdata.RECORDS), 22)
+        self.assertEqual(len(KNOWN_CERTIFICATES), 22)
         self.assertEqual(len(KNOWN_KEYS), 12)
 
     def test_sixteen_intermediates_share_eight_keys(self) -> None:
@@ -111,7 +111,7 @@ class CertdataTest(unittest.TestCase):
         )
 
     def test_pem_lines_are_distinct(self) -> None:
-        self.assertEqual(len({c.pem_line for c in KNOWN_CERTIFICATES}), 20)
+        self.assertEqual(len({c.pem_line for c in KNOWN_CERTIFICATES}), 22)
 
     def test_isrg_line(self) -> None:
         self.assertEqual(len(ISRG_ROOT_X1_LINE), 44)
@@ -120,6 +120,35 @@ class CertdataTest(unittest.TestCase):
         for key in KNOWN_KEYS:
             with self.subTest(label=key.label):
                 self.assertNotIn("Sectigo cross-sign", key.label)
+                self.assertNotIn("cross-certificate", key.label)
+
+    def test_g3_cross_certificates_match_in_full(self) -> None:
+        # emSign ECC Root CA - G3 cross-certified the TLS and CS roots on 2024-07-11 (crt.sh 14658191778, 14658191774).
+        wanted = {
+            "3094025792039A68AF6E553686410BDAB7C0D4A36B9084CBA64202E35D6EBBDD",
+            "7137FA71AD46BA686F746D1014AC57E8E6C6E9AF4AA2F73C0C44A5CF27DEBB59",
+        }
+        text = (REPO / "rules" / "certs" / "emudhra-g3-roots.pem").read_text()
+        ders = [
+            base64.b64decode(
+                "".join(block.split("-----BEGIN CERTIFICATE-----")[1].split())
+            )
+            for block in text.split("-----END CERTIFICATE-----")[:-1]
+        ]
+        found = [d for d in ders if hashlib.sha256(d).hexdigest().upper() in wanted]
+        self.assertEqual(len(found), 2)
+        for der in found:
+            with self.subTest(sha256=hashlib.sha256(der).hexdigest()):
+                lines = [
+                    f.line() for f in bundle_findings(SUBJECT, Matcher().scan(pem(der)))
+                ]
+                self.assertEqual(len(lines), 1)
+                self.assertRegex(
+                    lines[0],
+                    r"^FAIL  ca-bundle \[/x\] contains emSign Root (TLS|CS) CA - G3, cross-certificate"
+                    r" from emSign ECC Root CA - G3 \(",
+                )
+                self.assertNotIn("trust anchor", lines[0])
 
 
 class MatcherTest(unittest.TestCase):
@@ -132,7 +161,7 @@ class MatcherTest(unittest.TestCase):
         needs(OUT / "yara" / "cert00.der")
         labels = [c.label for c in sorted(KNOWN_CERTIFICATES, key=lambda c: c.sha256)]
         names = sorted(p.name for p in (OUT / "yara").glob("cert*"))
-        self.assertEqual(len(names), 60)
+        self.assertEqual(len(names), 66)
         for name in names:
             with self.subTest(name=name):
                 matches = self.matcher.scan((OUT / "yara" / name).read_bytes())
@@ -161,7 +190,7 @@ class MatcherTest(unittest.TestCase):
 
     def test_comment_less_bundle(self) -> None:
         data = b"".join(pem(c.der) for c in KNOWN_CERTIFICATES)
-        self.assertEqual(len(self.full(data)), 20)
+        self.assertEqual(len(self.full(data)), 22)
 
     def test_bundle_after_comments(self) -> None:
         data = b"# comment line\n" * 7000 + pem(G3_ECC_ROOT.der)

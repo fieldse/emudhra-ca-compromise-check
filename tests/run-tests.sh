@@ -285,8 +285,8 @@ function make_java_fixtures() {
 function test_yara() {
   local rules=/repo/rules/yara/emudhra-ca.yar got want
   got=$(run_in "$LAB_IMAGE" sh -c "yara -r $rules /out/yara | awk '{print \$1}' | sort | uniq -c | awk '{print \$2\"=\"\$1}' | tr '\n' ' '")
-  check "yara fixtures (16 intermediates, 3 roots, DER + 2 PEM wrappings each, 1 JKS)" \
-    "eMudhra_G3_compromised_intermediate=49 eMudhra_G3_root=9" "${got% }"
+  check "yara fixtures (16 intermediates, 5 G3 root certificates, DER + 2 PEM wrappings each, 1 JKS)" \
+    "eMudhra_G3_compromised_intermediate=49 eMudhra_G3_root=15" "${got% }"
 
   local tag
   for tag in old fixed; do
@@ -312,7 +312,7 @@ function test_yara() {
   check "yara system bundle agrees with the trust store's file list" "$want" "$got"
 }
 
-# Check the Sigma rule's structure and that it lists all 19 thumbprints from the certificate files
+# Check the Sigma rule's structure and that it lists all 21 thumbprints from the certificate files
 function test_sigma() {
   local got
   got=$(run_in "$LAB_IMAGE" python3 -I -c "
@@ -328,7 +328,7 @@ for f in glob.glob('/repo/rules/certs/*.pem'):
 rows = list(csv.DictReader(open('/repo/rules/iocs.csv')))
 want = {row['sha1'] for row in rows if row['role'] != 'cross-sign issuer root'}
 assert want <= blocks, 'an iocs.csv row has no certificate block'
-print('ok' if listed == want and len(want) == 19 else f'mismatch {len(listed)} {len(want)}')
+print('ok' if listed == want and len(want) == 21 else f'mismatch {len(listed)} {len(want)}')
 " 2>&1 | tail -1)
   check "sigma rule structure and thumbprints (not converted to a SIEM query)" "ok" "$got"
 }
@@ -346,7 +346,7 @@ for r in RECORDS:
     n = spki[1] & 0x7f if spki[1] & 0x80 else 0
     if spki[2 + n:] != r.spki_value:
         bad.append(r.label)
-print('ok' if not bad and len(RECORDS) == 20 else 'mismatch: ' + ', '.join(bad))
+print('ok' if not bad and len(RECORDS) == 22 else 'mismatch: ' + ', '.join(bad))
 ")
   check "certdata public keys match openssl" "ok" "$got"
   got=$(run_in "$LAB_IMAGE" python3 -I -c "

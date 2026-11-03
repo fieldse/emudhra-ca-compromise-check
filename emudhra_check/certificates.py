@@ -96,15 +96,14 @@ ORDER = {c.label: index for index, c in enumerate(KNOWN_CERTIFICATES)}
 
 
 def known_keys(certificates: tuple[KnownCertificate, ...]) -> tuple[KnownKey, ...]:
-    """Group the certificates by public key, each key named after its certificate that is not a cross-sign."""
+    """Group the certificates by public key, each key named after its self-signed or
+    eMudhra-issued certificate."""
     groups: dict[bytes, list[KnownCertificate]] = {}
     for certificate in certificates:
         groups.setdefault(certificate.spki_value, []).append(certificate)
     keys = []
     for spki, group in groups.items():
-        named = sorted(group, key=lambda c: ("Sectigo cross-sign" in c.label, c.label))[
-            0
-        ]
+        named = sorted(group, key=lambda c: (c.label.count(" cross-"), c.label))[0]
         keys.append(KnownKey(named.label, named.role, spki, tuple(group)))
     return tuple(keys)
 

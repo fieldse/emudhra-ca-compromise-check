@@ -47,7 +47,8 @@ SECTIONS = (
         "Matcher",
         "Certificate matcher",
         "Every bundle, keystore and binary the check reads goes through one matcher. It finds the 16"
-        " compromised intermediates, the three G3 roots and AAA Certificate Services by the SHA-256 of"
+        " compromised intermediates, the three G3 roots with their two cross-certificates and AAA"
+        " Certificate Services by the SHA-256 of"
         " each PEM block, by their DER bytes and by the first base64 line, and by public key when no"
         " full certificate is there. A full intermediate or G3 root is FAIL, AAA is WARN, and a bare"
         " intermediate key is INFO, because fixed software ships those keys as a blocklist.",

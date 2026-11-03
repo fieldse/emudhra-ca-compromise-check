@@ -69,8 +69,9 @@ Options:
   -s, --strict      Exit 1 on WARN and ERROR as well as FAIL
   -h, --help        Show this help
 
-A FAIL on a bundle, keystore or binary means it still contains one of the three emSign G3 roots
-or a compromised intermediate, so software using it trusts certificates anyone can now issue.
+A FAIL on a bundle, keystore or binary means it still contains one of the three emSign G3 roots,
+self-signed or cross-certified, or a compromised intermediate, so software using it trusts
+certificates anyone can now issue.
 Version FAILs mean a release older than the fix. AAA Certificate Services is reported as WARN.
 Exit codes: 0 no FAIL, 1 any FAIL, 2 usage or environment error. A WARN or ERROR alone exits 0
 unless --strict is given, which makes it exit 1.
