@@ -229,7 +229,7 @@ for blk in roots.split('-----END CERTIFICATE-----')[:-1]:
 }
 
 # Write emSign ECC Root CA - G3 as OpenSSL TRUSTED CERTIFICATE blocks with rejected uses only, trusted uses only,
-# and both
+# both, and only emailProtection rejected
 function write_trusted_fixtures() {
   run_in "$LAB_IMAGE" sh -c 'set -e
     mkdir -p /out/trusted
@@ -237,7 +237,8 @@ function write_trusted_fixtures() {
     t rejected.pem -addreject anyExtendedKeyUsage
     t rejected-alias.pem -addreject anyExtendedKeyUsage -setalias emSign
     t trusted.pem -addtrust serverAuth
-    t both.pem -addtrust serverAuth -addreject anyExtendedKeyUsage'
+    t both.pem -addtrust serverAuth -addreject anyExtendedKeyUsage
+    t email.pem -addreject emailProtection'
 }
 
 # Stop when YARA finds a compromised certificate in a check image's own system bundle, since every case reads it

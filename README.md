@@ -172,7 +172,7 @@ The [detections page](https://fieldse.github.io/emudhra-ca-compromise-check/dete
 - It identifies each certificate by its content and its public key, in PEM or DER, so it finds certificates in bundles that have no comments.
 - It reads Java keystores in JKS, JCEKS and PKCS12 directly, without `keytool`.
 - A compromised key held as a blocklist entry is `INFO`.
-- An OpenSSL `TRUSTED CERTIFICATE` entry whose trust settings list only rejected uses is `INFO`, because that entry distrusts the certificate.
+- An OpenSSL `TRUSTED CERTIFICATE` entry whose reject list holds `anyExtendedKeyUsage`, or every use the certificate serves (`serverAuth` for the TLS roots and intermediates, `codeSigning` for the code-signing ones, both for emSign ECC Root CA - G3 and AAA), is `INFO`, because OpenSSL then rejects it. An entry that rejects only other uses, such as `emailProtection`, is still trusted for TLS and stays `FAIL`.
 - A certifi or pip with no `cacert.pem` of its own, as Debian ships them, uses the system store and is `INFO`.
 - A `Cargo.lock` inside downloaded crate source, under Cargo's `registry/src` or `git/checkouts` directories, is `INFO` and is not read, because it does not decide what a local build uses.
 - Inside each container image it reads runtimes, Python packages, the `ca-certificates` package, CA bundles and Java keystores.

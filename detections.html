@@ -324,9 +324,9 @@ dl.levels dt.unv { color: var(--muted); }
   <section>
     <div class="facts">
       <div><b>183</b><span>rules</span></div>
-      <div><b>99</b><span>verified</span></div>
+      <div><b>100</b><span>verified</span></div>
       <div><b>68</b><span>weak</span></div>
-      <div><b>14</b><span>under review</span></div>
+      <div><b>13</b><span>under review</span></div>
     </div>
     <ul class="plain read">
       <li><strong>A rule</strong> is one decision the check makes: a condition it looks for and the level it
@@ -339,7 +339,7 @@ dl.levels dt.unv { color: var(--muted); }
         <a href="references.html">references page</a> that back it.</li>
       <li><strong>Level:</strong> <code>matcher</code> means the certificate matcher's levels apply, and
         <code>rules</code> means the levels of the rules the condition names.</li>
-      <li><strong>Rules with problems are shown here too.</strong> 14 rules are under review
+      <li><strong>Rules with problems are shown here too.</strong> 13 rules are under review
         because a source contradicts them, and 2 could not be checked. A rule under
         review shows no source link until it is fixed.</li>
     </ul>
@@ -387,7 +387,7 @@ dl.levels dt.unv { color: var(--muted); }
 <tr id='cert-23'><td class='rid'><a href='#cert-23'>CERT-23</a></td><td class='cond'>G3 root public key (SPKI) present with no full certificate, read as a trust anchor<span class='muted'>Design: a store can hold a trust anchor as a bare public key, as rustls webpki-roots does</span></td><td class='lvl'>FAIL</td><td class='val'>SPKI value of each G3 root in certdata.py</td><td class='rf'><a href='references.html#r309'>R309</a><a href='references.html#r311'>R311</a></td><td><span class='badge weak'>weak</span></td></tr>
 <tr id='cert-24'><td class='rid'><a href='#cert-24'>CERT-24</a></td><td class='cond'>Compromised intermediate public key present with no full certificate, read as a blocklist entry<span class='muted'>Design: fixed runtimes ship the eight compromised keys as a blocklist, so a bare intermediate key is read as a block entry</span></td><td class='lvl'>INFO</td><td class='val'>8 distinct intermediate SPKIs (each shared by the eMudhra cert and its Sectigo cross-sign)</td><td class='rf'><a href='references.html#r043'>R043</a><a href='references.html#r308'>R308</a></td><td><span class='badge weak'>weak</span></td></tr>
 <tr id='cert-25'><td class='rid'><a href='#cert-25'>CERT-25</a></td><td class='cond'>Any AAA Certificate Services match (full or key only), revoked cross-sign issuer trusted by clients that skip revocation<span class='muted'>Project decision: AAA Certificate Services is WARN, since it is a live root that some clients still trust and that the cross-signs chain to</span></td><td class='lvl'>WARN</td><td class='val'>AAA_LEVEL = WARN, detail cites revocation date 2026-10-19</td><td class='rf'><a href='references.html#r002'>R002</a><a href='references.html#r011'>R011</a><a href='references.html#r040'>R040</a><a href='references.html#r104'>R104</a><a href='references.html#r237'>R237</a><a href='references.html#r310'>R310</a></td><td><span class='badge weak'>weak</span></td></tr>
-<tr id='cert-26'><td class='rid'><a href='#cert-26'>CERT-26</a></td><td class='cond'>OpenSSL TRUSTED CERTIFICATE block whose X509_CERT_AUX lists only rejected uses (rejected entry, not trusted). anything not parsing as exactly one aux structure counts as trusted</td><td class='lvl'>INFO</td><td class='val'>aux field order 0x30, 0xA0, 0x0C, 0x04, 0xA1, rejected &gt; 0 and trusted = 0</td><td class='rf'><span class='muted'>under review</span></td><td><span class='badge bad'>under review</span></td></tr>
+<tr id='cert-26'><td class='rid'><a href='#cert-26'>CERT-26</a></td><td class='cond'>OpenSSL TRUSTED CERTIFICATE block whose X509_CERT_AUX reject list holds anyExtendedKeyUsage or every use the certificate serves: serverAuth for the TLS roots and intermediates, codeSigning for the CS root and CS intermediates, both for emSign ECC Root CA - G3 and AAA (rejected entry, not trusted). The reject list is read before the trust list, as OpenSSL does. A block that rejects only other uses, or that does not parse as exactly one aux structure, counts as trusted (FAIL)</td><td class='lvl'>INFO</td><td class='val'>aux field order 0x30, 0xA0, 0x0C, 0x04, 0xA1. anyExtendedKeyUsage 2.5.29.37.0, serverAuth 1.3.6.1.5.5.7.3.1, codeSigning 1.3.6.1.5.5.7.3.3</td><td class='rf'><a href='references.html#r351'>R351</a></td><td><span class='badge ok'>verified</span></td></tr>
 <tr id='cert-27'><td class='rid'><a href='#cert-27'>CERT-27</a></td><td class='cond'>How a match is found: SHA-256 of each decoded PEM block, raw DER bytes, the first base64 line outside rejected entries, then the public key value for a key-only match<span class='muted'>Design: match by content and key in PEM and DER so bundles without comments are covered</span></td><td class='lvl'>matcher</td><td class='val'>pem_line = first 64 base64 chars of the DER, PEM block cap MAX_PEM_BLOCK_BYTES</td><td class='rf'><a href='references.html#r312'>R312</a></td><td><span class='badge weak'>weak</span></td></tr>
 <tr id='cert-28'><td class='rid'><a href='#cert-28'>CERT-28</a></td><td class='cond'>A judged file whose matches include no FAIL gets an extra PASS line &#x27;contains no compromised eMudhra certificate&#x27;<span class='muted'>Design: report a judged file that holds no compromised certificate</span></td><td class='lvl'>PASS</td><td class='val'>n/a</td><td class='rf'><span class='muted'>decision</span></td><td><span class='badge weak'>weak</span></td></tr>
 </tbody></table></div>

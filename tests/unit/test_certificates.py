@@ -31,7 +31,7 @@ from emudhra_check.certificates import (
     has_pem,
     keystore_kind,
     pem_blocks,
-    rejected_only,
+    rejected_uses,
 )
 from emudhra_check.report import Finding, Level, Subject
 
@@ -307,9 +307,11 @@ class MatcherTest(unittest.TestCase):
         self.assertIn(G3_ECC_ROOT.label, self.full(path.read_bytes()))
 
 
-# Trust settings in an OpenSSL X509_CERT_AUX: anyExtendedKeyUsage and serverAuth.
+# Trust settings in an OpenSSL X509_CERT_AUX: anyExtendedKeyUsage, serverAuth, codeSigning and emailProtection.
 ANY_EKU = bytes.fromhex("0604551d2500")
 SERVER_AUTH = bytes.fromhex("06082b06010505070301")
+CODE_SIGNING = bytes.fromhex("06082b06010505070303")
+EMAIL = bytes.fromhex("06082b06010505070304")
 
 
 def tlv(tag: int, content: bytes) -> bytes:
@@ -331,34 +333,38 @@ REJECTED_LINE = (
 )
 
 
+def by_label(prefix: str) -> Any:
+    return next(c for c in KNOWN_CERTIFICATES if c.label.startswith(prefix))
+
+
 class RejectedEntryTest(unittest.TestCase):
     matcher = Matcher()
 
     def lines(self, data: bytes) -> list:
         return [f.line() for f in bundle_findings(SUBJECT, self.matcher.scan(data))]
 
-    def test_rejected_only_aux(self) -> None:
+    def test_rejected_uses(self) -> None:
         alias = tlv(0x0C, b"emSign")
         keyid = tlv(0x04, b"\x01\x02")
         other = tlv(0xA1, tlv(0x30, tlv(0x06, b"\x2a")))
-        for value in (
-            REJECT_ONLY,
-            aux(tlv(0xA0, ANY_EKU + SERVER_AUTH)),
-            aux(tlv(0x30, b""), tlv(0xA0, ANY_EKU)),
-            aux(tlv(0xA0, ANY_EKU), alias, keyid, other),
-            aux(tlv(0xA0, ANY_EKU * 30)),
+        for value, want in (
+            (REJECT_ONLY, {ANY_EKU[2:]}),
+            (aux(tlv(0xA0, ANY_EKU + SERVER_AUTH)), {ANY_EKU[2:], SERVER_AUTH[2:]}),
+            (aux(tlv(0x30, b""), tlv(0xA0, ANY_EKU)), {ANY_EKU[2:]}),
+            (aux(tlv(0xA0, ANY_EKU), alias, keyid, other), {ANY_EKU[2:]}),
+            (aux(tlv(0xA0, ANY_EKU * 30)), {ANY_EKU[2:]}),
+            (TRUST_AND_REJECT, {ANY_EKU[2:]}),
+            (TRUST_ONLY, set()),
+            (aux(), set()),
+            (aux(tlv(0xA0, b"")), set()),
+            (aux(tlv(0x0C, b"emSign")), set()),
         ):
             with self.subTest(aux=value.hex()):
-                self.assertTrue(rejected_only(value))
+                self.assertEqual(rejected_uses(value), frozenset(want))
 
-    def test_trusted_or_malformed_aux(self) -> None:
+    def test_malformed_aux(self) -> None:
         for value in (
             b"",
-            TRUST_ONLY,
-            TRUST_AND_REJECT,
-            aux(),
-            aux(tlv(0xA0, b"")),
-            aux(tlv(0x0C, b"emSign")),
             aux(tlv(0xA0, ANY_EKU), tlv(0x30, SERVER_AUTH)),
             aux(tlv(0xA0, ANY_EKU), tlv(0xA0, ANY_EKU)),
             aux(tlv(0xA0, ANY_EKU + b"\x05\x00")),
@@ -373,7 +379,7 @@ class RejectedEntryTest(unittest.TestCase):
             b"\x31" + REJECT_ONLY[1:],
         ):
             with self.subTest(aux=value.hex()):
-                self.assertFalse(rejected_only(value))
+                self.assertIsNone(rejected_uses(value))
 
     def test_rejected_block_is_info_and_the_bundle_passes(self) -> None:
         for width in (64, 76, 32):
@@ -388,13 +394,50 @@ class RejectedEntryTest(unittest.TestCase):
                 )
 
     def test_trusted_blocks_fail(self) -> None:
-        for value in (TRUST_ONLY, TRUST_AND_REJECT, aux(tlv(0xA0, b"\x05\x00")), b""):
+        for value in (
+            TRUST_ONLY,
+            aux(tlv(0xA0, EMAIL)),
+            aux(tlv(0xA0, SERVER_AUTH)),
+            aux(tlv(0xA0, b"\x05\x00")),
+            b"",
+        ):
             with self.subTest(aux=value.hex()):
                 data = trusted_pem(G3_ECC_ROOT.der + value, 64)
                 self.assertEqual(
                     self.lines(data),
                     [f"FAIL  ca-bundle [/x] contains {G3_ECC_ROOT.label}"],
                 )
+
+    def test_reject_list_and_trust_list_together(self) -> None:
+        # OpenSSL reads the reject list first, so a rejected purpose wins over a trusted one.
+        data = trusted_pem(G3_ECC_ROOT.der + TRUST_AND_REJECT, 64)
+        self.assertEqual(self.lines(data)[0], REJECTED_LINE)
+
+    def test_the_purpose_rejected_must_be_the_role_s_purpose(self) -> None:
+        tls_root = by_label("emSign Root TLS CA - G3")
+        cs_root = by_label("emSign Root CS CA - G3")
+        tls_ca = by_label("EM DV TLS CA - G3B (")
+        cs_ca = by_label("EM OV CS CA - G3B (")
+        both = SERVER_AUTH + CODE_SIGNING
+        for certificate, reject, rejected in (
+            (tls_root, SERVER_AUTH, True),
+            (tls_root, CODE_SIGNING, False),
+            (tls_ca, SERVER_AUTH, True),
+            (tls_ca, EMAIL, False),
+            (cs_root, CODE_SIGNING, True),
+            (cs_root, SERVER_AUTH, False),
+            (cs_ca, CODE_SIGNING, True),
+            (cs_ca, SERVER_AUTH, False),
+            (G3_ECC_ROOT, both, True),
+            (G3_ECC_ROOT, CODE_SIGNING, False),
+            (AAA, both, True),
+            (AAA, SERVER_AUTH, False),
+        ):
+            with self.subTest(label=certificate.label, reject=reject.hex()):
+                data = trusted_pem(certificate.der + aux(tlv(0xA0, reject)), 64)
+                first = self.lines(data)[0]
+                self.assertEqual(first.startswith("INFO"), rejected, first)
+                self.assertIn(certificate.label, first)
 
     def test_a_trusted_copy_beside_the_rejected_entry_fails(self) -> None:
         rejected = trusted_pem(G3_ECC_ROOT.der + REJECT_ONLY, 64)
@@ -445,7 +488,14 @@ class RejectedEntryTest(unittest.TestCase):
                 ],
             ),
             ("trusted.pem", [f"FAIL  ca-bundle [/x] contains {G3_ECC_ROOT.label}"]),
-            ("both.pem", [f"FAIL  ca-bundle [/x] contains {G3_ECC_ROOT.label}"]),
+            (
+                "both.pem",
+                [
+                    REJECTED_LINE,
+                    "PASS  ca-bundle [/x] contains no compromised eMudhra certificate",
+                ],
+            ),
+            ("email.pem", [f"FAIL  ca-bundle [/x] contains {G3_ECC_ROOT.label}"]),
         )
         for name, want in rows:
             with self.subTest(name=name):

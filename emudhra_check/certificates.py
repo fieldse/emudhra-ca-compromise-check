@@ -2,9 +2,9 @@
 
 Builds the known certificates and keys from certdata.py, finds them in PEM bundles, keystores and
 binaries by SHA-256 of each PEM block, by DER, by the first base64 line and by the public key, and
-turns the matches into findings. An OpenSSL TRUSTED CERTIFICATE block whose trust settings list only
-rejected uses is a distrust entry and gives INFO, not FAIL. Every scan is a bytes.find loop over the
-buffer, so the cost is linear in its size.
+turns the matches into findings. An OpenSSL TRUSTED CERTIFICATE block whose reject list holds
+anyExtendedKeyUsage or every use the certificate serves is a distrust entry and gives INFO, not
+FAIL. Every scan is a bytes.find loop over the buffer, so the cost is linear in its size.
 """
 
 from __future__ import annotations
@@ -153,53 +153,78 @@ def der_header(data: bytes, pos: int, end: int) -> Optional[tuple[int, int, int]
     return data[pos], start, start + length
 
 
-def oid_count(data: bytes, start: int, end: int) -> Optional[int]:
-    """Return how many OBJECT IDENTIFIERs fill data[start:end] exactly, or None when anything else is there."""
-    count = 0
+def oid_contents(data: bytes, start: int, end: int) -> Optional[list[bytes]]:
+    """Return the content octets of the OBJECT IDENTIFIERs that fill data[start:end] exactly, or None when
+    anything else is there."""
+    oids = []
     while start < end:
         header = der_header(data, start, end)
         if header is None or header[0] != 0x06 or header[1] == header[2]:
             return None
-        count += 1
+        oids.append(data[header[1] : header[2]])
         start = header[2]
-    return count
+    return oids
 
 
 # X509_CERT_AUX fields in order: trust SEQUENCE OF OID, reject [0], alias UTF8String, keyid OCTET STRING, other [1].
 AUX_FIELDS = (0x30, 0xA0, 0x0C, 0x04, 0xA1)
 
 
-def rejected_only(aux: bytes) -> bool:
-    """Return whether an OpenSSL X509_CERT_AUX lists one or more rejected uses and no trusted use.
+# Content octets of the extended key usage OIDs OpenSSL checks a reject list for.
+ANY_EKU = bytes.fromhex("551d2500")
+SERVER_AUTH = bytes.fromhex("2b06010505070301")
+CODE_SIGNING = bytes.fromhex("2b06010505070303")
 
-    Anything that does not parse as exactly one well-formed aux structure counts as trusted.
+
+def rejected_uses(aux: bytes) -> Optional[frozenset[bytes]]:
+    """Return the content octets of each OID in an OpenSSL X509_CERT_AUX reject list.
+
+    Returns None when aux does not parse as exactly one well-formed aux structure.
     """
     header = der_header(aux, 0, len(aux))
     if header is None or header[0] != 0x30 or header[2] != len(aux):
-        return False
+        return None
     pos, end = header[1], header[2]
-    trusted = rejected = 0
+    rejected: frozenset[bytes] = frozenset()
     field = 0
     while pos < end:
         element = der_header(aux, pos, end)
         if element is None:
-            return False
+            return None
         tag, start, stop = element
         while field < len(AUX_FIELDS) and AUX_FIELDS[field] != tag:
             field += 1
         if field == len(AUX_FIELDS):
-            return False
+            return None
         field += 1
         if tag in (0x30, 0xA0):
-            count = oid_count(aux, start, stop)
-            if count is None:
-                return False
-            if tag == 0x30:
-                trusted = count
-            else:
-                rejected = count
+            oids = oid_contents(aux, start, stop)
+            if oids is None:
+                return None
+            if tag == 0xA0:
+                rejected = frozenset(oids)
         pos = stop
-    return rejected > 0 and trusted == 0
+    return rejected
+
+
+def purposes(label: str) -> frozenset[bytes]:
+    """Return the uses a known certificate serves: TLS, code signing, or both for the ECC root and AAA."""
+    if " TLS " in label:
+        return frozenset({SERVER_AUTH})
+    if " CS " in label:
+        return frozenset({CODE_SIGNING})
+    return frozenset({SERVER_AUTH, CODE_SIGNING})
+
+
+def is_rejected(certificate: KnownCertificate, aux: bytes) -> bool:
+    """Return whether OpenSSL rejects the certificate for every use it serves, as obj_trust does.
+
+    obj_trust rejects on anyExtendedKeyUsage or the purpose checked before it reads the trust list.
+    """
+    rejected = rejected_uses(aux)
+    if rejected is None:
+        return False
+    return ANY_EKU in rejected or purposes(certificate.label) <= rejected
 
 
 def pem_spans(
@@ -280,8 +305,9 @@ class Matcher:
                 der = first_der_element(trusted)
                 if der is None:
                     continue
-                if rejected_only(trusted[len(der) :]):
-                    rejected.add(hashlib.sha256(der).digest())
+                known = BY_SHA256.get(hashlib.sha256(der).digest())
+                if known is not None and is_rejected(known, trusted[len(der) :]):
+                    rejected.add(known.sha256)
                     rejected_spans.append((start, end))
                 else:
                     ders.append(der)
