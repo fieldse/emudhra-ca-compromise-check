@@ -278,8 +278,10 @@ class HomebrewTrustStoreTest(unittest.TestCase):
 ENCRYPTED_OID = bytes.fromhex("06092a864886f70d010706")
 JKS = bytes.fromhex("feedfeed") + b"\x00" * 12 + G3_ECC_ROOT.der
 JCEKS = bytes.fromhex("cececece") + b"\x00" * 12 + G3_ECC_ROOT.der
-P12_PLAIN_CLEAN = b"\x30\x82\x04\x00" + b"\x00" * 64
-P12_ENCRYPTED = b"\x30\x82\x04\x00" + ENCRYPTED_OID + b"\x00" * 64
+# A PFX header: SEQUENCE, version 3, then the authSafe SEQUENCE with the PKCS #7 data OID.
+P12_HEAD = bytes.fromhex("30820400020103308203f006092a864886f70d010701")
+P12_PLAIN_CLEAN = P12_HEAD + b"\x00" * 64
+P12_ENCRYPTED = P12_HEAD + ENCRYPTED_OID + b"\x00" * 64
 G3_FAIL = "contains emSign ECC Root CA - G3 (removed root)"
 
 

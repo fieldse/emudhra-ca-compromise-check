@@ -324,9 +324,9 @@ dl.levels dt.unv { color: var(--muted); }
   <section>
     <div class="facts">
       <div><b>185</b><span>rules</span></div>
-      <div><b>111</b><span>verified</span></div>
+      <div><b>112</b><span>verified</span></div>
       <div><b>68</b><span>weak</span></div>
-      <div><b>4</b><span>under review</span></div>
+      <div><b>3</b><span>under review</span></div>
     </div>
     <ul class="plain read">
       <li><strong>A rule</strong> is one decision the check makes: a condition it looks for and the level it
@@ -339,7 +339,7 @@ dl.levels dt.unv { color: var(--muted); }
         <a href="references.html">references page</a> that back it.</li>
       <li><strong>Level:</strong> <code>matcher</code> means the certificate matcher's levels apply, and
         <code>rules</code> means the levels of the rules the condition names.</li>
-      <li><strong>Rules with problems are shown here too.</strong> 4 rules are under review
+      <li><strong>Rules with problems are shown here too.</strong> 3 rules are under review
         because a source contradicts them, and 2 could not be checked. A rule under
         review shows no source link until it is fixed.</li>
     </ul>
@@ -807,7 +807,7 @@ dl.levels dt.unv { color: var(--muted); }
     <div class="table-scroll"><table class='list rules'><thead>
 <tr><th>Rule</th><th>Condition</th><th>Level</th><th>Value</th><th>Sources</th><th>Status</th></tr></thead><tbody>
 <tr id='cert-31'><td class='rid'><a href='#cert-31'>CERT-31</a></td><td class='cond'>Each Java home&#x27;s cacerts and every file named cacerts under the roots is judged as a keystore</td><td class='lvl'>matcher</td><td class='val'>lib/security/cacerts, jre/lib/security/cacerts, name glob cacerts</td><td class='rf'><a href='references.html#r122'>R122</a><a href='references.html#r322'>R322</a></td><td><span class='badge ok'>verified</span></td></tr>
-<tr id='cert-32'><td class='rid'><a href='#cert-32'>CERT-32</a></td><td class='cond'>Keystore of unknown format is reported only when its content holds a FAIL, otherwise it gives no line<span class='muted'>Design: a keystore whose format the check cannot read is reported only when its bytes hold a FAIL</span></td><td class='lvl'>matcher</td><td class='val'>JKS magic FEEDFEED, JCEKS CECECECE, PKCS12 first bytes 3082/3083/3084</td><td class='rf'><span class='muted'>under review</span></td><td><span class='badge bad'>under review</span></td></tr>
+<tr id='cert-32'><td class='rid'><a href='#cert-32'>CERT-32</a></td><td class='cond'>Keystore format read from its first bytes as OpenJDK does. A keystore of unknown format is reported only when its content holds a FAIL, otherwise it gives no line<span class='muted'>Design: a keystore whose format the check cannot read is reported only when its bytes hold a FAIL</span></td><td class='lvl'>matcher</td><td class='val'>JKS magic FEEDFEED, JCEKS CECECECE, PKCS12 a SEQUENCE (30 80, 30 81 to 30 84 or a short length), version 02 01 03, then a SEQUENCE holding the data OID 06 09 2A 86 48 86 F7 0D 01 07 01</td><td class='rf'><a href='references.html#r357'>R357</a></td><td><span class='badge ok'>verified</span></td></tr>
 <tr id='cert-33'><td class='rid'><a href='#cert-33'>CERT-33</a></td><td class='cond'>PKCS12 keystore with encrypted contents and no FAIL, reported as &#x27;password-protected keystore, check it with keytool&#x27; (PASS line dropped)<span class='muted'>Design: a password-protected PKCS #12 cannot be read without the password, so it gets a manual check</span></td><td class='lvl'>WARN</td><td class='val'>encryptedData OID 1.2.840.113549.1.7.6 (06092A864886F70D010706)</td><td class='rf'><a href='references.html#r323'>R323</a></td><td><span class='badge weak'>weak</span></td></tr>
 </tbody></table></div>
   </section>

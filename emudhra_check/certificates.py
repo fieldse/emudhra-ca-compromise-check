@@ -354,13 +354,31 @@ class KeystoreKind(Enum):
 
 JKS_MAGIC = bytes.fromhex("feedfeed")
 JCEKS_MAGIC = bytes.fromhex("cececece")
-# A PKCS12 file opens with a DER SEQUENCE whose length takes two, three or four bytes.
-DER_SEQUENCE_LONG = (
-    bytes.fromhex("3082"),
-    bytes.fromhex("3083"),
-    bytes.fromhex("3084"),
-)
+# A PKCS12 PFX opens with version 3 and an authSafe of type data, as OpenJDK's PKCS12KeyStore probe reads it.
+PKCS12_VERSION = bytes.fromhex("020103")
+PKCS7_DATA_OID = bytes.fromhex("06092a864886f70d010701")
+PKCS12_HEAD_BYTES = 32
 ENCRYPTED_DATA_OID = bytes.fromhex("06092a864886f70d010706")
+
+
+def sequence_body(head: bytes, pos: int) -> Optional[int]:
+    """Return where the content of a SEQUENCE header at pos starts: indefinite, short or 1 to 4 length bytes."""
+    if head[pos : pos + 1] != b"\x30" or len(head) < pos + 2:
+        return None
+    first = head[pos + 1]
+    if first <= 0x80:
+        return pos + 2
+    width = first & 0x7F
+    return pos + 2 + width if width <= 4 else None
+
+
+def is_pkcs12(head: bytes) -> bool:
+    """Return whether head opens a PKCS12 PFX: a SEQUENCE, version 3, then a SEQUENCE holding the data OID."""
+    pos = sequence_body(head, 0)
+    if pos is None or head[pos : pos + len(PKCS12_VERSION)] != PKCS12_VERSION:
+        return False
+    pos = sequence_body(head, pos + len(PKCS12_VERSION))
+    return pos is not None and head[pos : pos + len(PKCS7_DATA_OID)] == PKCS7_DATA_OID
 
 
 def keystore_kind(data: Buffer) -> KeystoreKind:
@@ -370,7 +388,7 @@ def keystore_kind(data: Buffer) -> KeystoreKind:
         return KeystoreKind.JKS
     if head == JCEKS_MAGIC:
         return KeystoreKind.JCEKS
-    if head[:2] in DER_SEQUENCE_LONG:
+    if is_pkcs12(bytes(data[:PKCS12_HEAD_BYTES])):
         if data.find(ENCRYPTED_DATA_OID) >= 0:
             return KeystoreKind.PKCS12_ENCRYPTED
         return KeystoreKind.PKCS12_PLAIN

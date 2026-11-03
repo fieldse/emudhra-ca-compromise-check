@@ -607,22 +607,37 @@ class BundleFindingsTest(unittest.TestCase):
         )
 
 
+# The PKCS #7 data OID that opens a PKCS12 authSafe, and the encryptedData OID.
+DATA = bytes.fromhex("06092a864886f70d010701a0")
+ENCRYPTED = bytes.fromhex("06092a864886f70d010706")
+
+
 class KeystoreKindTest(unittest.TestCase):
     def test_kinds(self) -> None:
         rows = [
             (bytes.fromhex("feedfeed00000002"), KeystoreKind.JKS),
             (bytes.fromhex("cececece00000002"), KeystoreKind.JCEKS),
+            (bytes.fromhex("3082100002010330820ff0") + DATA, KeystoreKind.PKCS12_PLAIN),
             (
-                bytes.fromhex("3082100002010330") + b"\x00" * 16,
+                bytes.fromhex("3082100002010330820ff0") + DATA + ENCRYPTED,
+                KeystoreKind.PKCS12_ENCRYPTED,
+            ),
+            (
+                bytes.fromhex("308302d50002010330830200d0") + DATA,
                 KeystoreKind.PKCS12_PLAIN,
             ),
             (
-                bytes.fromhex("30821000") + bytes.fromhex("06092a864886f70d010706"),
-                KeystoreKind.PKCS12_ENCRYPTED,
+                bytes.fromhex("3084000102d50201033084000102d0") + DATA,
+                KeystoreKind.PKCS12_PLAIN,
             ),
-            (bytes.fromhex("308302d5020103"), KeystoreKind.PKCS12_PLAIN),
-            (bytes.fromhex("3084000102d5020103"), KeystoreKind.PKCS12_PLAIN),
+            # OpenJDK's probe also accepts BER indefinite length, a one-byte long form and a short form.
+            (bytes.fromhex("30800201033080") + DATA, KeystoreKind.PKCS12_PLAIN),
+            (bytes.fromhex("3081ff0201033081f0") + DATA, KeystoreKind.PKCS12_PLAIN),
+            (bytes.fromhex("30500201033040") + DATA, KeystoreKind.PKCS12_PLAIN),
             (bytes.fromhex("3081ff020103"), KeystoreKind.UNKNOWN),
+            (bytes.fromhex("3081ff0201043081f0") + DATA, KeystoreKind.UNKNOWN),
+            (bytes.fromhex("3081ff0201033181f0") + DATA, KeystoreKind.UNKNOWN),
+            (bytes.fromhex("308500000000010201033050") + DATA, KeystoreKind.UNKNOWN),
             (b"", KeystoreKind.UNKNOWN),
             (b"-----BEGIN", KeystoreKind.UNKNOWN),
         ]
