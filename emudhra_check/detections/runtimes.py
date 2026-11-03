@@ -43,7 +43,12 @@ from emudhra_check.hostenv import is_macos_stub
 from emudhra_check.limits import MAX_BINARY_BYTES, MAX_FIELD_CHARS, MAX_TEXT_BYTES
 from emudhra_check.report import Finding, Level, Subject
 from emudhra_check.scope import FileId, FileInterests
-from emudhra_check.versions import judge, judge_branched, parse_version
+from emudhra_check.versions import (
+    judge,
+    judge_branched,
+    parse_cpython_version,
+    parse_version,
+)
 
 __all__ = [
     "BunHost",
@@ -354,10 +359,10 @@ class GoToolchain:
 
 def cpython_finding(subject: Subject, version: str) -> Finding:
     """Judge a CPython version: end-of-life branches have no fix, the rest by their branch's ssl fix."""
-    parsed = parse_version(version)
+    parsed = parse_cpython_version(version)
     if parsed is not None and parsed.release[:2] < CPYTHON_OLDEST_FIXED_BRANCH:
         return Finding(Level.WARN, subject, f"found {version}, end-of-life, no fix")
-    return judge_branched(subject, version, CPYTHON_FIXED)
+    return judge_branched(subject, version, CPYTHON_FIXED, parse_cpython_version)
 
 
 class CPythonHost:

@@ -1,7 +1,8 @@
 """versions.py: version parsing, ordering and the fixed-version verdicts.
 
-Parses dotted versions with pre-releases, judges a found version against a FixRule, and orders
-dpkg, rpm and apk package versions and Homebrew and Go pseudo-version strings. No function calls
+Parses dotted versions with pre-releases and CPython versions with their release level, judges a
+found version against a FixRule, and orders dpkg, rpm and apk package versions and Homebrew and Go
+pseudo-version strings. No function calls
 int() on an unbounded digit string: long components are refused and package digit runs are compared
 by length.
 """
@@ -11,7 +12,7 @@ from __future__ import annotations
 import datetime
 import functools
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
 from emudhra_check.limits import MAX_FIELD_CHARS, MAX_VERSION_COMPONENT_DIGITS
 from emudhra_check.report import Finding, Level, Subject
@@ -73,6 +74,45 @@ def parse_version(text: str) -> Optional[Version]:
     return Version(text, tuple(int(p) for p in parts), pre)
 
 
+CPYTHON_LEVELS = {"a": "alpha", "b": "beta", "rc": "rc"}
+RELEASE_LEVEL_TAGS = {"alpha": "a", "beta": "b", "candidate": "rc"}
+DOTTED_CHARS = ASCII_DIGITS | frozenset(".")
+
+
+def parse_cpython_version(text: str) -> Optional[Version]:
+    """Parse a CPython version such as 3.13.5, 3.16.0a1 or 3.16.0rc1, or return None for anything else.
+
+    A trailing + marks a development build after that release and reads as the release itself.
+    """
+    if len(text) > MAX_FIELD_CHARS:
+        return None
+    core = text[:-1] if text.endswith("+") else text
+    end = take(core, 0, DOTTED_CHARS)
+    parts = core[:end].split(".")
+    if not all(is_number(p) for p in parts):
+        return None
+    pre = None
+    if end < len(core):
+        letters = take(core, end, ASCII_LETTERS)
+        level, number = core[end:letters], core[letters:]
+        if level not in CPYTHON_LEVELS or not is_number(number):
+            return None
+        pre = (PRE_RELEASE_PHASES[CPYTHON_LEVELS[level]], int(number))
+    return Version(text, tuple(int(p) for p in parts), pre)
+
+
+def running_cpython(
+    major: int, minor: int, micro: int, level: str, serial: int
+) -> Version:
+    """Return the version of the running interpreter from sys.version_info, keeping a pre-release level."""
+    tag = RELEASE_LEVEL_TAGS.get(level)
+    text = f"{major}.{minor}.{micro}" + (f"{tag}{serial}" if tag else "")
+    return parse_cpython_version(text) or Version(text, (major, minor, micro))
+
+
+Parser = Callable[[str], Optional[Version]]
+
+
 @dataclass(frozen=True)
 class FixRule:
     """Fixed versions by branch: the branch key is the first depth components of the version."""
@@ -99,11 +139,16 @@ def with_note(detail: str, note: str) -> str:
 
 
 def judge_against(
-    subject: Subject, found: str, fixed: str, below: Level, note: str
+    subject: Subject,
+    found: str,
+    fixed: str,
+    below: Level,
+    note: str,
+    parse: Parser = parse_version,
 ) -> Finding:
     """Judge found against one fixed version."""
-    have = parse_version(found)
-    want = parse_version(fixed)
+    have = parse(found)
+    want = parse(fixed)
     if have is None or want is None:
         return Finding(
             Level.WARN,
@@ -120,9 +165,11 @@ def judge(subject: Subject, found: str, rule: FixRule) -> Finding:
     return judge_against(subject, found, rule.fixed, rule.below, rule.note)
 
 
-def judge_branched(subject: Subject, found: str, rule: FixRule) -> Finding:
-    """Judge found against the fixed release of its own branch."""
-    have = parse_version(found)
+def judge_branched(
+    subject: Subject, found: str, rule: FixRule, parse: Parser = parse_version
+) -> Finding:
+    """Judge found against the fixed release of its own branch, versions read by parse."""
+    have = parse(found)
     if have is None:
         return Finding(
             Level.WARN,
@@ -132,11 +179,9 @@ def judge_branched(subject: Subject, found: str, rule: FixRule) -> Finding:
     key = ".".join(found.partition("+")[0].partition("-")[0].split(".")[: rule.depth])
     for branch, fixed in rule.fixes:
         if branch == key:
-            return judge_against(subject, found, fixed, rule.below, rule.note)
-    highest = max(
-        rule.fixes, key=lambda fix: parse_version(fix[1]) or Version("", (0,))
-    )[1]
-    highest_version = parse_version(highest)
+            return judge_against(subject, found, fixed, rule.below, rule.note, parse)
+    highest = max(rule.fixes, key=lambda fix: parse(fix[1]) or Version("", (0,)))[1]
+    highest_version = parse(highest)
     if highest_version is not None and have >= highest_version:
         return Finding(
             Level.PASS,

@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 from emudhra_check import fixes
-from emudhra_check.versions import FixRule, parse_version
+from emudhra_check.versions import FixRule, parse_cpython_version, parse_version
 
 SOURCE = Path(fixes.__file__).read_text(encoding="utf-8")
 CLAIM = re.compile(r"#.*\b[A-Z]+-\d{3}\b")
@@ -44,9 +44,11 @@ class FixesTest(unittest.TestCase):
         }
         self.assertGreater(len(rules), 15)
         for name, rule in rules.items():
+            # CPython writes a pre-release as 3.16.0a2, which only its own parser reads.
+            parse = parse_cpython_version if name == "CPYTHON_FIXED" else parse_version
             for branch, fixed in rule.fixes:
                 with self.subTest(name=name, fixed=fixed):
-                    self.assertIsNotNone(parse_version(fixed))
+                    self.assertIsNotNone(parse(fixed))
                     self.assertEqual(
                         ".".join(fixed.split("-")[0].split(".")[: rule.depth]), branch
                     )

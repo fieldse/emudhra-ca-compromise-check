@@ -17,10 +17,12 @@ from emudhra_check.versions import (
     dpkg_compare,
     judge,
     judge_branched,
+    parse_cpython_version,
     parse_version,
     pseudo_version_time,
     rpm_compare,
     rpm_evr_compare,
+    running_cpython,
 )
 
 SUBJECT = Subject("node", "host")
@@ -165,6 +167,37 @@ class ParseVersionTest(unittest.TestCase):
         rpm_compare("1." + "9" * 1024 * 1024, "1.1")
         apk_compare("1." + "9" * 1024 * 1024, "1.1")
         self.assertLess(time.monotonic() - start, 10)
+
+
+class CPythonVersionTest(unittest.TestCase):
+    def test_release_levels_order(self) -> None:
+        texts = [
+            "3.15.2",
+            "3.16.0a1",
+            "3.16.0a1+",
+            "3.16.0a2",
+            "3.16.0b1",
+            "3.16.0rc1",
+            "3.16.0",
+        ]
+        parsed = [parse_cpython_version(t) for t in texts]
+        self.assertNotIn(None, parsed)
+        self.assertEqual(parsed, sorted(parsed))
+        self.assertLess(parsed[1], parsed[3])
+        self.assertEqual(parsed[1], parsed[2])
+
+    def test_not_cpython_versions(self) -> None:
+        for text in ("3.16.0x1", "3.16.0a", "3.16.0-alpha.1", "3.16.", "a1", ""):
+            with self.subTest(text=text):
+                self.assertIsNone(parse_cpython_version(text))
+
+    def test_running_interpreter_keeps_its_release_level(self) -> None:
+        self.assertEqual(running_cpython(3, 16, 0, "alpha", 1).text, "3.16.0a1")
+        self.assertEqual(running_cpython(3, 16, 0, "candidate", 2).text, "3.16.0rc2")
+        self.assertEqual(running_cpython(3, 13, 5, "final", 0).text, "3.13.5")
+        self.assertLess(
+            running_cpython(3, 16, 0, "alpha", 1), running_cpython(3, 16, 0, "alpha", 2)
+        )
 
 
 class JudgeTest(unittest.TestCase):

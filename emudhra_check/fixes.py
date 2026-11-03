@@ -29,13 +29,14 @@ GO_FIXED: Final = FixRule(  # PKG-002 (R206)
 )
 # PKG-011 (R210), PKG-013 (R211)
 GO_FALLBACK_FIXED: Final = "v0.0.0-20261020153306-9f2b28d4331a"
-CPYTHON_FIXED: Final = FixRule(  # PYJS-028 (R177), PYJS-032 (R179)
+CPYTHON_FIXED: Final = FixRule(  # PYJS-028 (R177), PYJS-032 (R179), PY-CPY-07 (R350)
     (
         ("3.11", "3.11.18"),
         ("3.12", "3.12.16"),
         ("3.13", "3.13.18"),
         ("3.14", "3.14.10"),
         ("3.15", "3.15.2"),
+        ("3.16", "3.16.0a2"),
     ),
     2,
     Level.WARN,

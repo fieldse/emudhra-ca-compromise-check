@@ -48,7 +48,7 @@ from emudhra_check.scope import (
     resolve_excludes,
     resolve_roots,
 )
-from emudhra_check.versions import Version
+from emudhra_check.versions import running_cpython
 
 Writer = Callable[[str], None]
 
@@ -191,9 +191,7 @@ def build_context(
     excludes = resolve_excludes(options.excludes, cwd, home, oracle)
     path_dirs, path_notes = filter_path(environ.get("PATH", ""), excludes, oracle)
     brew_prefix = find_brew_prefix(path_dirs, oracle)
-    running = Version(
-        ".".join(str(n) for n in sys.version_info[:3]), tuple(sys.version_info[:3])
-    )
+    running = running_cpython(*sys.version_info[:5])
     hostenv = HostEnvironment(
         system,
         home,

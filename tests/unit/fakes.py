@@ -25,7 +25,7 @@ from emudhra_check.detections.ports import (
 from emudhra_check.hostenv import HostEnvironment
 from emudhra_check.report import Finding
 from emudhra_check.scope import FileId, Index, IndexedDir, IndexedFile, ScanScope
-from emudhra_check.versions import Version
+from emudhra_check.versions import parse_cpython_version
 
 Content = Union[bytes, Skipped]
 
@@ -215,7 +215,8 @@ def hostenv(
     running: str = "3.13.5",
     brew_prefix: Optional[str] = None,
 ) -> HostEnvironment:
-    numbers = tuple(int(n) for n in running.split("."))
+    version = parse_cpython_version(running)
+    assert version is not None, running
     return HostEnvironment(
         system,
         Path(home),
@@ -224,7 +225,7 @@ def hostenv(
         None,
         None,
         None,
-        Version(running, numbers),
+        version,
     )
 
 

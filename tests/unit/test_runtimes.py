@@ -188,6 +188,37 @@ class VersionVerdictTest(unittest.TestCase):
         )
         self.assertEqual(len(lines(CPythonHost(), ctx)), 1)
 
+    def test_cpython_pre_release_below_the_3_16_fix(self) -> None:
+        ctx, _ = tool_context(
+            "python3", "Python 3.16.0a1\n", env=hostenv(running="3.16.0a1")
+        )
+        self.assertTrue(
+            lines(CPythonHost(), ctx)[0].startswith(
+                "WARN  python3 [host] found 3.16.0a1, fixed 3.16.0a2 ("
+            )
+        )
+        # Same interpreter on PATH and running, so one line.
+        self.assertEqual(len(lines(CPythonHost(), ctx)), 1)
+        ctx, _ = tool_context(
+            "python3", "Python 3.13.18\n", env=hostenv(running="3.16.0a1")
+        )
+        self.assertTrue(
+            lines(CPythonHost(), ctx)[1].startswith(
+                "WARN  python3 [running] found 3.16.0a1, fixed 3.16.0a2"
+            )
+        )
+        for output, want in (
+            (
+                "Python 3.16.0a2\n",
+                "PASS  python3 [host] found 3.16.0a2, fixed 3.16.0a2",
+            ),
+            ("Python 3.16.0\n", "PASS  python3 [host] found 3.16.0, fixed 3.16.0a2"),
+            ("Python 3.17.0a1\n", "PASS  python3 [host] found 3.17.0a1, newer than"),
+        ):
+            with self.subTest(output=output):
+                ctx, _ = tool_context("python3", output, env=hostenv(running="3.13.5"))
+                self.assertTrue(lines(CPythonHost(), ctx)[0].startswith(want))
+
 
 SUBJECT = Subject("node", "host")
 

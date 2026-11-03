@@ -324,9 +324,9 @@ dl.levels dt.unv { color: var(--muted); }
   <section>
     <div class="facts">
       <div><b>183</b><span>rules</span></div>
-      <div><b>98</b><span>verified</span></div>
+      <div><b>99</b><span>verified</span></div>
       <div><b>68</b><span>weak</span></div>
-      <div><b>15</b><span>under review</span></div>
+      <div><b>14</b><span>under review</span></div>
     </div>
     <ul class="plain read">
       <li><strong>A rule</strong> is one decision the check makes: a condition it looks for and the level it
@@ -339,7 +339,7 @@ dl.levels dt.unv { color: var(--muted); }
         <a href="references.html">references page</a> that back it.</li>
       <li><strong>Level:</strong> <code>matcher</code> means the certificate matcher's levels apply, and
         <code>rules</code> means the levels of the rules the condition names.</li>
-      <li><strong>Rules with problems are shown here too.</strong> 15 rules are under review
+      <li><strong>Rules with problems are shown here too.</strong> 14 rules are under review
         because a source contradicts them, and 2 could not be checked. A rule under
         review shows no source link until it is fixed.</li>
     </ul>
@@ -542,7 +542,7 @@ dl.levels dt.unv { color: var(--muted); }
 <tr id='py-cpy-04'><td class='rid'><a href='#py-cpy-04'>PY-CPY-04</a></td><td class='cond'>CPython 3.14 below fix<span class='muted'>Project decision: CPython below its fix is WARN, since the pip and certifi checks decide the bundled CA files</span></td><td class='lvl'>WARN</td><td class='val'>3.14.10</td><td class='rf'><a href='references.html#r177'>R177</a><a href='references.html#r324'>R324</a></td><td><span class='badge weak'>weak</span></td></tr>
 <tr id='py-cpy-05'><td class='rid'><a href='#py-cpy-05'>PY-CPY-05</a></td><td class='cond'>CPython 3.15 below fix<span class='muted'>Project decision: CPython below its fix is WARN, since the pip and certifi checks decide the bundled CA files</span></td><td class='lvl'>WARN</td><td class='val'>3.15.2</td><td class='rf'><a href='references.html#r177'>R177</a><a href='references.html#r324'>R324</a></td><td><span class='badge weak'>weak</span></td></tr>
 <tr id='py-cpy-06'><td class='rid'><a href='#py-cpy-06'>PY-CPY-06</a></td><td class='cond'>CPython branch older than 3.11, reported as &#x27;end-of-life, no fix&#x27;<span class='muted'>Project decision: an end-of-life CPython branch is WARN, as for the other CPython rules</span></td><td class='lvl'>WARN</td><td class='val'>&lt; 3.11</td><td class='rf'><a href='references.html#r179'>R179</a><a href='references.html#r325'>R325</a></td><td><span class='badge weak'>weak</span></td></tr>
-<tr id='py-cpy-07'><td class='rid'><a href='#py-cpy-07'>PY-CPY-07</a></td><td class='cond'>CPython branch with no listed fix at or above 3.15.2 (3.16 and later)</td><td class='lvl'>PASS</td><td class='val'>&gt;= 3.15.2</td><td class='rf'><span class='muted'>under review</span></td><td><span class='badge bad'>under review</span></td></tr>
+<tr id='py-cpy-07'><td class='rid'><a href='#py-cpy-07'>PY-CPY-07</a></td><td class='cond'>CPython 3.16 below 3.16.0a2. The release level is kept on python3 --version and on the running interpreter (sys.version_info), so 3.16.0a1 is below the fix (WARN, as for any CPython below its fix). A branch above the highest listed fix (3.17 and later) is PASS</td><td class='lvl'>WARN</td><td class='val'>3.16.0a2</td><td class='rf'><a href='references.html#r350'>R350</a></td><td><span class='badge ok'>verified</span></td></tr>
 <tr id='py-cpy-08'><td class='rid'><a href='#py-cpy-08'>PY-CPY-08</a></td><td class='cond'>The macOS /usr/bin/python3 stub with no developer tools is not run and gives no line. The running interpreter is judged separately when it differs from python3 on PATH<span class='muted'>Design: never run the macOS python3 stub, which prompts to install developer tools</span></td><td class='lvl'>–</td><td class='val'>n/a</td><td class='rf'><span class='muted'>decision</span></td><td><span class='badge unv'>unverified</span></td></tr>
 </tbody></table></div>
   </section>
