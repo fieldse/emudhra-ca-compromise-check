@@ -1,7 +1,10 @@
 """test_register.py: contracts between the rule register, the source, references.html and detections.html.
 
-Checks that every fixed-version and certificate constant in fixes.py and certdata.py has a register
-row, that every R-number the register, the source comments and the detections page use is a row on
+Checks that every fixed version in fixes.py has a register row that cites its line and holds it as a
+value, that every version a row citing fixes.py holds is still in the constants it cites, that each
+FixRule's level and AAA_LEVEL appear in the level column of the rows citing them, that every
+certificate in certdata.py is a row value, that every code citation points at lines that exist, that
+every R-number the register, the source comments and the detections page use is a row on
 references.html, that detections.html equals a fresh build from the register, and that the register
 rows themselves are well formed.
 """
@@ -18,8 +21,11 @@ import unittest
 from pathlib import Path
 from types import ModuleType
 
+from emudhra_check import fixes
 from emudhra_check.certdata import RECORDS
 from emudhra_check.detections import REGISTRY
+from emudhra_check.report import Level
+from emudhra_check.versions import FixRule
 
 REPO = Path(__file__).resolve().parents[2]
 REGISTER = REPO / "rules" / "detection-rules.csv"
@@ -35,6 +41,8 @@ SHARED = ("Matcher", "Shared")
 VERSION = re.compile(r"v?[0-9]")
 R_NUMBER = re.compile(r"R([0-9]{3})(?:\s*[–-]\s*R([0-9]{3}))?")
 CODE_REF = re.compile(r"emudhra_check/fixes\.py:([0-9,-]+)")
+CITATION = re.compile(r"^([\w./-]+?)(?::([0-9]+(?:[-,][0-9]+)*))?$")
+VALUE_VERSION = re.compile(r"(?<![\w.~+:-])v?[0-9]+\.[0-9]+[\w.~+-]*(?<![.,-])")
 TOKEN_EDGE = r"[\w.~+-]"
 
 
@@ -73,6 +81,51 @@ def fixed_versions(node: ast.AST) -> list[str]:
         and VERSION.match(sub.value)
         and id(sub) not in keys
     ]
+
+
+def located_versions(node: ast.AST) -> list[tuple[str, int]]:
+    """Return each fixed version in a constant's value with the source line it is on."""
+    found = set(fixed_versions(node))
+    return [
+        (sub.value, sub.lineno)
+        for sub in ast.walk(node)
+        if isinstance(sub, ast.Constant)
+        and isinstance(sub.value, str)
+        and sub.value in found
+    ]
+
+
+def constant_strings(source: str) -> dict[int, set[str]]:
+    """Return, for each line of a top-level constant, every string in that whole constant."""
+    out: dict[int, set[str]] = {}
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.AnnAssign) and node.value:
+            strings = {
+                sub.value
+                for sub in ast.walk(node.value)
+                if isinstance(sub, ast.Constant) and isinstance(sub.value, str)
+            }
+            for line in range(node.lineno, (node.end_lineno or node.lineno) + 1):
+                out.setdefault(line, set()).update(strings)
+    return out
+
+
+def spans_of(code: str) -> list[tuple[str, int, int]]:
+    """Return (path, first, last) for each line span a code field cites, or (path, 0, 0) for a bare path."""
+    out = []
+    for word in code.split():
+        match = CITATION.match(word)
+        if match is None:
+            out.append((word, -1, -1))
+            continue
+        path, spans = match.groups()
+        if spans is None:
+            out.append((path, 0, 0))
+            continue
+        for span in spans.split(","):
+            first, _, last = span.partition("-")
+            out.append((path, int(first), int(last or first)))
+    return out
 
 
 def constants(source: str) -> list[tuple[str, int, int, list[str]]]:
@@ -143,6 +196,59 @@ class RegisterCoverageTest(unittest.TestCase):
                         any(has_token(row["value"], version) for row in self.rows)
                     )
 
+    def test_every_fixed_version_has_a_row_citing_its_line(self) -> None:
+        for node in ast.parse(FIXES.read_text(encoding="utf-8")).body:
+            if not (isinstance(node, ast.AnnAssign) and node.value):
+                continue
+            for version, line in located_versions(node.value):
+                with self.subTest(version=version, line=line):
+                    self.assertTrue(
+                        any(
+                            line in cited_lines(row["code"])
+                            and has_token(row["value"], version)
+                            for row in self.rows
+                        ),
+                        f"no row cites fixes.py:{line} with {version} as its value",
+                    )
+
+    def test_row_versions_are_in_the_constants_they_cite(self) -> None:
+        strings = constant_strings(FIXES.read_text(encoding="utf-8"))
+        for row in self.rows:
+            cited = set().union(
+                *(strings.get(line, set()) for line in cited_lines(row["code"]))
+            )
+            if not cited:
+                continue
+            for token in VALUE_VERSION.findall(row["value"]):
+                if token.endswith(".x"):
+                    continue
+                with self.subTest(rule=row["id"], version=token):
+                    self.assertTrue(
+                        any(has_token(text, token) for text in cited),
+                        f"{token} is not in the fixes.py constants {row['id']} cites",
+                    )
+
+    def test_levels_match_the_rows_citing_them(self) -> None:
+        for name, first, last, _ in constants(FIXES.read_text(encoding="utf-8")):
+            value = getattr(fixes, name)
+            if isinstance(value, FixRule):
+                # A row may describe the PASS at or above the fix instead of the verdict below it.
+                wanted = {value.below.name, value.no_fix.name, Level.PASS.name}
+            elif isinstance(value, Level):
+                wanted = {value.name}
+            else:
+                continue
+            for row in self.rows:
+                if not cited_lines(row["code"]) & set(range(first, last + 1)):
+                    continue
+                with self.subTest(constant=name, rule=row["id"]):
+                    self.assertTrue(set(row["level"].split("/")) & wanted, row["level"])
+
+    def test_homebrew_fix_is_a_row_value(self) -> None:
+        day, revision = fixes.HOMEBREW_CA_FIXED
+        version = f"{day.isoformat()}_{revision}"
+        self.assertTrue(any(has_token(row["value"], version) for row in self.rows))
+
     def test_every_certificate_is_a_row_value(self) -> None:
         values = " ".join(row["value"] for row in self.rows).upper()
         for record in RECORDS:
@@ -167,6 +273,19 @@ class RegisterRowsTest(unittest.TestCase):
                 self.assertTrue(row["detection"].split())
                 self.assertLessEqual(set(row["detection"].split()), names)
                 self.assertTrue(row["code"])
+
+    def test_code_citations_point_at_existing_lines(self) -> None:
+        for row in self.rows:
+            for path, first, last in spans_of(row["code"]):
+                with self.subTest(rule=row["id"], path=path, first=first):
+                    self.assertGreaterEqual(first, 0, f"unreadable citation {path}")
+                    target = REPO / path
+                    self.assertTrue(target.is_file(), f"{path} does not exist")
+                    if first:
+                        count = len(target.read_text(encoding="utf-8").splitlines())
+                        self.assertTrue(
+                            1 <= first <= last <= count, f"{first}-{last} of {count}"
+                        )
 
     def test_decisions_name_a_basis(self) -> None:
         for row in self.rows:
@@ -245,6 +364,17 @@ class HelperSelfTest(unittest.TestCase):
         self.assertEqual(
             r_numbers("OS-003 (R050–R052), OS-019 (R060)"),
             {"R050", "R051", "R052", "R060"},
+        )
+
+    def test_spans_of(self) -> None:
+        self.assertEqual(
+            spans_of("emudhra_check/fixes.py:15-17,20 rules/iocs.csv:2 README.md"),
+            [
+                ("emudhra_check/fixes.py", 15, 17),
+                ("emudhra_check/fixes.py", 20, 20),
+                ("rules/iocs.csv", 2, 2),
+                ("README.md", 0, 0),
+            ],
         )
 
     def test_version_token_edges(self) -> None:
