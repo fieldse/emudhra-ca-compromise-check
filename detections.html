@@ -324,9 +324,9 @@ dl.levels dt.unv { color: var(--muted); }
   <section>
     <div class="facts">
       <div><b>185</b><span>rules</span></div>
-      <div><b>112</b><span>verified</span></div>
+      <div><b>114</b><span>verified</span></div>
       <div><b>68</b><span>weak</span></div>
-      <div><b>3</b><span>under review</span></div>
+      <div><b>1</b><span>under review</span></div>
     </div>
     <ul class="plain read">
       <li><strong>A rule</strong> is one decision the check makes: a condition it looks for and the level it
@@ -339,7 +339,7 @@ dl.levels dt.unv { color: var(--muted); }
         <a href="references.html">references page</a> that back it.</li>
       <li><strong>Level:</strong> <code>matcher</code> means the certificate matcher's levels apply, and
         <code>rules</code> means the levels of the rules the condition names.</li>
-      <li><strong>Rules with problems are shown here too.</strong> 3 rules are under review
+      <li><strong>Rules with problems are shown here too.</strong> 1 rules are under review
         because a source contradicts them, and 2 could not be checked. A rule under
         review shows no source link until it is fixed.</li>
     </ul>
@@ -538,8 +538,8 @@ dl.levels dt.unv { color: var(--muted); }
     <div class="table-scroll"><table class='list rules'><thead>
 <tr><th>Rule</th><th>Condition</th><th>Level</th><th>Value</th><th>Sources</th><th>Status</th></tr></thead><tbody>
 <tr><td class='rid'><a href='#rt-gen-01'>RT-GEN-01</a></td><td class='cond'>Version command output unreadable, reported as &#x27;version unreadable&#x27;<span class='muted'>Design: a version the tool does not print readably gets a manual check</span></td><td class='lvl'>WARN</td><td class='val'>n/a</td><td class='rf'><span class='muted'>decision</span></td><td><span class='badge weak'>weak</span></td></tr>
-<tr id='py-cpy-01'><td class='rid'><a href='#py-cpy-01'>PY-CPY-01</a></td><td class='cond'>CPython 3.11 below fix (the ssl module&#x27;s key block, the pip and certifi checks decide)<span class='muted'>Project decision: CPython below its fix is WARN, since the pip and certifi checks decide the bundled CA files</span></td><td class='lvl'>WARN</td><td class='val'>3.11.18</td><td class='rf'><span class='muted'>under review</span></td><td><span class='badge bad'>under review</span></td></tr>
-<tr id='py-cpy-02'><td class='rid'><a href='#py-cpy-02'>PY-CPY-02</a></td><td class='cond'>CPython 3.12 below fix<span class='muted'>Project decision: CPython below its fix is WARN, since the pip and certifi checks decide the bundled CA files</span></td><td class='lvl'>WARN</td><td class='val'>3.12.16</td><td class='rf'><span class='muted'>under review</span></td><td><span class='badge bad'>under review</span></td></tr>
+<tr id='py-cpy-01'><td class='rid'><a href='#py-cpy-01'>PY-CPY-01</a></td><td class='cond'>CPython 3.11 below fix (the ssl module&#x27;s key block, the pip and certifi checks decide). Any 3.11 also gets INFO &#x27;3.11.18 blocks the compromised keys in ssl but bundles pip 24.0, whose certifi is affected&#x27;<span class='muted'>Project decision: CPython below its fix is WARN, since the pip and certifi checks decide the bundled CA files</span></td><td class='lvl'>WARN</td><td class='val'>3.11.18, bundles pip 24.0</td><td class='rf'><a href='references.html#r177'>R177</a><a href='references.html#r358'>R358</a></td><td><span class='badge ok'>verified</span></td></tr>
+<tr id='py-cpy-02'><td class='rid'><a href='#py-cpy-02'>PY-CPY-02</a></td><td class='cond'>CPython 3.12 below fix. Any 3.12 also gets INFO &#x27;3.12.16 blocks the compromised keys in ssl but bundles pip 25.0.1, whose certifi is affected&#x27;<span class='muted'>Project decision: CPython below its fix is WARN, since the pip and certifi checks decide the bundled CA files</span></td><td class='lvl'>WARN</td><td class='val'>3.12.16, bundles pip 25.0.1</td><td class='rf'><a href='references.html#r177'>R177</a><a href='references.html#r358'>R358</a></td><td><span class='badge ok'>verified</span></td></tr>
 <tr id='py-cpy-03'><td class='rid'><a href='#py-cpy-03'>PY-CPY-03</a></td><td class='cond'>CPython 3.13 below fix<span class='muted'>Project decision: CPython below its fix is WARN, since the pip and certifi checks decide the bundled CA files</span></td><td class='lvl'>WARN</td><td class='val'>3.13.18</td><td class='rf'><a href='references.html#r177'>R177</a><a href='references.html#r324'>R324</a></td><td><span class='badge weak'>weak</span></td></tr>
 <tr id='py-cpy-04'><td class='rid'><a href='#py-cpy-04'>PY-CPY-04</a></td><td class='cond'>CPython 3.14 below fix<span class='muted'>Project decision: CPython below its fix is WARN, since the pip and certifi checks decide the bundled CA files</span></td><td class='lvl'>WARN</td><td class='val'>3.14.10</td><td class='rf'><a href='references.html#r177'>R177</a><a href='references.html#r324'>R324</a></td><td><span class='badge weak'>weak</span></td></tr>
 <tr id='py-cpy-05'><td class='rid'><a href='#py-cpy-05'>PY-CPY-05</a></td><td class='cond'>CPython 3.15 below fix<span class='muted'>Project decision: CPython below its fix is WARN, since the pip and certifi checks decide the bundled CA files</span></td><td class='lvl'>WARN</td><td class='val'>3.15.2</td><td class='rf'><a href='references.html#r177'>R177</a><a href='references.html#r324'>R324</a></td><td><span class='badge weak'>weak</span></td></tr>

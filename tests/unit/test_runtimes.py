@@ -175,6 +175,35 @@ class VersionVerdictTest(unittest.TestCase):
                 ctx, _ = tool_context("python3", output, env=env)
                 self.assertTrue(lines(CPythonHost(), ctx)[0].startswith(want))
 
+    def test_cpython_3_11_and_3_12_fixes_bundle_an_affected_pip(self) -> None:
+        note = "fixed releases block the compromised keys in ssl, the pip and certifi checks decide"
+        for output, want in (
+            (
+                "Python 3.11.18\n",
+                [
+                    "PASS  python3 [host] found 3.11.18, fixed 3.11.18",
+                    "INFO  python3 [host] 3.11.18 blocks the compromised keys in ssl but bundles pip 24.0,"
+                    " whose certifi is affected, the pip and certifi checks decide",
+                ],
+            ),
+            (
+                "Python 3.12.10\n",
+                [
+                    f"WARN  python3 [host] found 3.12.10, fixed 3.12.16 ({note})",
+                    "INFO  python3 [host] 3.12.16 blocks the compromised keys in ssl but bundles pip 25.0.1,"
+                    " whose certifi is affected, the pip and certifi checks decide",
+                ],
+            ),
+            (
+                "Python 3.13.5\n",
+                [f"WARN  python3 [host] found 3.13.5, fixed 3.13.18 ({note})"],
+            ),
+        ):
+            with self.subTest(output=output):
+                version = output.split()[1]
+                ctx, _ = tool_context("python3", output, env=hostenv(running=version))
+                self.assertEqual(lines(CPythonHost(), ctx), want)
+
     def test_cpython_running_interpreter_when_it_differs(self) -> None:
         ctx, _ = tool_context(
             "python3", "Python 3.13.5\n", env=hostenv(running="3.9.25")

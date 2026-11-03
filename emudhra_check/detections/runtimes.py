@@ -34,6 +34,7 @@ from emudhra_check.detections.shared import (
 )
 from emudhra_check.fixes import (
     BUN_FIXED,
+    CPYTHON_BUNDLED_PIP,
     CPYTHON_FIXED,
     DENO_FIXED,
     GO_FIXED,
@@ -358,12 +359,25 @@ class GoToolchain:
                 )
 
 
-def cpython_finding(subject: Subject, version: str) -> Finding:
-    """Judge a CPython version: end-of-life branches have no fix, the rest by their branch's ssl fix."""
+def cpython_findings(subject: Subject, version: str) -> list[Finding]:
+    """Judge a CPython version: end-of-life branches have no fix, the rest by their branch's ssl fix, with a
+    note on branches whose fixed release still bundles an affected pip."""
     parsed = parse_cpython_version(version)
-    if parsed is not None and parsed.release[:2] < CPYTHON_OLDEST_FIXED_BRANCH:
-        return Finding(Level.WARN, subject, f"found {version}, end-of-life, no fix")
-    return judge_branched(subject, version, CPYTHON_FIXED, parse_cpython_version)
+    if parsed is None:
+        return [judge_branched(subject, version, CPYTHON_FIXED, parse_cpython_version)]
+    if parsed.release[:2] < CPYTHON_OLDEST_FIXED_BRANCH:
+        return [Finding(Level.WARN, subject, f"found {version}, end-of-life, no fix")]
+    findings = [judge_branched(subject, version, CPYTHON_FIXED, parse_cpython_version)]
+    branch = ".".join(str(n) for n in parsed.release[:2])
+    pip = dict(CPYTHON_BUNDLED_PIP).get(branch)
+    fixed = dict(CPYTHON_FIXED.fixes).get(branch)
+    if pip is not None and fixed is not None:
+        detail = (
+            f"{fixed} blocks the compromised keys in ssl but bundles pip {pip},"
+            " whose certifi is affected, the pip and certifi checks decide"
+        )
+        findings.append(Finding(Level.INFO, subject, detail))
+    return findings
 
 
 class CPythonHost:
@@ -389,9 +403,9 @@ class CPythonHost:
             )
             yield from lines
             if found is not None:
-                yield cpython_finding(Subject("python3", "host"), found)
+                yield from cpython_findings(Subject("python3", "host"), found)
         if found != running:
-            yield cpython_finding(Subject("python3", "running"), running)
+            yield from cpython_findings(Subject("python3", "running"), running)
 
 
 def manager_version(path: Path) -> Optional[str]:

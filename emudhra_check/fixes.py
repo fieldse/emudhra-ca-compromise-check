@@ -41,8 +41,10 @@ CPYTHON_FIXED: Final = FixRule(  # PYJS-028 (R177), PYJS-032 (R179), PY-CPY-07 (
     2,
     Level.WARN,
     Level.WARN,
-    "fixed releases block the compromised keys in ssl and bundle a fixed pip, the pip and certifi checks decide",
+    "fixed releases block the compromised keys in ssl, the pip and certifi checks decide",
 )
+# PYJS-028 (R177), PY-CPY-01 and PY-CPY-02 (R358): the pip these fixed releases bundle vendors an affected certifi.
+CPYTHON_BUNDLED_PIP: Final = (("3.11", "24.0"), ("3.12", "25.0.1"))
 CERTIFI_FIXED: Final = FixRule.single(  # PYJS-003 (R162), PYJS-004 (R161)
     "2026.10.18", Level.FAIL, "vendors its own CA bundle"
 )
