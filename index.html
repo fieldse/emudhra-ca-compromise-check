@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>eMudhra G3 CA compromise check</title>
-<meta name="description" content="How to check whether your stack still trusts the compromised eMudhra G3 certificates. Covers what happened, who is exposed through the G3 root and the AAA Certificate Services cross-signs, one read-only check per trust store, runtime, package, app and image, and an automated checker script.">
+<meta name="description" content="How to check whether your stack still trusts the compromised eMudhra G3 certificates, with a read-only checker, one check command per stack and the fixed versions.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <style>
 :root {
-  /* Blacklight Security: flat near-black ground, zinc cards with faint borders, one purple accent. */
+  /* Dark theme: flat near-black ground, zinc cards with faint borders, one purple accent. */
   --bg: #0b0b0d;
   --paper: #111114;
   --raised: #16161a;
@@ -138,7 +138,7 @@ footer { border-top: 1px solid var(--rule); padding-block: 20px 32px; font-size:
   a { color: #000; }
 }
 
-/* Blacklight treatment: centered hero, mono eyebrow pills, purple highlight word, rounded bordered cards. */
+/* Page treatment: centered hero, mono eyebrow pills, purple highlight word, rounded bordered cards. */
 body { color: var(--body); font-size: 18px; }
 table, table.list { font-size: 16px; }
 .cmd code, .code pre { font-size: 14.5px; }
@@ -147,10 +147,14 @@ strong, b, td:first-child, dt, h1, h2, h3 { color: var(--ink); }
 .band .wrap { display: flex; flex-direction: column; align-items: center; }
 .band .ids { display: inline-block; margin: 0; padding: 4px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper);
   font: 500 13px/1.5 var(--mono); color: var(--primary); letter-spacing: 0.01em; }
+.band .ids { max-width: none; white-space: nowrap; }
+@media (max-width: 640px) { .band .ids { white-space: normal; } }
 .band .ids b, .band .ids a { color: var(--primary); font-weight: 500; }
+.band .tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0 0 14px; }
+.band .tags span { padding: 3px 10px; border: 1px solid var(--rule); border-radius: 999px; font: 500 12px/1.5 var(--mono); color: var(--muted); letter-spacing: 0.02em; }
 .band h1 { margin: 24px 0 18px; font-size: clamp(30px, calc((100vw - 48px) / 18), 60px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--band-ink); max-width: none; }
 .band .wrap { max-width: 1440px; }
-.band p:not(.ids) { color: var(--muted); font-size: 19px; line-height: 1.6; max-width: 58ch; margin: 0 auto; }
+.band p:not(.ids):not(.tags) { color: var(--muted); font-size: 19px; line-height: 1.6; max-width: 58ch; margin: 0 auto; }
 .hl { color: var(--primary); }
 main { gap: 72px; padding-block: 48px 80px; }
 h2 { border-bottom: 0; padding-bottom: 0; font-size: clamp(26px, 3.4vw, 36px); font-weight: 800; letter-spacing: -0.025em; }
@@ -221,7 +225,7 @@ nav.toc li span { display: none; }
 .src a { display: inline-flex; align-items: center; gap: 8px; }
 .src a { padding: 6px 14px; border: 1px solid var(--rule); border-radius: 8px; background: var(--raised); color: var(--ink); font-weight: 600; font-size: 14px; text-decoration: none; }
 .src a:hover { border-color: var(--primary); box-shadow: 0 0 16px rgba(168, 85, 247, .3); }
-/* Blacklight call to action, after the mitigation section */
+/* Call to action box */
 .cta { border: 1px solid rgba(168, 85, 247, .35); border-radius: 12px; padding: 32px;
   background: linear-gradient(135deg, rgba(168, 85, 247, .2) 0%, rgba(168, 85, 247, .06) 60%, rgba(168, 85, 247, .02) 100%), var(--paper);
   display: grid; gap: 14px; }
@@ -296,191 +300,546 @@ section.area h3 { margin-top: 8px; }
 p.more a { font-weight: 600; font-size: 15px; }
 #manual > .read { max-width: 70ch; }
 
+/* Reading layout: quiet reference tags, sentence-case labels, lead-then-detail lists, compact tables with a Refs column. */
+.rl a { color: var(--muted); }
+.rl a:hover { color: var(--link); }
+dl.intro dt { font-size: 18px; letter-spacing: 0; text-transform: none; padding-top: 22px; }
+dl.intro dd > ul { gap: 12px; }
+dl.intro ul ul { margin-top: 4px; gap: 3px; }
+p.key { max-width: 70ch; font-size: 19px; line-height: 1.55; color: var(--ink); }
+section > h3 { margin-top: 12px; }
+ul.points { margin: 0; padding: 0; list-style: none; display: grid; gap: 22px; max-width: 80ch; }
+ul.points > li > strong:first-child { display: block; margin-bottom: 4px; }
+ul.points ul, ul.points ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+ul.points ul ul, ul.points ul ol { margin-top: 4px; gap: 2px; }
+ul.points li li::marker { color: var(--primary); }
+ul.points .code { margin-top: 4px; }
+table.list.tbl { min-width: 640px; font-size: 15.5px; }
+.tbl th, .tbl td { padding: 11px 14px; }
+.tbl td:first-child { width: 12rem; white-space: normal; font-weight: 600; color: var(--ink); }
+.tbl td ul { margin: 0; padding-left: 16px; display: grid; gap: 4px; }
+.tbl td.rf { width: 5rem; font: 500 13px var(--mono); white-space: nowrap; }
+.tbl td.rf a { display: block; text-decoration: none; }
+.tbl.when td:first-child { width: 10rem; white-space: nowrap; font: 500 14px var(--mono); color: var(--muted); }
+section.area { border-top: 1px solid var(--rule); padding-top: 28px; gap: 16px; }
+section.area h3 { margin-top: 0; }
+dl.levels + p, dl.levels + dl.levels { margin-top: 4px; }
+@media (max-width: 640px) {
+  table.list.tbl { min-width: 0; }
+  .tbl thead { display: none; }
+  .tbl, .tbl tbody, .tbl tr, .tbl td, .tbl tr.grp th { display: block; width: auto; }
+  .tbl tr { padding: 10px 0; border-bottom: 1px solid var(--rule); }
+  .tbl tr:last-child { border-bottom: 0; }
+  .tbl td, .tbl.when td:first-child { width: auto; border: 0; padding: 3px 16px; }
+  .tbl td:empty { display: none; }
+  .tbl td.rf a { display: inline; margin-right: 10px; }
+  dl.intro dt { padding-bottom: 4px; }
+  dl.intro dd { padding-top: 4px; }
+}
+
+/* Sister-page layout: the main check table, per-area caveat cards and the section Sources line. */
+#caveats { display: grid; gap: 32px; }
+.eco { display: grid; gap: 12px; }
+.eco h4 { margin: 12px 0 0; font-size: 16px; }
+table.caveats { min-width: 0; }
+table.caveats td:first-child { white-space: normal; width: 14rem; }
+table.caveats td ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+nav.toc h2 { font-size: 18px; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--primary); margin-bottom: 10px; }
+td.rf { font: 500 13px var(--mono); white-space: nowrap; }
+td.rf a { display: block; text-decoration: none; }
+.eco > p a { font-weight: 600; font-size: 15px; }
+p.refs-line { font-size: 14px; max-width: 80ch; }
+p.refs-line a { font: 500 13px var(--mono); text-decoration: none; }
+@media (max-width: 640px) { table.caveats td:first-child { width: auto; } }
+
+/* Manual checks: one card per stack. */
+.stacks { display: grid; gap: 28px; margin-top: 8px; }
+.stacks .eco { border-top: 1px solid var(--rule); padding-top: 24px; }
+.stacks .eco > p { max-width: 75ch; }
+
+/* Further reading: grouped primary sources. */
+#sources h4 { margin: 18px 0 6px; font-size: 13px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+
+/* Checks page: one card per item, with a status chip under its name. */
+.chip.fixed { color: var(--good); border-color: rgba(74, 222, 128, .45); background: rgba(74, 222, 128, .08); }
+.eco > p.status { margin-top: -6px; }
+.eco > p.status .chip { margin-bottom: 0; }
+.stacks .eco:target { outline: 1px solid var(--primary); outline-offset: 12px; border-radius: 4px; }
+
+/* Alias anchors kept for old links take no grid cell. */
+a[id]:empty { position: absolute; }
+section > h2 { margin-bottom: 8px; }
 </style>
 </head>
 <body>
 
 <header class="band">
   <div class="wrap">
-    <a class="back" href="checks.html">Checks by item →</a>
-    <p class="ids"><b>eMudhra G3</b> &nbsp;·&nbsp; Find-and-fix guide &nbsp;·&nbsp; <a href="checks.html">Checks</a> &nbsp;·&nbsp; <a href="detections.html">Detections</a> &nbsp;·&nbsp; <a href="references.html">References</a></p>
-    <h1><span class='hl'>eMudhra G3</span> CA compromise<br>Exposure check</h1>
-    <p>Eight eMudhra G3 intermediate CAs have private keys anyone can compute, and Sectigo cross-signed all eight with the same keys&nbsp;<span class="rl">[<a href="references.html#r001">R001</a>, <a href="references.html#r002">R002</a>]</span>. Browsers block them&nbsp;<span class="rl">[<a href="references.html#r026">R026</a>, <a href="references.html#r027">R027</a>, <a href="references.html#r035">R035</a>, <a href="references.html#r033">R033</a>]</span>. Your OS packages, runtimes, language packages, JDKs, apps and container images carry their own trust stores and need their own updates&nbsp;<span class="rl">[<a href="references.html#r038">R038</a>, <a href="references.html#r039">R039</a>]</span>. <a href="#manual">Start with the checks</a>.</p>
+    <p class="tags"><span>eMudhra G3</span><span>CA key compromise</span><span>October 2026</span></p>
+    <p class="ids">Guide &nbsp;·&nbsp; <a href="incident.html">Incident</a> &nbsp;·&nbsp; <a href="checks.html">Affected software</a> &nbsp;·&nbsp; <a href="fixes.html">Fixes</a> &nbsp;·&nbsp; <a href="detections.html">Checker rules</a> &nbsp;·&nbsp; <a href="proof.html">Proof</a> &nbsp;·&nbsp; <a href="references.html">References</a></p>
+    <h1><span class='hl'>eMudhra G3</span> CA compromise<br>Are you affected?</h1>
+    <p>Eight eMudhra G3 intermediate certificate authorities (CAs) have private keys anyone can compute. With them, anyone can issue a certificate for any website. OS packages, runtimes, JDKs, apps and container images carry their own trust stores, the lists of certificates they trust, so each needs its own update. <a href="#helper">Jump to the checker</a>.</p>
   </div>
 </header>
-
 <main class="wrap">
+<nav class="toc read" aria-label="Contents"><h2>Contents</h2><ol>
+  <li><a href="#tldr">TL;DR</a><span>Who is affected and where to start</span></li>
+  <li><a href="#vuln">The vulnerability</a><span>The weak keys and what an attacker can do</span></li>
+  <li><a href="#manual">Manual checks</a><span>Check each stack by hand, with affected and fixed versions</span></li>
+  <li><a href="#helper">Automated checker</a><span>A read-only check that runs in one pass</span></li>
+  <li><a href="#proof">Verifying a finding</a><span>Check any finding yourself from the original sources</span></li>
+  <li><a href="#resources">Documentation</a><span>How it works, its rules and its sources</span></li>
+  <li><a href="#help">Need help?</a><span>Help from Blacklight Security</span></li>
+  <li><a href="#sources">References</a><span>The sources behind this page, grouped by publisher</span></li>
+</ol></nav>
+<section id="tldr">
+<h2>TL;DR</h2>
+<p class="key"><strong>Update every OS package, runtime, JDK, app and container image that still trusts the compromised certificates.</strong></p>
+<p class="read">An updated OS doesn’t fix the others. The usual misses are pip and certifi in each Python venv, Node.js, JDKs, Electron apps, the macOS command-line tools and container images.</p>
+<p>Either of these finds them:</p>
+<ul class="notes">
+<li>The <a href="#manual">manual checks</a> give a check command and the fixed version for each stack.</li>
+<li>The <a href="#helper">checker</a> scans your machine in one read-only pass and reports what still trusts the compromised certificates or sits below its fix.</li>
+</ul>
+<p class="read">If a store can’t be updated today, its card on the <a href="fixes.html#caveats">fixes page</a> gives a stopgap under Until a fix ships.</p>
+</section>
+<section id="vuln">
+<h2>The vulnerability</h2>
+<p class="key"><strong>In October 2026 the certificate authority eMudhra was found to have made eight of its intermediate CAs with private keys anyone can calculate. Anyone can now forge a certificate for any website, and any software not yet updated to distrust those CAs will accept it.</strong></p>
+<dl class="intro">
+<dt>The problem</dt><dd><ul>
+<li>A certificate authority (CA) signs the certificates that prove a website or program is genuine. Clients trust whatever a trusted CA signs.</li>
+<li>Eight eMudhra G3 intermediate CAs have private keys below 256, so anyone can work them out from the public certificates.</li>
+<li>Clients trust the eight through three eMudhra G3 root CAs, including emSign ECC Root CA - G3.</li>
+<li>Sectigo also gave each of the eight a second certificate, a cross-sign, under its AAA Certificate Services root with the same key. That makes 16 affected certificates.</li>
+</ul></dd>
+<dt>Impact</dt><dd><ul>
+<li>Anyone can also make malware look signed by a trusted publisher on Windows.</li>
+</ul></dd>
+</dl>
+<p class="muted read">The <a href="incident.html">incident page</a> has the cause, the downstream impact, who is exposed and a timeline.</p>
+</section>
+<section id="manual">
+<h2>Manual checks</h2>
+<p class="key"><strong>Check each stack you run by hand, if you’d rather not run the <a href="#helper">checker</a> or want to confirm what it found.</strong></p>
+<p class="read">Most stacks keep their own trust store, so updating one leaves the others as they were. A fixed OS store doesn’t fix Node.js, pip, a JDK or an Electron app, and a container trusts only the bundle inside its image. Run the checks on every host and inside every image you ship.</p>
+<p>Each stack below has up to two kinds of check:</p>
+<ul class="notes">
+<li><strong>Version check.</strong> Prints the installed version. Compare it with the table under the commands.</li>
+<li><strong>Content check.</strong> Looks for the G3 or AAA Certificate Services root in the store itself. The comment above each command says what an affected result looks like.</li>
+</ul>
+<section id="fingerprints">
+<h3>Certificates to look for</h3>
+<p class="read">To search a bundle or keystore by fingerprint, use these. The repository’s <code>rules/iocs.csv</code> lists all 16 compromised intermediates and cross-signs with their serials and SHA-256 fingerprints. It has no row for AAA Certificate Services, so take that fingerprint from this table.</p>
+<div class="table-scroll"><table class="list fps"><thead><tr><th>Certificate</th><th>SHA-256</th></tr></thead><tbody>
+<tr><td>emSign ECC Root CA - G3</td><td class="fp"><code>86A1ECBA089C4A8D3BBE2734C612BA341D813E043CF9E8A862CD5C57A36BBE6B</code></td></tr>
+<tr><td>emSign Root TLS CA - G3</td><td class="fp"><code>7DD78D5F4F13459A83DFF9ABBBA62EDBAF6F2D102BF257FD712F4D9F2746ED8D</code></td></tr>
+<tr><td>emSign Root CS CA - G3</td><td class="fp"><code>F2EDAAFF3D9B701FB4D14C9F285F8C0BAD90FC3BCC1FA07D47F4718EDABA34A5</code></td></tr>
+<tr><td>AAA Certificate Services</td><td class="fp"><code>D7A7A0FB5D7E2731D771E9484EBCDEF71D5F0C3E0A2948782BC83EE0EA699EF4</code></td></tr>
+</tbody></table></div>
+<p class="read">Jump to: <a href="#m-debian">Debian and Ubuntu</a> · <a href="#m-alpine">Alpine</a> · <a href="#m-rhel">RHEL, AlmaLinux, Rocky</a> · <a href="#m-macos">macOS</a> · <a href="#m-brew">Homebrew</a> · <a href="#m-java">Java</a> · <a href="#m-certifi">certifi</a> · <a href="#m-pip">pip</a> · <a href="#m-uv">uv</a> · <a href="#m-node">Node.js</a> · <a href="#m-bun">Bun and Deno</a> · <a href="#m-go">Go</a> · <a href="#m-rust">Rust</a> · <a href="#m-pkgs">PHP, Ruby, Perl, Elixir</a> · <a href="#m-electron">Electron apps</a> · <a href="#m-images">Container images</a></p>
+<p class="muted read">The <a href="checks.html">Affected software page</a> has all 130 items, with the AAA status of each.</p>
+<div class="stacks">
+<div class="eco" id="m-debian">
+<h3>Debian and Ubuntu</h3>
+<p>The system CA bundle, from the <code>ca-certificates</code> package.</p>
+<div class="code"><button type="button">Copy</button><pre># Installed version
+dpkg-query -W ca-certificates
 
-  <nav class="toc read" aria-label="Contents"><h2>Contents</h2><ol>
-    <li><a href="#what">What happened</a></li>
-    <li><a href="#exposed">Who is exposed</a></li>
-    <li><a href="#manual">Manual checks by area</a></li>
-    <li><a href="#helper">Automated checker</a></li>
-    <li><a href="#mitigate">If you can’t upgrade today</a></li>
-    <li><a href="#help">Need help</a></li>
-    <li><a href="#sources">Sources</a></li>
-  </ol></nav>
+# Roots still in the bundle. Prints nothing on a fixed system
+openssl crl2pkcs7 -nocrl -certfile /etc/ssl/certs/ca-certificates.crt \
+  | openssl pkcs7 -print_certs -noout \
+  | grep -E 'emSign ECC Root CA - G3|AAA Certificate Services'</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>Release</th><th>Affected</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td>Debian 13</td><td class="bad"><code>20250419</code></td><td class="good"><code>20250419+deb13u1</code></td></tr>
+<tr><td>Debian 12</td><td class="bad"><code>20230311+deb12u1</code>, <code>20250419~deb12u1</code></td><td class="good"><code>20250419~deb12u2</code></td></tr>
+<tr><td>Debian forky, sid</td><td class="bad"><code>20260816</code> and earlier</td><td class="good"><code>20260816+nmu1</code></td></tr>
+<tr><td>Debian 11</td><td class="bad"><code>20210119</code></td><td class="good">No fix yet</td></tr>
+<tr><td>Ubuntu 22.04</td><td class="bad"><code>20211016</code> (release build)</td><td class="good"><code>20260816ubuntu0.22.04.1</code></td></tr>
+<tr><td>Ubuntu 24.04</td><td class="bad"><code>20240203</code> (release build)</td><td class="good"><code>20260816ubuntu0.24.04.1</code></td></tr>
+<tr><td>Ubuntu 26.04</td><td class="bad"><code>20260223</code> (release build)</td><td class="good"><code>20260816ubuntu0.26.04.1</code></td></tr>
+<tr><td>Ubuntu 26.10</td><td class="bad"><code>20260816</code> (release build)</td><td class="good"><code>20260816ubuntu0.26.10.1</code></td></tr>
+</tbody></table></div>
+<p><a href="fixes.html#a-os">Fixing OS trust stores →</a></p>
+</div>
+<div class="eco" id="m-alpine">
+<h3>Alpine</h3>
+<p>The system CA bundle, from the <code>ca-certificates</code> package.</p>
+<div class="code"><button type="button">Copy</button><pre># Installed version
+apk info -v 2&gt;/dev/null | grep ca-certificates
 
-  <section id="what">
-    <h2>What happened</h2>
-    <dl class="intro">
-      <dt>What it is</dt>
-      <dd><ul><li><strong>Eight eMudhra G3 intermediates have private keys anyone can compute&nbsp;<span class="rl">[<a href="references.html#r001">R001</a>]</span>.</strong> Their P-384 keys are whole numbers below 256, namely 4, 56, 66, 115, 155, 156, 230 and 237&nbsp;<span class="rl">[<a href="references.html#r001">R001</a>]</span>.</li><li><strong>Six are TLS CAs and two are code-signing CAs&nbsp;<span class="rl">[<a href="references.html#r001">R001</a>]</span>.</strong> The TLS CAs sit under emSign Root TLS CA - G3 and the code-signing CAs under emSign Root CS CA - G3&nbsp;<span class="rl">[<a href="references.html#r001">R001</a>]</span>. Browsers trust the TLS CAs through emSign ECC Root CA - G3, which cross-signs emSign Root TLS CA - G3&nbsp;<span class="rl">[<a href="references.html#r005">R005</a>]</span>.</li><li><strong>Sectigo's eight cross-signs reuse the same keys, so 16 certificates are affected&nbsp;<span class="rl">[<a href="references.html#r002">R002</a>]</span>.</strong> Sectigo issued them under its AAA Certificate Services root, dated 14 May 2025&nbsp;<span class="rl">[<a href="references.html#r002">R002</a>]</span>. The repo's <code>rules/iocs.csv</code> lists all 16 with serials and SHA-256 fingerprints&nbsp;<span class="rl">[<a href="references.html#r003">R003</a>]</span>.</li><li><strong>A TLS key lets anyone forge a certificate for any website&nbsp;<span class="rl">[<a href="references.html#r004">R004</a>]</span>.</strong> Any client that still trusts the chain accepts the forgery, which opens its traffic to interception&nbsp;<span class="rl">[<a href="references.html#r004">R004</a>]</span>. The two code-signing keys could make malware look like it comes from a trusted publisher on Windows&nbsp;<span class="rl">[<a href="references.html#r004">R004</a>]</span>.</li><li><strong>Chrome's paranoid_crypto check found no other weak CA keys&nbsp;<span class="rl">[<a href="references.html#r036">R036</a>]</span>.</strong> It checked the Chrome-trusted CA certificates in its monitoring data and in CCADB within an hour of the report&nbsp;<span class="rl">[<a href="references.html#r036">R036</a>]</span>.</li></ul></dd>
-      <dt>Cause</dt>
-      <dd><ul><li><strong>A key ceremony rehearsal left two key objects per CA&nbsp;<span class="rl">[<a href="references.html#r008">R008</a>]</span>.</strong> At the 30 April 2025 ceremony, eMudhra's script generated each B and C series key, then wrapped, unwrapped and re-imported it&nbsp;<span class="rl">[<a href="references.html#r008">R008</a>]</span>. The CA certificates were issued over the re-imported key objects rather than the originals&nbsp;<span class="rl">[<a href="references.html#r008">R008</a>]</span>.</li><li><strong>Only the P-384 keys of series B and C are affected&nbsp;<span class="rl">[<a href="references.html#r001">R001</a>]</span>.</strong> The eight came from a batch of 24 intermediates made that day&nbsp;<span class="rl">[<a href="references.html#r001">R001</a>]</span>. The affected keys were generated on Utimaco HSMs, while series A and A-1 were generated on Entrust nShield HSMs and skipped the rehearsal&nbsp;<span class="rl">[<a href="references.html#r008">R008</a>]</span>.</li><li><strong>eMudhra has given two accounts of why the weak keys signed the CSRs&nbsp;<span class="rl">[<a href="references.html#r009">R009</a>]</span>.</strong> On 19 October it said staff picked them by mistake because the key labels were similar&nbsp;<span class="rl">[<a href="references.html#r009">R009</a>]</span>. On 28 October it said the ceremony script itself specified the re-imported keys&nbsp;<span class="rl">[<a href="references.html#r009">R009</a>]</span>.</li></ul></dd>
-      <dt>Timeline</dt>
-      <dd><ul><li><strong>17 October: found, reported and blocked&nbsp;<span class="rl">[<a href="references.html#r010">R010</a>]</span>.</strong> A researcher scanning certificates disclosed in CCADB found the weak keys at 16:27 UTC and reported them to Apple, Chrome, Microsoft, Mozilla and eMudhra at 18:05 UTC&nbsp;<span class="rl">[<a href="references.html#r010">R010</a>]</span>. Chrome's CRLSet blocked the keys at 19:45 UTC&nbsp;<span class="rl">[<a href="references.html#r026">R026</a>]</span>. eMudhra acknowledged at about 21:28 UTC and said EM DV TLS CA - G3C had been live, and Mozilla recovered the keys on its own at 21:48 UTC&nbsp;<span class="rl">[<a href="references.html#r010">R010</a>]</span>.</li><li><strong>17 October: Firefox OneCRL&nbsp;<span class="rl">[<a href="references.html#r027">R027</a>]</span>.</strong> The block reached all Firefox users on standard settings by 22:59 UTC&nbsp;<span class="rl">[<a href="references.html#r027">R027</a>]</span>. The day is disputed, because the NSS 3.131.1 announcement relayed on oss-security says OneCRL went out on Saturday 19th, while Mozilla's blog and the bug say 17 October&nbsp;<span class="rl">[<a href="references.html#r027">R027</a>]</span>.</li><li><strong>18 October: eMudhra revoked the eight&nbsp;<span class="rl">[<a href="references.html#r011">R011</a>]</span>.</strong> It revoked them with reason cACompromise between 09:24 and 09:38 UTC&nbsp;<span class="rl">[<a href="references.html#r011">R011</a>]</span>. Mozilla opened Bug 2083449 at 12:06 UTC&nbsp;<span class="rl">[<a href="references.html#r012">R012</a>]</span>.</li><li><strong>19 October: Sectigo revoked the cross-signs&nbsp;<span class="rl">[<a href="references.html#r011">R011</a>]</span>.</strong> Its CRL backdates the revocations to 14 May 2025, and Sectigo also revoked its other eMudhra cross-signs and ended the relationship&nbsp;<span class="rl">[<a href="references.html#r011">R011</a>]</span>. Mozilla warned downstream trust store maintainers the same day&nbsp;<span class="rl">[<a href="references.html#r012">R012</a>]</span>. Android got the Chrome block through Google Play services around 22:00 UTC&nbsp;<span class="rl">[<a href="references.html#r026">R026</a>]</span>.</li><li><strong>20 October: root removal decided&nbsp;<span class="rl">[<a href="references.html#r028">R028</a>]</span>.</strong> Mozilla chose emergency removal of emSign ECC Root CA - G3, and Chrome committed to the same&nbsp;<span class="rl">[<a href="references.html#r028">R028</a>]</span>. Mozilla published its blog post on the incident&nbsp;<span class="rl">[<a href="references.html#r012">R012</a>]</span>. eMudhra confirmed at 16:27 UTC that it had stopped all G3 issuance&nbsp;<span class="rl">[<a href="references.html#r016">R016</a>]</span>.</li></ul></dd>
-      <dt>Root programs</dt>
-      <dd><ul><li><strong>Chrome removed emSign ECC Root CA - G3 in Chrome Root Store v43&nbsp;<span class="rl">[<a href="references.html#r031">R031</a>]</span>.</strong> Version 42 still has it&nbsp;<span class="rl">[<a href="references.html#r031">R031</a>]</span>. Google expected v43 on all devices on the morning of 27 October (Pacific time), and no source read confirms it shipped&nbsp;<span class="rl">[<a href="references.html#r031">R031</a>]</span>. The 17 October CRLSet blocks by public key, so it also covers the Sectigo cross-signs&nbsp;<span class="rl">[<a href="references.html#r026">R026</a>]</span>.</li><li><strong>Mozilla removed the root in NSS 3.131.1 on 20 October&nbsp;<span class="rl">[<a href="references.html#r029">R029</a>]</span>.</strong> The release also removes emSign Root CA - C1 and emSign ECC Root CA - C3&nbsp;<span class="rl">[<a href="references.html#r029">R029</a>]</span>. Firefox 158.0.1, ESR 153.5.1 and ESR 115.43.1 shipped the same day with the block built in, for users whose settings keep OneCRL from updating&nbsp;<span class="rl">[<a href="references.html#r030">R030</a>]</span>. Whether ESR 115.43.1 is fixed is disputed&nbsp;<span class="rl">[<a href="references.html#r030">R030</a>]</span>.</li><li><strong>Microsoft removed six emSign G3 roots and AAA Certificate Services&nbsp;<span class="rl">[<a href="references.html#r034">R034</a>]</span>.</strong> Windows dropped them in a 26 October out-of-band update (KB5134133, KB5134137), and Edge and WebView2 on 27 October in PKI Metadata 72.0.0.0&nbsp;<span class="rl">[<a href="references.html#r034">R034</a>]</span>. On 20 October the Windows Disallowed CTL had already blocked the eight keys, and Edge CRLSet 2026.10.20 the TLS keys&nbsp;<span class="rl">[<a href="references.html#r033">R033</a>]</span>.</li><li><strong>Apple blocks the 12 TLS certificates and the G3 ECC root&nbsp;<span class="rl">[<a href="references.html#r035">R035</a>]</span>.</strong> The 12 are the six eMudhra TLS CAs and their six Sectigo cross-signs, and the root block started on 23 October&nbsp;<span class="rl">[<a href="references.html#r035">R035</a>]</span>. Apple dates the first block to 19 October, while the community tracker says 22 October&nbsp;<span class="rl">[<a href="references.html#r035">R035</a>]</span>. Command-line tools that read <code>/etc/ssl/cert.pem</code> skip Apple's block&nbsp;<span class="rl">[<a href="references.html#r044">R044</a>]</span>.</li><li><strong>No root program has removed emSign Root CA - G1&nbsp;<span class="rl">[<a href="references.html#r032">R032</a>]</span>.</strong> Chrome Root Store v43 and NSS master still carry it, Mozilla said on 20 October it was not removing it at that time, and Microsoft is evaluating the remaining eMudhra roots&nbsp;<span class="rl">[<a href="references.html#r032">R032</a>]</span>. OpenJDK's interim fix deletes the G1 alias anyway&nbsp;<span class="rl">[<a href="references.html#r037">R037</a>]</span>.</li></ul></dd>
-      <dt>eMudhra since</dt>
-      <dd><ul><li><strong>eMudhra is leaving the TLS business&nbsp;<span class="rl">[<a href="references.html#r015">R015</a>]</span>.</strong> Its board decided on 22 October to leave the global SSL/TLS certificate market, and its G1 RSA roots keep serving customers until the transition ends&nbsp;<span class="rl">[<a href="references.html#r015">R015</a>]</span>.</li><li><strong>25,058 G3 certificates were still valid on 28 October&nbsp;<span class="rl">[<a href="references.html#r016">R016</a>]</span>.</strong> All sit under two InCommon CAs, and eMudhra does not force their replacement&nbsp;<span class="rl">[<a href="references.html#r016">R016</a>]</span>. US ACME subscribers move to a hierarchy under emSign Root CA - G1, and non-US subscribers are re-issued through Sectigo under its R46 or E46 roots&nbsp;<span class="rl">[<a href="references.html#r016">R016</a>]</span>. eMudhra expects the non-US re-issuance to finish by 15 November and has no date for moving US subscribers off G1&nbsp;<span class="rl">[<a href="references.html#r016">R016</a>]</span>.</li><li><strong>The root-cause report is still owed&nbsp;<span class="rl">[<a href="references.html#r018">R018</a>]</span>.</strong> eMudhra promised a full report through CCADB but had filed none on Bug 2083449 by 02:21 UTC on 31 October&nbsp;<span class="rl">[<a href="references.html#r018">R018</a>]</span>. It says it appointed KPMG as independent reviewer on 30 October, a claim that rests only on eMudhra's own status page&nbsp;<span class="rl">[<a href="references.html#r017">R017</a>]</span>.</li></ul></dd>
-      <dt>Misuse</dt>
-      <dd><ul><li><strong>No source reports attacks on users&nbsp;<span class="rl">[<a href="references.html#r014">R014</a>]</span>.</strong> None of the root program or CA statements read mentions misuse of the keys&nbsp;<span class="rl">[<a href="references.html#r014">R014</a>]</span>. eMudhra says it issued no end-entity certificates from the eight CAs and put only EM DV TLS CA - G3C into production&nbsp;<span class="rl">[<a href="references.html#r014">R014</a>]</span>.</li><li><strong>Nothing was in CT before Chrome's block&nbsp;<span class="rl">[<a href="references.html#r046">R046</a>]</span>.</strong> Google says no TLS certificate under the six TLS CAs was logged to CT before then, so clients that enforce CT could not have been attacked&nbsp;<span class="rl">[<a href="references.html#r046">R046</a>]</span>. Whether anyone used the keys against clients that don't enforce CT before disclosure is unknown&nbsp;<span class="rl">[<a href="references.html#r014">R014</a>]</span>.</li><li><strong>A count of 107,107 post-disclosure CT certificates is unconfirmed&nbsp;<span class="rl">[<a href="references.html#r013">R013</a>]</span>.</strong> One commenter on Bug 2083449 counted that many certificates under six of the keys in e-Szignó's CT logs, logged on 20 and 21 October, and called 106,050 of them proof-of-concept certificates for google[.]com&nbsp;<span class="rl">[<a href="references.html#r013">R013</a>]</span>. Nobody has replicated the count&nbsp;<span class="rl">[<a href="references.html#r013">R013</a>]</span>.</li></ul></dd>
-      <dt>CVE IDs</dt>
-      <dd><ul><li><strong>The compromise has no CVE of its own&nbsp;<span class="rl">[<a href="references.html#r019">R019</a>]</span>.</strong> Red Hat says it is not a software vulnerability, and the CVEs track downstream trust store updates&nbsp;<span class="rl">[<a href="references.html#r019">R019</a>]</span>. CVE-2026-111944 has no CVE record&nbsp;<span class="rl">[<a href="references.html#r019">R019</a>]</span>.</li><li><strong>CVE-2026-114820 and CVE-2026-91403 are Oracle CNA records&nbsp;<span class="rl">[<a href="references.html#r022">R022</a>]</span>.</strong> CVE-2026-114820 covers Java SE and GraalVM updates that remove the eMudhra roots&nbsp;<span class="rl">[<a href="references.html#r022">R022</a>]</span>. CVE-2026-91403 covers Java updates that distrust the intermediates&nbsp;<span class="rl">[<a href="references.html#r023">R023</a>]</span>. OpenJDK's own advisory reuses CVE-2026-114820, with issue JDK-8395690 as its fix marker&nbsp;<span class="rl">[<a href="references.html#r022">R022</a>]</span>.</li><li><strong>Go and Red Hat have their own CVEs&nbsp;<span class="rl">[<a href="references.html#r020">R020</a>]</span>.</strong> CVE-2026-111943 (Go CNA) adds a <code>crypto/x509</code> denylist, fixed in Go 1.26.10 and 1.27.3&nbsp;<span class="rl">[<a href="references.html#r020">R020</a>]</span>. CVE-2026-114406 (Red Hat) covers the RHEL <code>ca-certificates</code> package&nbsp;<span class="rl">[<a href="references.html#r021">R021</a>]</span>.</li><li><strong>Firefox, Electron and Perl have CVEs too&nbsp;<span class="rl">[<a href="references.html#r030">R030</a>]</span>.</strong> CVE-2026-113470 (Mozilla) covers the Firefox and Thunderbird block lists&nbsp;<span class="rl">[<a href="references.html#r030">R030</a>]</span>. CVE-2026-115570 (GitHub, GHSA-jr5w-w6x2-84p9) covers Electron before 42.11.16, 43.8.1, 44.9.1 and 45.0.0-beta.6&nbsp;<span class="rl">[<a href="references.html#r025">R025</a>]</span>. Every fixed Electron release checked still carries the G3 root, because the fix blocks the intermediates and leaves the root in place&nbsp;<span class="rl">[<a href="references.html#r271">R271</a>]</span>. CVE-2026-113812 (CPANSec) covers Perl <code>Mozilla::CA</code> before 20261020&nbsp;<span class="rl">[<a href="references.html#r024">R024</a>]</span>.</li></ul></dd>
-    </dl>
-    <h3>Certificates to look for</h3>
-    <p class="read">Search bundles and keystores for these roots by fingerprint. The repository’s <code>rules/iocs.csv</code> lists all 16 compromised intermediates and cross-signs with their serials and SHA-256 fingerprints&nbsp;<span class="rl">[<a href="references.html#r003">R003</a>]</span>. It has no row for AAA Certificate Services, so take that fingerprint from this table.</p>
-    <div class='table-scroll'><table class='list fps'><thead><tr><th>Certificate</th><th>SHA-256</th><th>Refs</th></tr></thead><tbody><tr><td>emSign ECC Root CA - G3</td><td class='fp'><code>86A1ECBA089C4A8D3BBE2734C612BA341D813E043CF9E8A862CD5C57A36BBE6B</code></td><td class='rf'><a href="references.html#r005">R005</a></td></tr><tr><td>emSign Root TLS CA - G3</td><td class='fp'><code>7DD78D5F4F13459A83DFF9ABBBA62EDBAF6F2D102BF257FD712F4D9F2746ED8D</code></td><td class='rf'><a href="references.html#r006">R006</a></td></tr><tr><td>emSign Root CS CA - G3</td><td class='fp'><code>F2EDAAFF3D9B701FB4D14C9F285F8C0BAD90FC3BCC1FA07D47F4718EDABA34A5</code></td><td class='rf'><a href="references.html#r006">R006</a></td></tr><tr><td>AAA Certificate Services</td><td class='fp'><code>D7A7A0FB5D7E2731D771E9484EBCDEF71D5F0C3E0A2948782BC83EE0EA699EF4</code></td><td class='rf'><a href="references.html#r007">R007</a></td></tr></tbody></table></div>
-  </section>
+# Roots still in the bundle. Prints nothing on a fixed system
+openssl crl2pkcs7 -nocrl -certfile /etc/ssl/certs/ca-certificates.crt \
+  | openssl pkcs7 -print_certs -noout \
+  | grep -E 'emSign ECC Root CA - G3|AAA Certificate Services'</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>Branch</th><th>Affected</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td>3.20 image</td><td class="bad"><code>20260413-r0</code></td><td class="good"><code>20261020-r0</code></td></tr>
+<tr><td>edge image</td><td class="bad"><code>20260611-r0</code></td><td class="good"><code>20261020-r0</code></td></tr>
+</tbody></table></div>
+<p><code>20261020-r0</code> is the fix on every branch.</p>
+<p><a href="fixes.html#a-os">Fixing OS trust stores →</a></p>
+</div>
+<div class="eco" id="m-rhel">
+<h3>RHEL, AlmaLinux and Rocky Linux</h3>
+<p>The system TLS bundle and the code-signing bundle, both from the <code>ca-certificates</code> package. AlmaLinux and Rocky Linux ship the same builds as RHEL.</p>
+<div class="code"><button type="button">Copy</button><pre># Installed version
+rpm -q ca-certificates
 
-  <section id="exposed">
-    <h2>Who is exposed</h2>
-    <p class="read">Update everything that carries its own trust store&nbsp;<span class="rl">[<a href="references.html#r038">R038</a>]</span>. Browsers on default settings are covered by pushed blocks and root store changes&nbsp;<span class="rl">[<a href="references.html#r026">R026</a>, <a href="references.html#r027">R027</a>, <a href="references.html#r035">R035</a>, <a href="references.html#r033">R033</a>]</span>. OS bundles, language packages, JDK <code>cacerts</code>, runtimes, Electron apps and container images each need their own update&nbsp;<span class="rl">[<a href="references.html#r038">R038</a>, <a href="references.html#r039">R039</a>, <a href="references.html#r025">R025</a>]</span>.</p>
-    <ul class="notes"><li><strong>Browsers on default settings are covered&nbsp;<span class="rl">[<a href="references.html#r026">R026</a>]</span>.</strong> Chrome's CRLSet reached users on 17 October&nbsp;<span class="rl">[<a href="references.html#r026">R026</a>]</span>. Mozilla says Firefox's OneCRL block did too, though its NSS 3.131.1 announcement says 19 October&nbsp;<span class="rl">[<a href="references.html#r027">R027</a>]</span>. Apple, Windows and Edge pushed their own blocks between 19 and 22 October&nbsp;<span class="rl">[<a href="references.html#r035">R035</a>, <a href="references.html#r033">R033</a>]</span>. A new Firefox ESR 115 profile can still trust the chains until OneCRL loads after 20 idle seconds&nbsp;<span class="rl">[<a href="references.html#r030">R030</a>]</span>.</li><li><strong>Apps that ship their own CA bundle need their own update, even on a patched Windows host&nbsp;<span class="rl">[<a href="references.html#r038">R038</a>]</span>.</strong> Microsoft says software that doesn't reliably check revocation or its disallowed list can still accept the chains if it keeps or restores trust in the removed roots&nbsp;<span class="rl">[<a href="references.html#r109">R109</a>]</span>. macOS command-line tools that read <code>/etc/ssl/cert.pem</code>, including curl, git, python3, ruby, perl and openssl, skip Apple's block and still accept the chains&nbsp;<span class="rl">[<a href="references.html#r044">R044</a>]</span>. A container trusts the CA bundle inside its image, so a patched host does not protect it&nbsp;<span class="rl">[<a href="references.html#r038">R038</a>]</span>.</li><li><strong>Runtimes and JDKs carry their own copy&nbsp;<span class="rl">[<a href="references.html#r039">R039</a>]</span>.</strong> Node.js bundles a Mozilla snapshot fixed at release time, so only a Node.js upgrade changes it&nbsp;<span class="rl">[<a href="references.html#r039">R039</a>]</span>. A JDK update fixes only its bundled <code>cacerts</code>, and an app's own JKS or PKCS12 truststore needs the roots removed from that file&nbsp;<span class="rl">[<a href="references.html#r039">R039</a>]</span>. Electron's advisory gives 42.11.16, 43.8.1, 44.9.1 and 45.0.0-beta.6 as the first releases that block the intermediates in its Chromium networking and Node.js TLS&nbsp;<span class="rl">[<a href="references.html#r025">R025</a>]</span>. Each Electron app needs its own release on one of them&nbsp;<span class="rl">[<a href="references.html#r272">R272</a>]</span>. Fixed Electron builds still contain the G3 root, so check each app's Electron version to tell fixed from unfixed&nbsp;<span class="rl">[<a href="references.html#r271">R271</a>]</span>.</li><li><strong>A store with AAA Certificate Services and no G3 root can still trust a forged chain&nbsp;<span class="rl">[<a href="references.html#r002">R002</a>]</span>.</strong> Sectigo cross-signed all eight compromised intermediates under its AAA Certificate Services root, and each cross-sign reuses the same weak key&nbsp;<span class="rl">[<a href="references.html#r002">R002</a>]</span>. A forged leaf can chain through those cross-signed copies to AAA, so removing emSign ECC Root CA - G3 alone does not block it&nbsp;<span class="rl">[<a href="references.html#r040">R040</a>]</span>. Before the incident Apple and Microsoft still trusted AAA, while Mozilla and Chrome had removed it&nbsp;<span class="rl">[<a href="references.html#r007">R007</a>]</span>.</li><li><strong>Microsoft removed AAA&nbsp;<span class="rl">[<a href="references.html#r034">R034</a>]</span>.</strong> Windows dropped it on 26 October, and Edge and WebView2 on 27 October&nbsp;<span class="rl">[<a href="references.html#r034">R034</a>]</span>. The 20 October Disallowed CTL block matches the keys, so it covers the cross-signs too&nbsp;<span class="rl">[<a href="references.html#r033">R033</a>]</span>.</li><li><strong>Mozilla trusts AAA for email only&nbsp;<span class="rl">[<a href="references.html#r041">R041</a>]</span>.</strong> NSS and Firefox carry the root without TLS trust&nbsp;<span class="rl">[<a href="references.html#r041">R041</a>]</span>. Mozilla left the cross-signs out of OneCRL, saying the root is not in its root store&nbsp;<span class="rl">[<a href="references.html#r041">R041</a>]</span>.</li><li><strong>Apple blocks the six TLS cross-signs&nbsp;<span class="rl">[<a href="references.html#r035">R035</a>]</span>.</strong> They are among the 12 TLS certificates Apple blocks&nbsp;<span class="rl">[<a href="references.html#r035">R035</a>]</span>. In <code>/etc/ssl/cert.pem</code> they still verify through AAA, so Apple's interim steps offer removing AAA as well as G3&nbsp;<span class="rl">[<a href="references.html#r040">R040</a>]</span>.</li><li><strong>Chrome's store holds no AAA root&nbsp;<span class="rl">[<a href="references.html#r042">R042</a>]</span>.</strong> Chrome Root Store v41, v42 and v43 do not contain it&nbsp;<span class="rl">[<a href="references.html#r042">R042</a>]</span>. Chrome's CRLSet blocks by public key, so it covers the cross-signs anyway&nbsp;<span class="rl">[<a href="references.html#r026">R026</a>]</span>.</li><li><strong>Sectigo revoked the cross-signs on 19 October&nbsp;<span class="rl">[<a href="references.html#r011">R011</a>]</span>.</strong> Its AAA Certificate Services CRL backdates the revocations to 14 May 2025&nbsp;<span class="rl">[<a href="references.html#r310">R310</a>]</span>. Clients that skip revocation checks, such as the macOS tools that read <code>/etc/ssl/cert.pem</code>, still accept the chains&nbsp;<span class="rl">[<a href="references.html#r044">R044</a>]</span>.</li><li><strong>Fixes that block by public key also catch the cross-signs&nbsp;<span class="rl">[<a href="references.html#r043">R043</a>]</span>.</strong> Go's <code>crypto/x509</code> denylist, <code>rustls-webpki</code> 0.103.16 and CPython's <code>ssl</code> block match the compromised keys&nbsp;<span class="rl">[<a href="references.html#r043">R043</a>]</span>. So do Chrome's CRLSet and the Windows Disallowed CTL&nbsp;<span class="rl">[<a href="references.html#r026">R026</a>, <a href="references.html#r033">R033</a>]</span>. A fix that only removes the G3 root leaves the AAA path open wherever AAA is still trusted&nbsp;<span class="rl">[<a href="references.html#r040">R040</a>]</span>.</li><li><strong>Common tools could not fetch eMudhra's revocation data until 26 October&nbsp;<span class="rl">[<a href="references.html#r045">R045</a>]</span>.</strong> eMudhra's firewall refused HTTP CRL and OCSP requests from curl, Wget, Python-urllib and libwww-perl user agents from 28 September 2022 to 10:32 UTC on 26 October 2026&nbsp;<span class="rl">[<a href="references.html#r045">R045</a>]</span>. The blocked files include the two CRLs that carry the eight revocations, and HTTPS was no fallback because the certificates name HTTP CRL URLs&nbsp;<span class="rl">[<a href="references.html#r045">R045</a>]</span>.</li><li><strong>Clients that don't enforce CT are more exposed&nbsp;<span class="rl">[<a href="references.html#r046">R046</a>]</span>.</strong> CT-enforcing clients reject a leaf that was never logged, and non-browser clients such as curl usually don't enforce CT&nbsp;<span class="rl">[<a href="references.html#r046">R046</a>]</span>. One commenter counted 106,058 post-disclosure CT certificates that chain through the AAA cross-signs, a count nobody has replicated&nbsp;<span class="rl">[<a href="references.html#r013">R013</a>]</span>.</li></ul>
-  </section>
+# Roots still in the TLS bundle. Prints nothing on a fixed system
+openssl crl2pkcs7 -nocrl -certfile /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+  | openssl pkcs7 -print_certs -noout \
+  | grep -E 'emSign ECC Root CA - G3|AAA Certificate Services'
 
-  <section id="manual">
-    <h2>Manual checks by area</h2>
-    <p class="read">Check every area you use, on every host and inside every image you ship. Each area below lists what to fix first. The <a href="checks.html">checks page</a> has one row per item, with a read-only command, the vulnerable and fixed versions and the AAA status (130 items, 303 sourced claims).</p>
-  <section class="area" id="a-os">
-    <h3>OS trust stores</h3>
-    <ul class="notes"><li><strong>Upgrade <code>ca-certificates</code>, rebuild images, then check the bundle file&nbsp;<span class="rl">[<a href="references.html#r049">R049</a>]</span>.</strong> Most distributions fixed this by removing <code>emSign ECC Root CA - G3</code>. Red Hat says its store cannot distrust single intermediates&nbsp;<span class="rl">[<a href="references.html#r049">R049</a>]</span>. The current <code>rockylinux:8</code>, <code>:9</code> and <code>:10</code> images still ship unfixed builds, and an upgrade installs the fixed build&nbsp;<span class="rl">[<a href="references.html#r075">R075</a>, <a href="references.html#r074">R074</a>]</span>. On Amazon Linux 2023 a plain <code>dnf update ca-certificates</code> leaves the unfixed build in place, and <code>--releasever=latest</code> installs the fix&nbsp;<span class="rl">[<a href="references.html#r079">R079</a>]</span>.</li><li><strong>Check for <code>AAA Certificate Services</code> as well as G3&nbsp;<span class="rl">[<a href="references.html#r104">R104</a>]</span>.</strong> Removing G3 alone leaves the six Sectigo cross-signs trusted through AAA&nbsp;<span class="rl">[<a href="references.html#r104">R104</a>]</span>. Mozilla named AAA with the two G3 roots as candidates for removal&nbsp;<span class="rl">[<a href="references.html#r048">R048</a>]</span>. Unfixed Debian packages and the Ubuntu 22.04 and 24.04 release builds hold it&nbsp;<span class="rl">[<a href="references.html#r053">R053</a>, <a href="references.html#r057">R057</a>]</span>. Unfixed Red Hat-family packages hold it in the email and code-signing bundles&nbsp;<span class="rl">[<a href="references.html#r070">R070</a>]</span>.</li><li><strong>No fix yet on 2026-10-31 for Debian 11, openSUSE Leap 15.6, Tumbleweed on aarch64 or the Amazon Linux 2027 preview</strong>&nbsp;<span class="rl">[<a href="references.html#r055">R055</a>, <a href="references.html#r091">R091</a>, <a href="references.html#r090">R090</a>, <a href="references.html#r081">R081</a>]</span>. The newest Debian 11, Leap 15.6 and Tumbleweed aarch64 packages checked still trust the G3 root, and Debian 11's also trusts AAA&nbsp;<span class="rl">[<a href="references.html#r055">R055</a>, <a href="references.html#r091">R091</a>, <a href="references.html#r090">R090</a>]</span>.</li><li><strong>Check the code-signing bundle on Red Hat-family systems&nbsp;<span class="rl">[<a href="references.html#r063">R063</a>, <a href="references.html#r072">R072</a>]</span>.</strong> Fedora's first update and CentOS Stream 10's current build take G3 out of TLS trust but still trust <code>emSign Root CS CA - G3</code> for code signing&nbsp;<span class="rl">[<a href="references.html#r063">R063</a>, <a href="references.html#r072">R072</a>]</span>. On RHEL only the .3 builds are advisory versions&nbsp;<span class="rl">[<a href="references.html#r069">R069</a>]</span>.</li><li><strong>Check <code>/etc/ssl/cert.pem</code> on every Mac&nbsp;<span class="rl">[<a href="references.html#r098">R098</a>]</span>.</strong> curl, git, python3, ruby, perl and openssl from macOS or the Command Line Tools trust that file and skip Apple's block and revocation checks&nbsp;<span class="rl">[<a href="references.html#r098">R098</a>]</span>. macOS 26.6.2 ships it with both roots, and its <code>/usr/bin/curl</code> completes HTTPS to hosts serving the compromised chains (checked 2026-10-31)&nbsp;<span class="rl">[<a href="references.html#r099">R099</a>, <a href="references.html#r100">R100</a>]</span>. Apple has named no fixed version&nbsp;<span class="rl">[<a href="references.html#r098">R098</a>]</span>. Homebrew's own bundle is fixed from <code>2026-09-25_1</code>&nbsp;<span class="rl">[<a href="references.html#r093">R093</a>]</span>.</li><li><strong>Keep CTL and Play services updates flowing on Windows and Android&nbsp;<span class="rl">[<a href="references.html#r106">R106</a>, <a href="references.html#r107">R107</a>]</span>.</strong> Windows blocks the eight keys through the Disallowed CTL and removed seven certificates on 26 October 2026, including one Microsoft calls an AAA Certificate Services cross-sign, whose thumbprint is the AAA root's&nbsp;<span class="rl">[<a href="references.html#r106">R106</a>, <a href="references.html#r107">R107</a>]</span>. Devices with automatic updates off or no internet access need the CTLs delivered another way&nbsp;<span class="rl">[<a href="references.html#r108">R108</a>]</span>. Microsoft says software that doesn't reliably check revocation or its disallowed list can still accept the compromised chains if it keeps or restores trust in the removed roots. The community tracker says apps with their own CA bundle need their own update&nbsp;<span class="rl">[<a href="references.html#r109">R109</a>]</span>. Android received its block through Google Play services on 19 October 2026&nbsp;<span class="rl">[<a href="references.html#r110">R110</a>]</span>.</li></ul>
-    <p class="more"><a href="checks.html#g-os">OS trust stores: every item, command and fixed version →</a></p>
-  </section>
-  <section class="area" id="a-java">
-    <h3>Java</h3>
-    <ul class="notes"><li><strong>Check every JDK by fingerprint, then by subject&nbsp;<span class="rl">[<a href="references.html#r119">R119</a>]</span>.</strong> The same G3 root sits under four alias styles, and OpenJDK's alias names miss Temurin, Microsoft and Corretto's second copy&nbsp;<span class="rl">[<a href="references.html#r119">R119</a>]</span>. <code>keytool -list</code> prints SHA-256 fingerprints by default and <code>-v</code> adds the owner, so grep for both&nbsp;<span class="rl">[<a href="references.html#r120">R120</a>, <a href="references.html#r121">R121</a>]</span>. Each installation has its own <code>cacerts</code>, and a running JVM keeps the old store until it restarts&nbsp;<span class="rl">[<a href="references.html#r126">R126</a>]</span>.</li><li><strong>Fixed means G3 and <code>AAA Certificate Services</code> are both gone&nbsp;<span class="rl">[<a href="references.html#r116">R116</a>, <a href="references.html#r117">R117</a>]</span>.</strong> Sectigo's AAA root issued cross-signs for all eight compromised intermediates, and OpenJDK's second fix removes AAA along with G3, G1 and G2&nbsp;<span class="rl">[<a href="references.html#r116">R116</a>, <a href="references.html#r117">R117</a>]</span>. Fixed Temurin keeps G1 on purpose, so a <code>BAD ROOT: CN=emSign Root CA - G1,…</code> line from OpenJDK's <code>CheckCerts</code> is expected there&nbsp;<span class="rl">[<a href="references.html#r141">R141</a>, <a href="references.html#r125">R125</a>]</span>. Fixed Corretto keeps emSign C1 and C3. A reply on Corretto's issue tracker says they don't chain to the compromised intermediates&nbsp;<span class="rl">[<a href="references.html#r146">R146</a>]</span>.</li><li><strong>Version numbers mislead across vendors&nbsp;<span class="rl">[<a href="references.html#r114">R114</a>]</span>.</strong> OpenJDK's advisory of 2026-10-24 lists 27.0.1.0.2, 25.0.5.0.2, 21.0.13.0.2, 17.0.21.0.2, 11.0.32.1, 8u504 and earlier as affected&nbsp;<span class="rl">[<a href="references.html#r114">R114</a>]</span>. The .0.2 builds from OpenJDK, Oracle and SapMachine still hold G3 and AAA, yet Temurin 27.0.1.0.2+1 is fixed&nbsp;<span class="rl">[<a href="references.html#r127">R127</a>, <a href="references.html#r131">R131</a>, <a href="references.html#r154">R154</a>, <a href="references.html#r138">R138</a>]</span>. Azul's fixed Zulu 21 subscriber build reports JDK 21.0.12.1, while the free 21.0.13 build still holds all four roots&nbsp;<span class="rl">[<a href="references.html#r151">R151</a>, <a href="references.html#r152">R152</a>]</span>.</li><li><strong>Several lines had no fix on 2026-10-31&nbsp;<span class="rl">[<a href="references.html#r139">R139</a>, <a href="references.html#r138">R138</a>]</span>.</strong> Temurin 8 and 11 and the <code>eclipse-temurin:27-jre</code> tag still trust G3&nbsp;<span class="rl">[<a href="references.html#r139">R139</a>, <a href="references.html#r138">R138</a>]</span>. The free Azul Zulu 21 build (disputed, see&nbsp;<span class="rl">[<a href="references.html#r152">R152</a>]</span>) and Microsoft Build of OpenJDK 21 and 25 still hold both G3 and AAA&nbsp;<span class="rl">[<a href="references.html#r152">R152</a>, <a href="references.html#r153">R153</a>]</span>. IBM names no fix for Semeru 8 or 11, and no fixed Oracle GraalVM build was found&nbsp;<span class="rl">[<a href="references.html#r156">R156</a>, <a href="references.html#r132">R132</a>]</span>.</li><li><strong>A JDK update leaves other Java stores alone&nbsp;<span class="rl">[<a href="references.html#r157">R157</a>]</span>.</strong> On Debian and Ubuntu, updating <code>ca-certificates</code> doesn't refresh <code>/etc/ssl/certs/java/cacerts</code>&nbsp;<span class="rl">[<a href="references.html#r157">R157</a>]</span>. Application truststores keep the roots until you remove them&nbsp;<span class="rl">[<a href="references.html#r159">R159</a>]</span>. Homebrew and FreeBSD OpenJDK carry their own store and need their own update&nbsp;<span class="rl">[<a href="references.html#r150">R150</a>]</span>.</li><li><strong>Only OpenJDK's second fix removes the roots&nbsp;<span class="rl">[<a href="references.html#r116">R116</a>]</span>.</strong> The first fix (JDK-8395142) blocked 16 certificates by fingerprint and kept the roots, and Sonatype reports that re-encoded copies got past it&nbsp;<span class="rl">[<a href="references.html#r116">R116</a>]</span>. The second (JDK-8395690) deletes four roots, and a fixed build's release note names JDK-8395690 and CVE-2026-114820&nbsp;<span class="rl">[<a href="references.html#r117">R117</a>, <a href="references.html#r118">R118</a>]</span>. CVE-2026-91403 and CVE-2026-114820 are Oracle CVE records naming only Oracle products, and OpenJDK's advisories of 2026-10-21 and 2026-10-24 are separate documents&nbsp;<span class="rl">[<a href="references.html#r113">R113</a>, <a href="references.html#r112">R112</a>, <a href="references.html#r115">R115</a>, <a href="references.html#r114">R114</a>]</span>.</li></ul>
-    <p class="more"><a href="checks.html#g-java">Java: every item, command and fixed version →</a></p>
-  </section>
-  <section class="area" id="a-python">
-    <h3>Python</h3>
-    <ul class="notes"><li><strong>Upgrade pip to 26.2.2 in every environment&nbsp;<span class="rl">[<a href="references.html#r167">R167</a>, <a href="references.html#r169">R169</a>]</span>.</strong> pip vendors its own certifi and always trusts it, alongside the OS store from pip 24.2 on Python 3.10 and later, so a fixed OS store or certifi package leaves an older pip trusting G3&nbsp;<span class="rl">[<a href="references.html#r167">R167</a>, <a href="references.html#r169">R169</a>]</span>. pip 26.2.2 is the first release whose vendored bundle leaves out G3&nbsp;<span class="rl">[<a href="references.html#r168">R168</a>]</span>. Each venv has its own pip and a <code>pyvenv.cfg</code> at its root, so find them all and upgrade each one&nbsp;<span class="rl">[<a href="references.html#r171">R171</a>]</span>.</li><li><strong>Target certifi 2026.10.19 or later&nbsp;<span class="rl">[<a href="references.html#r162">R162</a>]</span>.</strong> GHSA-6q48-6c7w-9gw2 names 2026.10.18 as the first patched release, and the PSF recommends 2026.10.19&nbsp;<span class="rl">[<a href="references.html#r162">R162</a>]</span>. 2026.10.18 removed every emSign root, including the unaffected G1, C1 and C3, and users reported broken connections&nbsp;<span class="rl">[<a href="references.html#r161">R161</a>]</span>. 2026.10.19 restores those three and still leaves out G3&nbsp;<span class="rl">[<a href="references.html#r162">R162</a>]</span>.</li><li><strong>Check certifi from before 2019 too&nbsp;<span class="rl">[<a href="references.html#r164">R164</a>]</span>.</strong> The advisory range starts at 2019.03.09 and covers the G3 root only&nbsp;<span class="rl">[<a href="references.html#r164">R164</a>]</span>. Every certifi up to 2025.1.31, including 2018.11.29, holds Sectigo's <code>AAA Certificate Services</code> root, which cross-signed the compromised intermediates&nbsp;<span class="rl">[<a href="references.html#r164">R164</a>]</span>.</li><li><strong>Treat venvs made by Python 3.11 and 3.12 as affected&nbsp;<span class="rl">[<a href="references.html#r178">R178</a>]</span>.</strong> Current releases of these lines bundle pip 24.0 and 25.0.1, both holding G3 and the AAA root, and a reply on the PSF thread says security releases will not upgrade them&nbsp;<span class="rl">[<a href="references.html#r178">R178</a>]</span>. Python 3.15.2, 3.14.10, 3.13.18, 3.12.16 and 3.11.18 add an <code>ssl</code> block on the compromised keys that also catches the Sectigo cross-signs&nbsp;<span class="rl">[<a href="references.html#r177">R177</a>]</span>. Python 3.10 and older are end of life and get no fix&nbsp;<span class="rl">[<a href="references.html#r179">R179</a>]</span>.</li><li><strong>Update uv, Pixi and conda on their own&nbsp;<span class="rl">[<a href="references.html#r172">R172</a>, <a href="references.html#r174">R174</a>]</span>.</strong> uv 0.13.4 drops G3, and after uv 0.13.5, <code>uv python upgrade</code> replaces the managed 3.11 and newer interpreters&nbsp;<span class="rl">[<a href="references.html#r172">R172</a>, <a href="references.html#r174">R174</a>]</span>. Standalone Pixi needs 0.82.1&nbsp;<span class="rl">[<a href="references.html#r188">R188</a>]</span>. conda needs its CA packages updated in every environment, because updating <code>base</code> leaves the others alone&nbsp;<span class="rl">[<a href="references.html#r185">R185</a>]</span>. Anaconda main has no fixed CA packages for osx-64, linux-ppc64le or linux-s390x&nbsp;<span class="rl">[<a href="references.html#r187">R187</a>]</span>.</li><li><strong>Fix requests, HTTPX and truststore at their source&nbsp;<span class="rl">[<a href="references.html#r181">R181</a>, <a href="references.html#r182">R182</a>, <a href="references.html#r183">R183</a>]</span>.</strong> requests and HTTPX use certifi, and truststore uses the OS store&nbsp;<span class="rl">[<a href="references.html#r181">R181</a>, <a href="references.html#r182">R182</a>, <a href="references.html#r183">R183</a>]</span>. <code>REQUESTS_CA_BUNDLE</code> replaces certifi for requests, and for pip it only adds CAs&nbsp;<span class="rl">[<a href="references.html#r181">R181</a>, <a href="references.html#r169">R169</a>]</span>.</li></ul>
-    <p class="more"><a href="checks.html#g-python">Python: every item, command and fixed version →</a></p>
-  </section>
-  <section class="area" id="a-js">
-    <h3>JavaScript runtimes</h3>
-    <ul class="notes"><li><strong>Upgrade Node.js to 22.23.4, 24.22.1 or 26.12.1&nbsp;<span class="rl">[<a href="references.html#r190">R190</a>]</span>.</strong> Node compiles a Mozilla root snapshot into its binary, and only a Node upgrade changes it&nbsp;<span class="rl">[<a href="references.html#r190">R190</a>]</span>. These releases move to NSS 3.131.1, which drops G3, and reject chains with blocked public keys&nbsp;<span class="rl">[<a href="references.html#r191">R191</a>, <a href="references.html#r192">R192</a>, <a href="references.html#r193">R193</a>, <a href="references.html#r194">R194</a>, <a href="references.html#r196">R196</a>]</span>. The Node.js security release lists the CA change as a dependency update with no CVE&nbsp;<span class="rl">[<a href="references.html#r197">R197</a>]</span>.</li><li><strong>Move off Node.js 20&nbsp;<span class="rl">[<a href="references.html#r195">R195</a>]</span>.</strong> It reached end of life on 2026-04-30 and has no fix&nbsp;<span class="rl">[<a href="references.html#r195">R195</a>]</span>. Its last release, 20.20.2, still bundles G3&nbsp;<span class="rl">[<a href="references.html#r195">R195</a>]</span>.</li><li><strong>Do not rely on extra CA settings in Node.js&nbsp;<span class="rl">[<a href="references.html#r198">R198</a>]</span>.</strong> <code>NODE_EXTRA_CA_CERTS</code>, <code>--use-system-ca</code> and <code>NODE_USE_SYSTEM_CA=1</code> add certificates to the bundled roots, and Node does not apply the system's distrust settings&nbsp;<span class="rl">[<a href="references.html#r198">R198</a>]</span>.</li><li><strong>Grep every Node binary for the G3 PEM line&nbsp;<span class="rl">[<a href="references.html#r192">R192</a>, <a href="references.html#r193">R193</a>, <a href="references.html#r194">R194</a>]</span>.</strong> Node stores its roots as PEM text, so the first base64 line of the G3 root appears in an affected binary and not in a fixed one&nbsp;<span class="rl">[<a href="references.html#r192">R192</a>, <a href="references.html#r193">R193</a>, <a href="references.html#r194">R194</a>]</span>. This grep was confirmed on Linux x64 builds only&nbsp;<span class="rl">[<a href="references.html#r192">R192</a>]</span>.</li><li><strong>Upgrade Bun to 1.4.4 and Deno to 2.9.8&nbsp;<span class="rl">[<a href="references.html#r201">R201</a>, <a href="references.html#r203">R203</a>]</span>.</strong> Bun 1.4.3 and Deno 2.9.7 still hold G3&nbsp;<span class="rl">[<a href="references.html#r201">R201</a>, <a href="references.html#r203">R203</a>]</span>. Deno 2.9.7 also holds the AAA root&nbsp;<span class="rl">[<a href="references.html#r204">R204</a>]</span>. Both store DER, so grep their binaries for the subject string <code>emSign ECC Root CA - G3</code>&nbsp;<span class="rl">[<a href="references.html#r201">R201</a>, <a href="references.html#r203">R203</a>]</span>.</li><li><strong>Grep <code>node_modules</code> yourself&nbsp;<span class="rl">[<a href="references.html#r200">R200</a>]</span>.</strong> Electron's is the only npm advisory for this incident between 2026-10-17 and 2026-10-31, and no advisory names a package with a vendored bundle&nbsp;<span class="rl">[<a href="references.html#r200">R200</a>]</span>. An advisory search cannot prove that no package vendors the root, so run the <code>node_modules</code> grep in each project&nbsp;<span class="rl">[<a href="references.html#r200">R200</a>]</span>.</li></ul>
-    <p class="more"><a href="checks.html#g-js">JavaScript runtimes: every item, command and fixed version →</a></p>
-  </section>
-  <section class="area" id="a-langs">
-    <h3>Other languages</h3>
-    <ul class="notes"><li><strong>Go needs two checks&nbsp;<span class="rl">[<a href="references.html#r205">R205</a>, <a href="references.html#r206">R206</a>, <a href="references.html#r207">R207</a>]</span>.</strong> Go 1.26.10 and 1.27.3 add a key denylist to <code>crypto/x509</code> for CVE-2026-111943, so rebuild every binary with one of them&nbsp;<span class="rl">[<a href="references.html#r205">R205</a>, <a href="references.html#r206">R206</a>, <a href="references.html#r207">R207</a>]</span>. <code>govulncheck -mode binary</code> flags binaries built with an older toolchain&nbsp;<span class="rl">[<a href="references.html#r209">R209</a>]</span>. <code>golang.org/x/crypto/x509roots/fallback</code> embeds its own roots and has no entry in the Go vulnerability database, so <code>govulncheck</code> misses an old pin&nbsp;<span class="rl">[<a href="references.html#r210">R210</a>, <a href="references.html#r213">R213</a>]</span>. Pin <code>v0.0.0-20261020153306-9f2b28d4331a</code> or later and rebuild&nbsp;<span class="rl">[<a href="references.html#r211">R211</a>, <a href="references.html#r214">R214</a>]</span>.</li><li><strong>Read every <code>webpki-roots</code> and <code>webpki-root-certs</code> entry in <code>Cargo.lock</code>&nbsp;<span class="rl">[<a href="references.html#r216">R216</a>, <a href="references.html#r220">R220</a>]</span>.</strong> 1.0.10 is the first fixed release of both&nbsp;<span class="rl">[<a href="references.html#r216">R216</a>, <a href="references.html#r220">R220</a>]</span>. 0.26.11 holds no roots and is safe only when the lock file also resolves the 1.x crate to 1.0.10 or later&nbsp;<span class="rl">[<a href="references.html#r218">R218</a>, <a href="references.html#r220">R220</a>]</span>. RUSTSEC-2026-0381 patches nothing else below 1.0.10, so 0.25.x and older have no fix&nbsp;<span class="rl">[<a href="references.html#r216">R216</a>, <a href="references.html#r218">R218</a>]</span>. The roots are compiled in, so rebuild after updating&nbsp;<span class="rl">[<a href="references.html#r215">R215</a>]</span>.</li><li><strong>A key block also stops the AAA cross-signs&nbsp;<span class="rl">[<a href="references.html#r207">R207</a>, <a href="references.html#r223">R223</a>, <a href="references.html#r229">R229</a>]</span>.</strong> Go 1.26.10 and 1.27.3, <code>rustls-webpki</code> 0.103.16 and <code>composer/ca-bundle</code> 1.6.0 and 1.4.16 match the eight compromised public keys, which Sectigo's cross-signs share&nbsp;<span class="rl">[<a href="references.html#r207">R207</a>, <a href="references.html#r223">R223</a>, <a href="references.html#r229">R229</a>]</span>. Composer 2.11.0 and 2.2.31 reject the intermediates even when the system store trusts their roots&nbsp;<span class="rl">[<a href="references.html#r231">R231</a>]</span>. <code>webpki-roots</code>, <code>excon</code>, <code>castore</code>, Hex <code>certifi</code>, <code>Mozilla::CA</code> and curl's <code>cacert.pem</code> fix by removing the G3 root&nbsp;<span class="rl">[<a href="references.html#r217">R217</a>, <a href="references.html#r234">R234</a>, <a href="references.html#r244">R244</a>, <a href="references.html#r246">R246</a>, <a href="references.html#r240">R240</a>, <a href="references.html#r252">R252</a>]</span>. Removing G3 alone leaves the cross-signs unblocked wherever the AAA root is trusted&nbsp;<span class="rl">[<a href="references.html#r237">R237</a>]</span>.</li><li><strong>Upgrade old pins to the first release after the incident&nbsp;<span class="rl">[<a href="references.html#r219">R219</a>, <a href="references.html#r221">R221</a>, <a href="references.html#r230">R230</a>, <a href="references.html#r235">R235</a>, <a href="references.html#r242">R242</a>, <a href="references.html#r245">R245</a>, <a href="references.html#r247">R247</a>, <a href="references.html#r212">R212</a>]</span>.</strong> These older releases bundle the AAA root as well as G3: <code>webpki-roots</code> and <code>webpki-root-certs</code> 0.26.9, <code>composer/ca-bundle</code> 1.5.6 and 1.4.7, <code>excon</code> 1.2.5, <code>Mozilla::CA</code> 20250202, <code>castore</code> 1.0.13, Hex <code>certifi</code> 2.14.0, the February 2025 Go fallback bundle, and everything before them&nbsp;<span class="rl">[<a href="references.html#r219">R219</a>, <a href="references.html#r221">R221</a>, <a href="references.html#r230">R230</a>, <a href="references.html#r235">R235</a>, <a href="references.html#r242">R242</a>, <a href="references.html#r245">R245</a>, <a href="references.html#r247">R247</a>, <a href="references.html#r212">R212</a>]</span>.</li><li><strong><code>httpclient</code> has no fix&nbsp;<span class="rl">[<a href="references.html#r236">R236</a>]</span>.</strong> 2.9.0, the latest release, loads its own bundle by default&nbsp;<span class="rl">[<a href="references.html#r236">R236</a>]</span>. That bundle is Mozilla data from 2015 with the AAA root and no G3 root, so a check for G3 alone passes it&nbsp;<span class="rl">[<a href="references.html#r236">R236</a>, <a href="references.html#r237">R237</a>]</span>.</li><li><strong>PHP, RubyGems, Bundler, Erlang/OTP <code>public_key</code>, .NET and <code>rustls-native-certs</code> follow the OS store&nbsp;<span class="rl">[<a href="references.html#r232">R232</a>, <a href="references.html#r233">R233</a>, <a href="references.html#r249">R249</a>, <a href="references.html#r250">R250</a>, <a href="references.html#r225">R225</a>]</span>.</strong> Fix the OS store for them&nbsp;<span class="rl">[<a href="references.html#r232">R232</a>, <a href="references.html#r233">R233</a>, <a href="references.html#r249">R249</a>, <a href="references.html#r250">R250</a>, <a href="references.html#r225">R225</a>]</span>. <code>rustls-native-certs</code> ignores OS distrust settings, and .NET on Linux ignores the <code>Disallowed</code> store, so the root has to leave the store itself&nbsp;<span class="rl">[<a href="references.html#r225">R225</a>, <a href="references.html#r251">R251</a>]</span>. Dart and Flutter apps on Android and Windows ignore OS blocklists, so rebuild them with Dart 3.13.7 or Flutter 3.47.8&nbsp;<span class="rl">[<a href="references.html#r255">R255</a>, <a href="references.html#r256">R256</a>]</span>.</li></ul>
-    <p class="more"><a href="checks.html#g-langs">Other languages: every item, command and fixed version →</a></p>
-  </section>
-  <section class="area" id="a-apps">
-    <h3>Browsers and apps</h3>
-    <ul class="notes"><li><strong>On default settings, browsers block the intermediates without an update, apart from a Firefox ESR 115 startup gap&nbsp;<span class="rl">[<a href="references.html#r257">R257</a>, <a href="references.html#r259">R259</a>, <a href="references.html#r260">R260</a>, <a href="references.html#r264">R264</a>, <a href="references.html#r269">R269</a>]</span>.</strong> Chrome blocks the keys through a CRLSet, which also covers the AAA cross-signs&nbsp;<span class="rl">[<a href="references.html#r257">R257</a>]</span>. Edge and WebView2 use their own CRLSet&nbsp;<span class="rl">[<a href="references.html#r259">R259</a>]</span>. Firefox uses OneCRL&nbsp;<span class="rl">[<a href="references.html#r260">R260</a>]</span>. Apple pushes trust data to Safari, Mail and its frameworks&nbsp;<span class="rl">[<a href="references.html#r269">R269</a>]</span>.</li><li><strong>Firefox ESR 115 has no released fix for new profiles&nbsp;<span class="rl">[<a href="references.html#r264">R264</a>]</span>.</strong> It loads OneCRL only after 20 idle seconds, and the fix is in an unreleased 115.45.0&nbsp;<span class="rl">[<a href="references.html#r264">R264</a>]</span>. CVE-2026-113470 still lists 115.43.1 as fixed&nbsp;<span class="rl">[<a href="references.html#r264">R264</a>]</span>. A fork that drops OneCRL, such as GNU IceCat built from ESR 153.5.1, still trusted the intermediates&nbsp;<span class="rl">[<a href="references.html#r265">R265</a>]</span>.</li><li><strong>Check each Electron app's Electron version&nbsp;<span class="rl">[<a href="references.html#r272">R272</a>]</span>.</strong> Every Electron app needs its own release on a fixed Electron, and there is no app-side workaround&nbsp;<span class="rl">[<a href="references.html#r272">R272</a>]</span>. Read the Electron version from the bundle without running the app&nbsp;<span class="rl">[<a href="references.html#r273">R273</a>, <a href="references.html#r274">R274</a>]</span>. Fixed Electron releases still contain the G3 root, because the fix blocks the intermediates and leaves the root in place&nbsp;<span class="rl">[<a href="references.html#r271">R271</a>]</span>. Grepping the binary for the root's PEM line shows the bundled Node.js store, and it matches on fixed releases too&nbsp;<span class="rl">[<a href="references.html#r275">R275</a>]</span>.</li><li><strong>The community tracker disagrees with the vendors on four apps&nbsp;<span class="rl">[<a href="references.html#r276">R276</a>, <a href="references.html#r277">R277</a>, <a href="references.html#r280">R280</a>, <a href="references.html#r283">R283</a>, <a href="references.html#r289">R289</a>]</span>.</strong> VS Code desktop needs 1.144.0, since 1.143.1 changed only the remote server's Node.js&nbsp;<span class="rl">[<a href="references.html#r276">R276</a>, <a href="references.html#r277">R277</a>]</span>. Docker Desktop 4.96.3 is the first release whose notes drop the partial-fix warning, while the tracker lists 4.96.2&nbsp;<span class="rl">[<a href="references.html#r283">R283</a>]</span>. certbot 5.9.0 and LibreOffice 26.8.2 shipped fixes that the tracker still lists as pending&nbsp;<span class="rl">[<a href="references.html#r280">R280</a>, <a href="references.html#r289">R289</a>]</span>.</li><li><strong>No fix yet for containerd, Podman, Godot, OpenHarmony or LibreOffice 26.2&nbsp;<span class="rl">[<a href="references.html#r281">R281</a>, <a href="references.html#r285">R285</a>, <a href="references.html#r287">R287</a>, <a href="references.html#r291">R291</a>, <a href="references.html#r290">R290</a>]</span>.</strong> containerd merged the Go update on 20 October and has not released it&nbsp;<span class="rl">[<a href="references.html#r281">R281</a>]</span>. Podman has no stable release since 12 October&nbsp;<span class="rl">[<a href="references.html#r285">R285</a>]</span>. Godot's fix is on master only&nbsp;<span class="rl">[<a href="references.html#r287">R287</a>]</span>. OpenHarmony merged a change with no release&nbsp;<span class="rl">[<a href="references.html#r291">R291</a>]</span>. LibreOffice 26.2 waits on 26.2.7&nbsp;<span class="rl">[<a href="references.html#r290">R290</a>]</span>.</li><li><strong>Look for the AAA root in app bundles too&nbsp;<span class="rl">[<a href="references.html#r292">R292</a>, <a href="references.html#r293">R293</a>]</span>.</strong> JBR b635.78 blocks all 16 certificates but its cacerts keeps the G3 and AAA roots, which b635.79 removes&nbsp;<span class="rl">[<a href="references.html#r292">R292</a>, <a href="references.html#r293">R293</a>]</span>. Godot 3 bundles AAA as well as the G3 root&nbsp;<span class="rl">[<a href="references.html#r288">R288</a>]</span>.</li></ul>
-    <p class="more"><a href="checks.html#g-apps">Browsers and apps: every item, command and fixed version →</a></p>
-  </section>
-  <section class="area" id="a-images">
-    <h3>Container images</h3>
-    <ul class="notes"><li><strong>Patching the host does not fix its containers&nbsp;<span class="rl">[<a href="references.html#r294">R294</a>]</span>.</strong> Each container trusts the bundle inside its image&nbsp;<span class="rl">[<a href="references.html#r294">R294</a>]</span>. Check the image and rebuild it&nbsp;<span class="rl">[<a href="references.html#r295">R295</a>]</span>.</li><li><strong>distroless Debian 12 is still vulnerable on 2026-10-31&nbsp;<span class="rl">[<a href="references.html#r298">R298</a>]</span>.</strong> static-debian12 and base-debian12 ship ca-certificates 20250419~deb12u1 with both the G3 and AAA roots&nbsp;<span class="rl">[<a href="references.html#r298">R298</a>]</span>. static-debian13 is fixed&nbsp;<span class="rl">[<a href="references.html#r299">R299</a>]</span>.</li><li><strong>Rocky and Amazon Linux 2023 images ship unfixed packages&nbsp;<span class="rl">[<a href="references.html#r300">R300</a>, <a href="references.html#r301">R301</a>]</span>.</strong> rockylinux:8, :9 and :10 need <code>dnf upgrade ca-certificates</code> or a rebuild&nbsp;<span class="rl">[<a href="references.html#r300">R300</a>]</span>. On amazonlinux:2023 a plain <code>dnf update</code> keeps the unfixed build, so add <code>--releasever=latest</code>&nbsp;<span class="rl">[<a href="references.html#r301">R301</a>]</span>.</li><li><strong>Debian and Ubuntu base images carry no bundle&nbsp;<span class="rl">[<a href="references.html#r296">R296</a>]</span>.</strong> Whichever later layer installs ca-certificates sets what the image trusts, so check the built image&nbsp;<span class="rl">[<a href="references.html#r296">R296</a>]</span>.</li><li><strong>Images with no shell can still be checked&nbsp;<span class="rl">[<a href="references.html#r295">R295</a>, <a href="references.html#r298">R298</a>]</span>.</strong> Copy the bundle or the dpkg status entry out with create and cp, without running the image&nbsp;<span class="rl">[<a href="references.html#r295">R295</a>, <a href="references.html#r298">R298</a>]</span>.</li><li><strong>Alpine 3.24.3 and the certbot v5.9.0 image are fixed&nbsp;<span class="rl">[<a href="references.html#r297">R297</a>, <a href="references.html#r303">R303</a>]</span>.</strong> Alpine 3.24.2 and certbot v5.8.0 still hold the G3 root&nbsp;<span class="rl">[<a href="references.html#r297">R297</a>, <a href="references.html#r303">R303</a>]</span>.</li></ul>
-    <p class="more"><a href="checks.html#g-images">Container images: every item, command and fixed version →</a></p>
-  </section>
-  </section>
+# Roots still in the code-signing bundle. Prints nothing on a fixed system
+openssl crl2pkcs7 -nocrl -certfile /etc/pki/ca-trust/extracted/pem/objsign-ca-bundle.pem \
+  | openssl pkcs7 -print_certs -noout \
+  | grep -E 'emSign Root CS CA - G3|emSign ECC Root CA - G3|AAA Certificate Services'</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>Release</th><th>Affected</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td>10</td><td class="bad">Builds before <code>2026.2.92_v9.0.319-100.3</code></td><td class="good"><code>2026.2.92_v9.0.319-100.3.el10_2</code></td></tr>
+<tr><td>9</td><td class="bad">Builds before <code>2026.2.92_v9.0.319-90.3</code></td><td class="good"><code>2026.2.92_v9.0.319-90.3.el9_8</code></td></tr>
+<tr><td>8</td><td class="bad">Builds before <code>2026.2.92_v9.0.319-81.3</code></td><td class="good"><code>2026.2.92_v9.0.319-81.3.el8_10</code></td></tr>
+</tbody></table></div>
+<p>The current <code>rockylinux:8</code>, <code>:9</code> and <code>:10</code> images are affected until you upgrade <code>ca-certificates</code> in them.</p>
+<p><a href="fixes.html#a-os">Fixing OS trust stores →</a></p>
+</div>
+<div class="eco" id="m-macos">
+<h3>macOS</h3>
+<p><code>/etc/ssl/cert.pem</code>, the bundle that curl, git, python3, ruby, perl and openssl from macOS trust. Re-run the check after every macOS update.</p>
+<div class="code"><button type="button">Copy</button><pre># macOS version
+sw_vers -productVersion
 
-  <section class="read" id="helper">
-    <h2>Automated checker</h2>
-    <p class="src"><a href="https://github.com/fieldse/emudhra-ca-compromise-check"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>Source on GitHub</span></a></p>
-    <p>We provide a free check, <code>vuln-check-emudhra-ca-compromise.pyz</code>, that runs most of these checks against one machine in a single pass. It is a single Python zipapp that needs Python 3.9 or later and no packages, and it only reads files. Usage is in the <a href="https://github.com/fieldse/emudhra-ca-compromise-check#readme">repository README</a>.</p>
-    <div class="code"><button type="button">Copy</button><pre>curl -fLO https://raw.githubusercontent.com/fieldse/emudhra-ca-compromise-check/v2.0.0/scripts/vuln-check-emudhra-ca-compromise.pyz
-curl -fLO https://raw.githubusercontent.com/fieldse/emudhra-ca-compromise-check/v2.0.0/scripts/vuln-check-emudhra-ca-compromise.pyz.sha256
-shasum -a 256 -c vuln-check-emudhra-ca-compromise.pyz.sha256
-unzip -l vuln-check-emudhra-ca-compromise.pyz   # review before running</pre></div>
-    <div class="code"><button type="button">Copy</button><pre>python3 -I -S vuln-check-emudhra-ca-compromise.pyz -r ~ -q                      # scan home, print problems only
-python3 -I -S vuln-check-emudhra-ca-compromise.pyz -r ~/src -x ~/src/vendor -q  # skip one directory
-python3 -I -S vuln-check-emudhra-ca-compromise.pyz --root=/opt --containers     # also probe local Podman images
-python3 -I -S vuln-check-emudhra-ca-compromise.pyz -i registry/app:tag          # probe one local image
-python3 -I -S vuln-check-emudhra-ca-compromise.pyz --help</pre></div>
-    <p><code>-I -S</code> keeps the scanned machine’s Python settings, <code>site</code> and <code>.pth</code> files out of the check, so always run it as <code>python3 -I -S FILE</code>. Run through its shebang, Python runs those hooks before the archive re-executes itself under <code>-I -S</code>. The archive is reproducible: the README shows how to rebuild it in a container under Python 3.9 or 3.13 and compare it byte for byte.</p>
-    <h3>What it checks</h3>
-    <ul class="notes">
-      <li><strong>Certificates and keys inside files.</strong> It looks in CA bundles, Java keystores (read directly, without <code>keytool</code>), and Node.js, Bun, Deno, Go and Rust binaries and Electron apps for <code>emSign ECC Root CA - G3</code> and the compromised certificates. It matches each certificate and its public key in PEM or DER, so bundles without comments or labels are covered. It never runs a binary it judges.</li>
-      <li><strong>Versions against the fixes on this page.</strong> It compares OS <code>ca-certificates</code> packages, Homebrew’s <code>ca-certificates</code>, runtimes (Node.js, Bun, Deno, Go, CPython), language packages (certifi, pip, uv, Electron, Rust, Composer, Ruby, Elixir and Perl bundles), Go and Rust binaries, Electron apps and ShipIt updater caches with the fixed releases.</li>
-      <li><strong>Where it looks.</strong> <code>-r</code> sets each directory to scan, <code>$HOME</code> by default, and <code>-x</code> keeps it out of a directory. It also reads the OS bundle files, Homebrew’s bundle, the <code>cacerts</code> of each Java home, and programs in <code>GOBIN</code>, <code>GOPATH/bin</code>, <code>~/.cargo/bin</code>, <code>~/.local/bin</code>, <code>/usr/local/bin</code> and Homebrew’s <code>bin</code>. On macOS it always adds <code>/Applications</code> and Homebrew’s <code>etc</code> and <code>Caskroom</code>.</li>
-      <li><strong>Images, opt in.</strong> <code>-c</code> also probes every local Podman image with networking off, and <code>-i</code> probes one image. The probe reads runtimes, Python packages, the <code>ca-certificates</code> package, CA bundles and Java keystores.</li>
-      <li><strong>What it runs.</strong> For version answers it runs <code>node</code>, <code>bun</code>, <code>deno</code>, <code>go</code>, <code>python3</code>, <code>uv</code> and <code>perl</code>, and on macOS <code>security</code>, <code>xcode-select</code> and <code>java_home</code>, plus <code>podman</code> with <code>-c</code>. Each comes from <code>PATH</code> and is skipped when it sits in an excluded directory. On a machine whose <code>PATH</code> tools you don’t trust, scan from a clean account or pass <code>-x</code> for those directories.</li>
-    </ul>
-    <dl class="levels">
-      <dt class="fail">FAIL</dt><dd>A bundle, keystore or binary still holds the G3 root or a compromised certificate, or a release is older than its fix.</dd>
-      <dt>WARN</dt><dd>Needs manual review. The AAA Certificate Services root is reported here&nbsp;<span class="rl">[<a href="references.html#r040">R040</a>]</span>.</dd>
-      <dt>INFO</dt><dd>Context, such as a compromised key held as a blocklist entry or a certificate held as a rejected entry.</dd>
-      <dt>ERROR</dt><dd>A check that failed to run. The rest of the run continues.</dd>
-    </dl>
-    <p>The check exits 1 on any <code>FAIL</code>, 2 on a usage or environment error, and 0 otherwise. A <code>WARN</code> or <code>ERROR</code> alone exits 0. Pass <code>--strict</code> to exit 1 on those too when it gates CI. A stock Mac fails <code>--strict</code> on the AAA line for <code>/etc/ssl/cert.pem</code> until Apple updates that file&nbsp;<span class="rl">[<a href="references.html#r099">R099</a>, <a href="references.html#r044">R044</a>]</span>.</p>
-    <h3>Changes from the Bash script</h3>
-    <p>The zipapp replaces the earlier Bash script. Its lines keep the same format, with these changes:</p>
-    <ul class="notes">
-      <li><strong>AAA is WARN.</strong> AAA Certificate Services was INFO and is now WARN, so <code>--strict</code> fails on it.</li>
-      <li><strong>Exact Electron versions below the fix are FAIL.</strong> An exact <code>"43.8.0"</code> or <code>"=43.8.0"</code> in <code>package.json</code> can install only that version. Ranges (<code>^</code>, <code>~</code>, <code>N.x</code>) below the fix stay WARN. A declared Electron line names the <code>package.json</code> path and opens its detail with <code>pins V</code> for an exact spec or <code>range starts at V</code> for a range.</li>
-      <li><strong>rpm lines show the full VERSION-RELEASE.</strong> For example <code>found 2025.2.80_v9.0.304-6.fc44, fixed 2026.2.92_v9.0.319-2</code>, as <code>rpm -q</code> prints it.</li>
-      <li><strong>The PEM count includes linked files.</strong> <code>checked N PEM files</code> counts each certificate a link in <code>/etc/ssl/certs</code> points to.</li>
-      <li><strong>Old <code>rustls-webpki</code> in a binary with no affected root is WARN.</strong> A Rust binary whose <code>rustls-webpki</code> is below 0.103.16 lacks the key blocklist&nbsp;<span class="rl">[<a href="references.html#r223">R223</a>]</span>, which matters only when it uses the system trust store. It is FAIL when the same binary holds the G3 root or a compromised intermediate, and WARN otherwise. uv 0.13.4 gets this WARN, and uv calls 0.13.4 fixed&nbsp;<span class="rl">[<a href="references.html#r172">R172</a>]</span>.</li>
-      <li><strong>ERROR lines.</strong> They can appear, and the <code>SUMMARY</code> line gains <code>error=N</code>.</li>
-    </ul>
-    <h3>What it doesn’t check yet</h3>
-    <ul class="notes">
-      <li><strong>Electron apps on Windows.</strong> It reads macOS and Linux app layouts only. Fixed Electron binaries still contain the G3 root, because the fix blocks the intermediates and leaves the root in place&nbsp;<span class="rl">[<a href="references.html#r271">R271</a>]</span>, so it judges apps by their Electron version&nbsp;<span class="rl">[<a href="references.html#r273">R273</a>, <a href="references.html#r274">R274</a>]</span>.</li>
-      <li><strong>Other apps.</strong> It has no version check for Firefox ESR 115, LibreOffice, Godot, Docker Desktop or Git for Windows. Bundles and keystores inside them are read only when they sit under a scan root.</li>
-      <li><strong>Paths outside the scan roots.</strong> It misses JDKs that are not <code>JAVA_HOME</code>, the <code>java</code> on <code>PATH</code> or (on macOS) listed by <code>java_home</code>, Debian’s <code>/etc/ssl/certs/java/cacerts</code> when no JDK it reads links to it, and Go and Rust binaries outside the directories above. Add those directories with <code>-r</code>.</li>
-      <li><strong>Some OS bundles.</strong> It doesn’t read the Red Hat-family code-signing and email bundles.</li>
-      <li><strong>Packages without a version check.</strong> Composer itself, Ruby <code>httpclient</code>, Go’s <code>x/crypto/x509roots/fallback</code> in <code>go.mod</code> (it is checked inside Go binaries), conda, Pixi, uv-managed Python, CPython’s bundled pip, Dart and Flutter.</li>
-      <li><strong>Platform stores.</strong> The macOS system keychain (reported as notes only), Windows trust lists, iOS, Android and Bottlerocket.</li>
-      <li><strong>Inside images.</strong> The image probe doesn’t read Go or Rust binaries, Electron apps or lock files.</li>
-    </ul>
-    <h3>YARA rule</h3>
-    <p>The repository also ships <code>rules/yara/emudhra-ca.yar</code>, which matches the G3 root and the compromised intermediates in any file, and <code>rules/iocs.csv</code> with all 16 compromised certificates. A hit for the compromised intermediates inside Deno 2.9.8 or later likely comes from Deno’s own distrust list, so judge Deno by its version and the root grep&nbsp;<span class="rl">[<a href="references.html#r203">R203</a>]</span>.</p>
-  </section>
+# Roots still in the bundle. Prints nothing on a fixed system
+openssl crl2pkcs7 -nocrl -certfile /etc/ssl/cert.pem \
+  | openssl pkcs7 -print_certs -noout \
+  | grep -E 'emSign ECC Root CA - G3|AAA Certificate Services'</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>Version</th><th>Affected</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td>26.6.2 (25G83)</td><td class="bad">Yes, checked 2026-10-31</td><td class="good">No fix yet</td></tr>
+<tr><td>27.2</td><td class="bad">Yes, per the community tracker. Not confirmed by Apple</td><td class="good">No fix yet</td></tr>
+</tbody></table></div>
+<p>Apple names no fixed version. Its interim steps remove the roots, and the <a href="fixes.html#s-os">fixes page</a> has them.</p>
+<p><a href="fixes.html#a-os">Fixing OS trust stores →</a></p>
+</div>
+<div class="eco" id="m-brew">
+<h3>Homebrew</h3>
+<p>Homebrew’s own CA bundle, from its <code>ca-certificates</code> formula.</p>
+<div class="code"><button type="button">Copy</button><pre># Installed version
+brew list --versions ca-certificates
 
-  <section class="read" id="mitigate">
-    <h2>If you can’t upgrade today</h2>
-    <p>Take the compromised roots out of each store you can’t update yet, then upgrade when a fix ships. Remove AAA Certificate Services along with the G3 root, or the cross-signed path stays open&nbsp;<span class="rl">[<a href="references.html#r040">R040</a>]</span>.</p>
-    <h3>Any trust store</h3>
-    <ul class="notes"><li><strong>Remove both emSign ECC Root CA - G3 and AAA Certificate Services from any bundle you can't update&nbsp;<span class="rl">[<a href="references.html#r040">R040</a>]</span>.</strong> Removing G3 alone leaves the six Sectigo TLS cross-signs trusted through AAA&nbsp;<span class="rl">[<a href="references.html#r040">R040</a>]</span>. Mozilla advised distributions that cannot block the intermediates to consider removing AAA Certificate Services, emSign Root TLS CA - G3 and emSign ECC Root CA - G3&nbsp;<span class="rl">[<a href="references.html#r047">R047</a>]</span>.</li></ul>
-    <h3>OS trust stores</h3>
-    <ul class="notes"><li><strong>On macOS, remove the roots from <code>/etc/ssl/cert.pem</code> with Apple's interim steps&nbsp;<span class="rl">[<a href="references.html#r104">R104</a>]</span>.</strong> Apple's steps remove <code>emSign ECC Root CA - G3</code> and optionally <code>AAA Certificate Services</code>, and removing G3 alone leaves the six Sectigo cross-signs trusted&nbsp;<span class="rl">[<a href="references.html#r104">R104</a>]</span>. A macOS update can replace the file, so re-check it after every update&nbsp;<span class="rl">[<a href="references.html#r103">R103</a>]</span>. The community tracker reports that 27.2 undid hand edits&nbsp;<span class="rl">[<a href="references.html#r102">R102</a>]</span>.</li><li><strong>On Bottlerocket 1.67.0 and earlier, apply AWS's <code>settings.pki</code> override&nbsp;<span class="rl">[<a href="references.html#r085">R085</a>]</span>.</strong> It sets <code>trusted = false</code> for emSign ECC Root CA - G3, C3 and C1 through <code>apiclient apply</code> until the node runs 1.68.0&nbsp;<span class="rl">[<a href="references.html#r085">R085</a>]</span>. The override does not list AAA, which is not in the bundle 1.67.0 uses&nbsp;<span class="rl">[<a href="references.html#r085">R085</a>, <a href="references.html#r084">R084</a>]</span>.</li><li><strong>On disconnected Windows devices, deliver the updated CTLs another way&nbsp;<span class="rl">[<a href="references.html#r108">R108</a>]</span>.</strong> Without automatic updates or internet access the CTL Updater cannot fetch them&nbsp;<span class="rl">[<a href="references.html#r108">R108</a>]</span>. Microsoft gives <code>01dd5f6ca45c9d86</code> as the sequence number of the Disallowed CTL with the eMudhra block&nbsp;<span class="rl">[<a href="references.html#r106">R106</a>]</span>.</li><li><strong>On Android devices without the Play services block, restart first&nbsp;<span class="rl">[<a href="references.html#r110">R110</a>]</span>.</strong> A restart triggers the update&nbsp;<span class="rl">[<a href="references.html#r110">R110</a>]</span>. Failing that, the community tracker suggests disabling <code>emSign ECC Root CA - G3</code> and <code>AAA Certificate Services</code> under Settings, Trusted credentials, System&nbsp;<span class="rl">[<a href="references.html#r111">R111</a>]</span>.</li></ul>
-    <h3>Java</h3>
-    <ul class="notes"><li><strong>Delete G3 and AAA from each <code>cacerts</code> under the vendor's own alias&nbsp;<span class="rl">[<a href="references.html#r123">R123</a>]</span>.</strong> OpenJDK's stopgap is to back up the file, run <code>keytool -delete -cacerts -alias "emsigneccrootcag3 [jdk]"</code> for each of the four <code>[jdk]</code> aliases, ignore "does not exist" errors and restart running JVMs&nbsp;<span class="rl">[<a href="references.html#r123">R123</a>]</span>. Those names miss Temurin, Microsoft and Corretto's second copy, so run the fingerprint check with <code>grep -B1</code> first to print each matching entry's alias&nbsp;<span class="rl">[<a href="references.html#r119">R119</a>, <a href="references.html#r120">R120</a>]</span>. On JDK 8, use <code>-keystore "$JAVA_HOME/jre/lib/security/cacerts"</code> in place of <code>-cacerts</code>&nbsp;<span class="rl">[<a href="references.html#r122">R122</a>]</span>.</li><li><strong>Rebuild the Debian and Ubuntu Java keystore&nbsp;<span class="rl">[<a href="references.html#r158">R158</a>]</span>.</strong> After updating <code>ca-certificates</code>, run <code>rm -f /etc/ssl/certs/java/cacerts</code> and then <code>update-ca-certificates --fresh</code> as root&nbsp;<span class="rl">[<a href="references.html#r158">R158</a>]</span>. A package update alone leaves the old keystore in place&nbsp;<span class="rl">[<a href="references.html#r157">R157</a>]</span>.</li><li><strong>Clean application truststores by hand&nbsp;<span class="rl">[<a href="references.html#r159">R159</a>]</span>.</strong> Run the same <code>keytool -delete</code> with <code>-keystore</code> and the file's password, because the default cacerts fix does not reach these files&nbsp;<span class="rl">[<a href="references.html#r159">R159</a>]</span>.</li><li><strong>Turn on revocation checking as a last resort&nbsp;<span class="rl">[<a href="references.html#r124">R124</a>]</span>.</strong> For TLS clients, OpenJDK suggests adding <code>-Dcom.sun.net.ssl.checkRevocation=true -Dcom.sun.security.enableCRLDP=true</code> to the <code>java</code> command line&nbsp;<span class="rl">[<a href="references.html#r124">R124</a>]</span>. For signed JARs on JDK 17 and later, it suggests <code>jarsigner -verify -revcheck -strict</code> on each JAR&nbsp;<span class="rl">[<a href="references.html#r124">R124</a>]</span>.</li></ul>
-    <h3>Python and JavaScript runtimes</h3>
-    <ul class="notes"><li><strong>Bootstrap uv through the OS verifier&nbsp;<span class="rl">[<a href="references.html#r175">R175</a>]</span>.</strong> <code>--system-certs</code>, <code>UV_SYSTEM_CERTS=true</code> or <code>system-certs = true</code> in <code>uv.toml</code> make uv verify with the operating system instead of its bundled roots, for example <code>UV_SYSTEM_CERTS=true uv self update</code>&nbsp;<span class="rl">[<a href="references.html#r175">R175</a>]</span>. Fix the OS store first&nbsp;<span class="rl">[<a href="references.html#r175">R175</a>]</span>.</li><li><strong>Point uv at a fixed bundle&nbsp;<span class="rl">[<a href="references.html#r175">R175</a>, <a href="references.html#r162">R162</a>]</span>.</strong> <code>SSL_CERT_FILE</code> or <code>SSL_CERT_DIR</code> replaces uv's default certificate source entirely, so a fixed file such as the <code>cacert.pem</code> from certifi 2026.10.19 takes over&nbsp;<span class="rl">[<a href="references.html#r175">R175</a>, <a href="references.html#r162">R162</a>]</span>.</li><li><strong>Point requests at a fixed bundle&nbsp;<span class="rl">[<a href="references.html#r181">R181</a>]</span>.</strong> <code>REQUESTS_CA_BUNDLE</code> or <code>CURL_CA_BUNDLE</code> makes requests use that file instead of certifi&nbsp;<span class="rl">[<a href="references.html#r181">R181</a>]</span>. These settings do not help pip, which keeps its vendored roots and only adds the extra CAs&nbsp;<span class="rl">[<a href="references.html#r169">R169</a>]</span>.</li><li><strong>Upgrade pip inside each venv you cannot rebuild&nbsp;<span class="rl">[<a href="references.html#r171">R171</a>, <a href="references.html#r176">R176</a>]</span>.</strong> Each venv keeps its own pip, so upgrading the interpreter leaves existing venvs on their old pip&nbsp;<span class="rl">[<a href="references.html#r171">R171</a>, <a href="references.html#r176">R176</a>]</span>. Bring each one to pip 26.2.2&nbsp;<span class="rl">[<a href="references.html#r168">R168</a>]</span>.</li><li><strong>Run Node.js with <code>--use-openssl-ca</code> on Linux once the distribution store is fixed&nbsp;<span class="rl">[<a href="references.html#r199">R199</a>]</span>.</strong> The flag replaces the bundled roots with OpenSSL's default store, which most Linux distributions maintain&nbsp;<span class="rl">[<a href="references.html#r199">R199</a>]</span>. This was not tested against a fixed store&nbsp;<span class="rl">[<a href="references.html#r199">R199</a>]</span>.</li><li><strong>Run Deno with <code>DENO_TLS_CA_STORE=system</code> once the OS store is fixed&nbsp;<span class="rl">[<a href="references.html#r202">R202</a>]</span>.</strong> The variable picks the system store, the bundled Mozilla roots or both, in order, and defaults to the bundled roots&nbsp;<span class="rl">[<a href="references.html#r202">R202</a>]</span>. Upgrade to 2.9.8 anyway, because which 2.9.7 code path loads the AAA root was not traced&nbsp;<span class="rl">[<a href="references.html#r204">R204</a>]</span>.</li></ul>
-    <h3>Other languages</h3>
-    <ul class="notes"><li><strong>Point Go, curl, .NET on Linux and <code>rustls-native-certs</code> at curl's <code>cacert-2026-10-20.pem</code> with <code>SSL_CERT_FILE</code>&nbsp;<span class="rl">[<a href="references.html#r252">R252</a>, <a href="references.html#r253">R253</a>]</span>.</strong> That bundle holds neither the G3 root nor the AAA root&nbsp;<span class="rl">[<a href="references.html#r252">R252</a>, <a href="references.html#r253">R253</a>]</span>. All four read <code>SSL_CERT_FILE</code>&nbsp;<span class="rl">[<a href="references.html#r208">R208</a>, <a href="references.html#r254">R254</a>, <a href="references.html#r250">R250</a>, <a href="references.html#r225">R225</a>]</span>. The curl tool reads it, and <code>CURL_CA_BUNDLE</code>, only when it uses no native store, so a Schannel build on Windows ignores both&nbsp;<span class="rl">[<a href="references.html#r254">R254</a>]</span>. From Go 1.27, setting it on macOS or Windows turns off Go's platform verifier&nbsp;<span class="rl">[<a href="references.html#r208">R208</a>]</span>.</li><li><strong>For .NET on Linux, remove the roots from the OpenSSL bundle&nbsp;<span class="rl">[<a href="references.html#r250">R250</a>, <a href="references.html#r251">R251</a>]</span>.</strong> .NET ignores the <code>Disallowed</code> store when it builds chains on Linux&nbsp;<span class="rl">[<a href="references.html#r251">R251</a>]</span>.</li><li><strong>Keep a fixed CA bundle in Go containers and leave <code>GODEBUG=x509usefallbackroots=1</code> unset&nbsp;<span class="rl">[<a href="references.html#r210">R210</a>]</span>.</strong> Go then uses the system roots and never the embedded fallback bundle&nbsp;<span class="rl">[<a href="references.html#r210">R210</a>]</span>.</li><li><strong>Give Perl a fixed, usable system store&nbsp;<span class="rl">[<a href="references.html#r243">R243</a>]</span>.</strong> IO::Socket::SSL clients such as LWP and HTTP::Tiny load <code>Mozilla::CA</code> only when no usable system store is found&nbsp;<span class="rl">[<a href="references.html#r243">R243</a>]</span>.</li></ul>
-    <h3>Apps and container images</h3>
-    <ul class="notes"><li><strong>Firefox ESR 115: leave a new profile idle for 20 seconds before first use&nbsp;<span class="rl">[<a href="references.html#r264">R264</a>]</span>.</strong> ESR 115 loads OneCRL only after 20 seconds without input&nbsp;<span class="rl">[<a href="references.html#r264">R264</a>]</span>. Once it loaded, the tracker's test page showed none of the 14 chains trusted&nbsp;<span class="rl">[<a href="references.html#r264">R264</a>]</span>.</li><li><strong>Upgrade ca-certificates in the image build when the base image lags&nbsp;<span class="rl">[<a href="references.html#r300">R300</a>]</span>.</strong> On rockylinux:8, :9 and :10, <code>dnf upgrade ca-certificates</code> installs the fixed builds&nbsp;<span class="rl">[<a href="references.html#r300">R300</a>]</span>. On amazonlinux:2023, add <code>--releasever=latest</code> to the update, or it keeps the unfixed build&nbsp;<span class="rl">[<a href="references.html#r301">R301</a>]</span>.</li><li><strong>Move distroless images to Debian 13&nbsp;<span class="rl">[<a href="references.html#r299">R299</a>]</span>.</strong> static-debian13 ships the fixed ca-certificates 20250419+deb13u1&nbsp;<span class="rl">[<a href="references.html#r299">R299</a>]</span>. The Debian 12 images had no fix on 2026-10-31&nbsp;<span class="rl">[<a href="references.html#r298">R298</a>]</span>.</li><li><strong>Update the podman machine VM's own ca-certificates&nbsp;<span class="rl">[<a href="references.html#r286">R286</a>]</span>.</strong> The VM keeps a store separate from the host, and the community tracker gives Fedora 2026.2.92_v9.0.319 as fixed&nbsp;<span class="rl">[<a href="references.html#r286">R286</a>]</span>.</li></ul>
-  </section>
+# Roots still in the bundle. Prints nothing on a fixed install
+openssl crl2pkcs7 -nocrl -certfile "$(brew --prefix)/etc/ca-certificates/cert.pem" \
+  | openssl pkcs7 -print_certs -noout \
+  | grep -E 'emSign ECC Root CA - G3|AAA Certificate Services'</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>Formula</th><th>Affected</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td><code>ca-certificates</code></td><td class="bad"><code>2026-09-25</code> and earlier</td><td class="good"><code>2026-09-25_1</code>, or <code>2026-10-20</code> (current)</td></tr>
+</tbody></table></div>
+<p><a href="checks.html#g-os">Every OS item, with Homebrew →</a></p>
+</div>
+<div class="eco" id="m-java">
+<h3>Java</h3>
+<p>The <code>cacerts</code> keystore in each JDK or JRE. Run the <code>keytool</code> of the JDK you are checking.</p>
+<div class="code"><button type="button">Copy</button><pre># Compromised roots by fingerprint. Prints nothing on a fixed build
+keytool -list -cacerts -storepass changeit | grep -iE '86:A1:EC:BA:08:9C:4A:8D|D7:A7:A0:FB:5D:7E:27:31'
 
-  <aside class="cta" id="help" aria-label="Get help from Blacklight Security">
-    <span class="label">Blacklight Security</span>
-    <h3>Need help?</h3>
-    <p>Our in-house team at <a href="https://blacklight.security/">Blacklight Security</a> can find every trust store, keystore, bundle and image across your systems that still trusts the compromised certificates, help you replace them, and look for signs that a certificate issued under them was used against you.</p>
-    <div class="actions">
-      <a class="btn btn-primary" href="https://blacklight.security/contact">Contact us →</a>
-      <a class="btn btn-ghost" href="https://blacklight.security/">Our services</a>
-    </div>
-  </aside>
+# Compromised roots by owner name. Prints nothing on a fixed build
+keytool -list -v -cacerts -storepass changeit | grep -E 'Owner: .*(emSign ECC Root CA - G3|AAA Certificate Services)'</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>JDK line</th><th>Affected (OpenJDK’s list)</th></tr></thead><tbody>
+<tr><td>27</td><td class="bad"><code>27.0.1.0.2</code> and earlier</td></tr>
+<tr><td>25</td><td class="bad"><code>25.0.5.0.2</code> and earlier</td></tr>
+<tr><td>21</td><td class="bad"><code>21.0.13.0.2</code> and earlier</td></tr>
+<tr><td>17</td><td class="bad"><code>17.0.21.0.2</code> and earlier</td></tr>
+<tr><td>11</td><td class="bad"><code>11.0.32.1</code> and earlier</td></tr>
+<tr><td>8</td><td class="bad"><code>8u504</code> and earlier</td></tr>
+</tbody></table></div>
+<p>A fixed build’s release note names JDK-8395690 and CVE-2026-114820. Vendor version numbers differ, so check each vendor’s fixed build on the <a href="checks.html#g-java">Affected software page</a>.</p>
+<p><a href="fixes.html#a-java">Fixing Java →</a></p>
+</div>
+<div class="eco" id="m-certifi">
+<h3>Python certifi</h3>
+<p>The CA bundle that requests, HTTPX and other Python clients load from the certifi package. Check it in every venv.</p>
+<div class="code"><button type="button">Copy</button><pre># Bundle path
+python -m certifi
 
-  <section id="sources">
-    <h2>Sources</h2>
-    <p class="muted read">Every claim on these pages has a numbered row on the references page, with its sources, publisher and date, checked on 2026-10-31. The primary sources behind this page are listed below.</p>
-    <p class="src"><a href="references.html"><span>Every claim with its sources</span></a></p>
-    <ul class="sources"><li><a href='https://bugzilla.mozilla.org/show_bug.cgi?id=2083449'>Bug 2083449 - eMudhra: Private key compromise of Intermediate Certificates</a><span class='muted'> · Mozilla</span></li><li><a href='https://github.com/TrustedRootProgram/Program-Requirements/blob/main/Announcements.md'>Announcements - Microsoft Trusted Root Certificate Program</a><span class='muted'> · Microsoft</span></li><li><a href='https://blog.mozilla.org/security/2026/10/20/protecting-firefox-users-following-the-compromise-of-emudhra-intermediate-certificates/'>Protecting Firefox users following the compromise of eMudhra intermediate certificates</a><span class='muted'> · Mozilla</span></li><li><a href='https://www.microsoft.com/en-us/msrc/blog/2026/10/microsoft-response-to-compromised-emudhra-certificate-authority-keys'>Microsoft's response to compromised eMudhra certificate authority keys</a><span class='muted'> · Microsoft</span></li><li><a href='https://support.apple.com/en-us/149555'>About the compromised eMudhra intermediate CAs</a><span class='muted'> · Apple</span></li><li><a href='https://chromium.googlesource.com/chromium/src/+/5a6a4e78597add03dd32bc233e03f3145cd99b65/net/data/ssl/chrome_root_store/root_store.textproto'>Chrome Root Store v42 root_store.textproto</a><span class='muted'> · Chromium</span></li><li><a href='https://bugzilla.mozilla.org/attachment.cgi?id=9670867'>eMudhra response to Chrome Root Program questions on Bug 2083449</a><span class='muted'> · eMudhra</span></li><li><a href='https://blog.google/security/protecting-chrome-and-android-users-from-compromised-emudhra-intermediate-ca-certificates/'>Protecting Chrome and Android Users from Compromised eMudhra Intermediate CA Certificates</a><span class='muted'> · Google</span></li><li><a href='https://www.sectigo.com/resource-library/advisory-on-compromised-emudhra-intermediate-certificates'>Advisory on compromised eMudhra intermediate certificates</a><span class='muted'> · Sectigo</span></li><li><a href='https://www.openwall.com/lists/oss-security/2026/10/20/1'>oss-security: eMudhra Intermediates Compromise</a><span class='muted'> · Openwall</span></li><li><a href='https://www.einpresswire.com/article/951482814/emudhra-to-exit-global-ssl-tls-certificate-business'>eMudhra to Exit global SSL/TLS Certificate Business</a><span class='muted'> · EIN Presswire</span></li><li><a href='https://emudhra.com/en/post/certificate-security-incident'>eMudhra status page, Update 7</a><span class='muted'> · eMudhra</span></li><li><a href='https://access.redhat.com/security/vulnerabilities/RHSB-2026-012'>RHSB-2026-012 Certificate compromise - eMudhra</a><span class='muted'> · Red Hat</span></li><li><a href='https://cveawg.mitre.org/api/cve/CVE-2026-111944'>CVE record CVE-2026-111944</a><span class='muted'> · CVE Program</span></li><li><a href='https://cveawg.mitre.org/api/cve/CVE-2026-111943'>CVE record CVE-2026-111943</a><span class='muted'> · CVE Program</span></li><li><a href='https://pkg.go.dev/vuln/GO-2026-6809'>GO-2026-6809</a><span class='muted'> · Go</span></li><li><a href='https://cveawg.mitre.org/api/cve/CVE-2026-114406'>CVE record CVE-2026-114406</a><span class='muted'> · CVE Program</span></li><li><a href='https://cveawg.mitre.org/api/cve/CVE-2026-114820'>CVE record CVE-2026-114820</a><span class='muted'> · CVE Program</span></li><li><a href='https://www.oracle.com/security-alerts/alert-cve-2026-114820.html'>Oracle Security Alert Advisory - CVE-2026-114820</a><span class='muted'> · Oracle</span></li><li><a href='https://openjdk.org/emudhra'>Compromised Certificates and OpenJDK Java Runtimes</a><span class='muted'> · OpenJDK</span></li><li><a href='https://cveawg.mitre.org/api/cve/CVE-2026-91403'>CVE record CVE-2026-91403</a><span class='muted'> · CVE Program</span></li><li><a href='https://www.oracle.com/security-alerts/alert-cve-2026-91403.html'>Oracle Security Alert Advisory - CVE-2026-91403</a><span class='muted'> · Oracle</span></li><li><a href='https://cveawg.mitre.org/api/cve/CVE-2026-113812'>CVE record CVE-2026-113812</a><span class='muted'> · CVE Program</span></li><li><a href='https://cveawg.mitre.org/api/cve/CVE-2026-115570'>CVE record CVE-2026-115570</a><span class='muted'> · CVE Program</span></li><li><a href='https://github.com/electron/electron/security/advisories/GHSA-jr5w-w6x2-84p9'>Mitigation for compromised eMudhra intermediate certificates (GHSA-jr5w-w6x2-84p9)</a><span class='muted'> · Electron</span></li><li><a href='https://bugzilla.mozilla.org/show_bug.cgi?id=2084101'>Bug 2084101 - Remove eMudhra emSign Root CA - G3 from NSS</a><span class='muted'> · Mozilla</span></li><li><a href='https://raw.githubusercontent.com/nss-dev/nss/master/lib/ckfw/builtins/certdata.txt'>NSS master certdata.txt</a><span class='muted'> · Mozilla</span></li><li><a href='https://cveawg.mitre.org/api/cve/CVE-2026-113470'>CVE record CVE-2026-113470</a><span class='muted'> · CVE Program</span></li><li><a href='https://bugzilla.mozilla.org/show_bug.cgi?id=2086788'>Bug 2086788 - Firefox 115 ESR may still trust the compromised eMudhra certificates</a><span class='muted'> · Mozilla</span></li><li><a href='https://product-details.mozilla.org/1.0/firefox_versions.json'>Mozilla product-details firefox_versions.json</a><span class='muted'> · Mozilla</span></li><li><a href='https://chromium.googlesource.com/chromium/src/+/main/net/data/ssl/chrome_root_store/root_store.textproto'>Chrome Root Store v43 root_store.textproto</a><span class='muted'> · Chromium</span></li><li><a href='https://www.oracle.com/java/technologies/javase/27-0-1-0-3-relnotes.html'>Oracle JDK 27.0.1.0.3 release notes</a><span class='muted'> · Oracle</span></li><li><a href='https://github.com/dart-lang/sdk/security/advisories/GHSA-frr6-h895-5pxp'>TLS MitM vulnerability on Android, Windows, and Linux due to compromised eMudhra intermediate CA certificates</a><span class='muted'> · Dart</span></li><li><a href='https://nodejs.org/api/cli.html'>Command-line API</a><span class='muted'> · Node.js</span></li><li><a href='https://www.ibm.com/support/pages/node/7294729'>Security Bulletin: eMudhra CA Certificate Compromise (CVE-2026-91403 and CVE-2026-114820)</a><span class='muted'> · IBM</span></li><li><a href='https://github.com/nss-dev/nss'>NSS certdata.txt at release tags NSS_3_130 to NSS_3_132</a><span class='muted'> · Mozilla</span></li><li><a href='https://github.com/golang/go/commit/90617fb7ceb59cf08bee7826bb51b8c8fb8c11de'>Go commit 90617fb</a><span class='muted'> · Go</span></li><li><a href='https://github.com/python/cpython/issues/160040'>ssl: distrust compromised eMudhra intermediate CA keys</a><span class='muted'> · Python Software Foundation</span></li><li><a href='https://bugzilla.mozilla.org/show_bug.cgi?id=2085612'>Bug 2085612 - eMudhra: Access to CRLs blocked for certain User-Agent headers</a><span class='muted'> · Mozilla</span></li></ul>
-  </section>
+# Prints 1 if the bundle holds the G3 root, 0 if not
+grep -c 'Label: "emSign ECC Root CA - G3"' "$(python -m certifi)"
 
+# Prints 1 if the bundle holds the AAA root, 0 if not
+grep -c 'Comodo AAA Services root' "$(python -m certifi)"</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>Root</th><th>Affected</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td>G3</td><td class="bad"><code>2019.3.9</code> to <code>2026.7.22</code></td><td class="good"><code>2026.10.19</code> or later</td></tr>
+<tr><td>AAA</td><td class="bad"><code>2025.1.31</code> and earlier, including <code>2018.11.29</code></td><td class="good"><code>2026.10.19</code> or later</td></tr>
+</tbody></table></div>
+<p><code>2026.10.18</code> is the advisory’s first patched release, but it also drops emSign roots that were not affected.</p>
+<p><a href="fixes.html#a-python">Fixing Python →</a></p>
+</div>
+<div class="eco" id="m-pip">
+<h3>pip</h3>
+<p>pip vendors its own copy of certifi, so a fixed OS store or certifi package doesn’t protect an old pip. Each venv has its own pip.</p>
+<div class="code"><button type="button">Copy</button><pre># Installed version
+python -m pip --version
+
+# Lists every pip copy under your home directory that still holds the G3 root
+find ~ -path '*/pip/_vendor/certifi/cacert.pem' -exec grep -l 'Label: "emSign ECC Root CA - G3"' {} + 2&gt;/dev/null</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>Versions</th><th>Affected</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td>All</td><td class="bad"><code>26.2.1</code> and earlier hold the G3 root</td><td class="good"><code>26.2.2</code>, which vendors certifi 2026.10.19</td></tr>
+<tr><td>Bundled with Python 3.11 and 3.12</td><td class="bad"><code>24.0</code> and <code>25.0.1</code> hold the G3 and AAA roots</td><td class="good"><code>26.2.2</code></td></tr>
+</tbody></table></div>
+<p>Upgrade pip in every venv.</p>
+<p><a href="fixes.html#a-python">Fixing Python →</a></p>
+</div>
+<div class="eco" id="m-uv">
+<h3>uv</h3>
+<p>uv carries its own root list inside its binary.</p>
+<div class="code"><button type="button">Copy</button><pre># Installed version
+uv --version
+
+# Prints a count above 0 on an affected build, 0 on a fixed one.
+# Confirmed on Linux x86_64 builds only
+grep -ac 'emSign ECC Root CA - G3' "$(command -v uv)"</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>Tool</th><th>Affected</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td>uv</td><td class="bad"><code>0.13.3</code> and earlier</td><td class="good"><code>0.13.4</code> removes the root. <code>0.13.5</code> also rejects the compromised keys</td></tr>
+</tbody></table></div>
+<p><a href="fixes.html#a-python">Fixing Python →</a></p>
+</div>
+<div class="eco" id="m-node">
+<h3>Node.js</h3>
+<p>Node compiles a root list into its binary, and only a Node upgrade changes it.</p>
+<div class="code"><button type="button">Copy</button><pre># Installed version
+node --version
+
+# Prints 1 if the binary holds the G3 root, 0 if not.
+# Confirmed on Linux x86_64 builds only
+grep -ac 'MIICTjCCAdOgAwIBAgIKPPYHqWhwDtqLhDAKBggqhkjOPQQDAzBrMQswCQYDVQQG' "$(command -v node)"</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>Line</th><th>Affected</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td>26</td><td class="bad"><code>26.12.0</code> and earlier</td><td class="good"><code>26.12.1</code></td></tr>
+<tr><td>24</td><td class="bad"><code>24.22.0</code> and earlier</td><td class="good"><code>24.22.1</code></td></tr>
+<tr><td>22</td><td class="bad"><code>22.23.3</code> and earlier</td><td class="good"><code>22.23.4</code></td></tr>
+<tr><td>20</td><td class="bad">Every release (end of life)</td><td class="good">No fix. Move to a supported line</td></tr>
+</tbody></table></div>
+<p><a href="fixes.html#a-js">Fixing JavaScript runtimes →</a></p>
+</div>
+<div class="eco" id="m-bun">
+<h3>Bun and Deno</h3>
+<p>Both carry their own root list inside their binary.</p>
+<div class="code"><button type="button">Copy</button><pre># Installed versions
+bun --version
+deno --version
+
+# Each prints a count above 0 on an affected build, 0 on a fixed one
+grep -ac 'emSign ECC Root CA - G3' "$(command -v bun)"
+grep -ac 'emSign ECC Root CA - G3' "$(command -v deno)"</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>Runtime</th><th>Affected</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td>Bun</td><td class="bad"><code>1.4.3</code> and earlier</td><td class="good"><code>1.4.4</code></td></tr>
+<tr><td>Deno</td><td class="bad"><code>2.9.7</code> and earlier</td><td class="good"><code>2.9.8</code></td></tr>
+</tbody></table></div>
+<p><a href="fixes.html#a-js">Fixing JavaScript runtimes →</a></p>
+</div>
+<div class="eco" id="m-go">
+<h3>Go</h3>
+<p>Go’s denylist for the compromised certificates is compiled into each program. A program has it only if it was built with go1.26.10, go1.27.3 or later.</p>
+<div class="code"><button type="button">Copy</button><pre># Toolchain version
+go version
+
+# Toolchain a program was built with
+go version ./your-binary
+
+# Known vulnerabilities in a built program
+govulncheck -mode binary ./your-binary</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>Line</th><th>Affected</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td>1.27</td><td class="bad"><code>1.27.0</code> to <code>1.27.2</code></td><td class="good"><code>1.27.3</code>, then rebuild</td></tr>
+<tr><td>1.26</td><td class="bad"><code>1.26.9</code> and earlier</td><td class="good"><code>1.26.10</code>, then rebuild</td></tr>
+</tbody></table></div>
+<p><a href="fixes.html#a-langs">Fixing other languages →</a></p>
+</div>
+<div class="eco" id="m-rust">
+<h3>Rust</h3>
+<p>The root crates compile their roots into each program, so rebuild after updating. Run the checks in the project root.</p>
+<div class="code"><button type="button">Copy</button><pre># Locked versions of the root and verifier crates
+grep -A1 'name = "webpki-roots"' Cargo.lock
+grep -A1 'name = "webpki-root-certs"' Cargo.lock
+grep -A1 'name = "rustls-webpki"' Cargo.lock</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>Crate</th><th>Affected</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td><code>webpki-roots</code></td><td class="bad"><code>1.0.9</code> and earlier 1.x, and <code>0.26.0</code> to <code>0.26.10</code></td><td class="good"><code>1.0.10</code></td></tr>
+<tr><td><code>webpki-root-certs</code></td><td class="bad"><code>1.0.9</code> and earlier 1.x, and <code>0.26.10</code> and earlier</td><td class="good"><code>1.0.10</code></td></tr>
+<tr><td><code>rustls-webpki</code></td><td class="bad"><code>0.103.15</code> and earlier</td><td class="good"><code>0.103.16</code></td></tr>
+</tbody></table></div>
+<p><a href="fixes.html#a-langs">Fixing other languages →</a></p>
+</div>
+<div class="eco" id="m-pkgs">
+<h3>PHP, Ruby, Perl and Elixir packages</h3>
+<p>Packages that ship their own CA bundle. Run each check in the project root.</p>
+<div class="code"><button type="button">Copy</button><pre># PHP
+grep -A3 '"name": "composer/ca-bundle"' composer.lock
+
+# Ruby
+grep -E '^    excon ' Gemfile.lock
+grep -E '^    httpclient ' Gemfile.lock
+
+# Perl
+grep -o 'Mozilla-CA-[0-9]*' cpanfile.snapshot | sort -u
+
+# Elixir and Erlang
+grep '"castore"' mix.lock
+grep '"certifi"' mix.lock rebar.lock</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>Package</th><th>Affected</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td><code>composer/ca-bundle</code></td><td class="bad"><code>1.5.14</code> and earlier, <code>1.4.15</code> and earlier</td><td class="good"><code>1.6.0</code> or <code>1.4.16</code></td></tr>
+<tr><td><code>excon</code></td><td class="bad"><code>1.7.3</code> and earlier</td><td class="good"><code>1.8.0</code></td></tr>
+<tr><td><code>httpclient</code></td><td class="bad"><code>2.9.0</code>, the latest release (AAA path)</td><td class="good">No fix yet</td></tr>
+<tr><td><code>Mozilla::CA</code></td><td class="bad">Before <code>20261020</code></td><td class="good"><code>20261020</code></td></tr>
+<tr><td><code>castore</code></td><td class="bad"><code>1.0.21</code> and earlier</td><td class="good"><code>1.0.22</code></td></tr>
+<tr><td>Hex <code>certifi</code></td><td class="bad"><code>2.17.0</code> and earlier</td><td class="good"><code>2.18.0</code>, then a clean rebuild</td></tr>
+</tbody></table></div>
+<p><a href="fixes.html#a-langs">Fixing other languages →</a></p>
+</div>
+<div class="eco" id="m-electron">
+<h3>Electron apps</h3>
+<p>Each Electron app ships its own Electron, so the fix is the app’s own release on a fixed Electron. Fixed releases still contain the G3 root, so the version is the check. Both commands read it without running the app.</p>
+<div class="code"><button type="button">Copy</button><pre># Electron version of an installed macOS app
+plutil -extract CFBundleVersion raw "/Applications/&lt;App&gt;.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Resources/Info.plist"
+
+# Electron version from an app's main binary, on macOS or Linux
+grep -a -o 'Electron/[0-9][0-9.]*' "&lt;app binary&gt;" | sort -u</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>Line</th><th>Affected</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td>45</td><td class="bad"><code>45.0.0-alpha.1</code> to below <code>45.0.0-beta.6</code></td><td class="good"><code>45.0.0-beta.6</code> or later</td></tr>
+<tr><td>44</td><td class="bad"><code>44.0.0-alpha.1</code> to below <code>44.9.1</code></td><td class="good"><code>44.9.1</code></td></tr>
+<tr><td>43</td><td class="bad"><code>43.0.0-alpha.1</code> to below <code>43.8.1</code></td><td class="good"><code>43.8.1</code></td></tr>
+<tr><td>42 and older</td><td class="bad">Below <code>42.11.16</code></td><td class="good"><code>42.11.16</code></td></tr>
+</tbody></table></div>
+<p><a href="fixes.html#a-apps">Fixing browsers and apps →</a></p>
+</div>
+<div class="eco" id="m-images">
+<h3>Container images</h3>
+<p>A container trusts only the bundle inside its image, so check every image you build or run.</p>
+<div class="code"><button type="button">Copy</button><pre># Copy the bundle out of an image with a shell
+docker run --rm --network none --entrypoint cat &lt;image&gt; /etc/ssl/certs/ca-certificates.crt &gt; bundle.pem
+
+# Or, for an image with no shell
+id=$(docker create &lt;image&gt; x); docker cp "$id":/etc/ssl/certs/ca-certificates.crt bundle.pem; docker rm "$id"
+
+# Roots still in the bundle. Prints nothing when neither is there
+openssl crl2pkcs7 -nocrl -certfile bundle.pem \
+  | openssl pkcs7 -print_certs -noout \
+  | grep -E 'emSign ECC Root CA - G3|AAA Certificate Services'</pre></div>
+<div class="table-scroll"><table class="caveats"><thead><tr><th>Image</th><th>Affected</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td>Any image</td><td class="bad">Built before its distro’s fixed <code>ca-certificates</code></td><td class="good">Rebuild on a fixed base, or upgrade <code>ca-certificates</code> in the build</td></tr>
+<tr><td>distroless <code>static-debian12</code>, <code>base-debian12</code></td><td class="bad"><code>ca-certificates</code> <code>20250419~deb12u1</code>, with the G3 and AAA roots. No fix on 2026-10-31</td><td class="good">distroless <code>static-debian13</code> (<code>20250419+deb13u1</code>)</td></tr>
+</tbody></table></div>
+<p><a href="fixes.html#a-images">Fixing container images →</a></p>
+</div>
+</div>
+</section>
+</section>
+<section class="read" id="helper">
+<h2>Automated checker</h2>
+<p class="key"><strong>A free, read-only checker runs these checks against your machine in one pass.</strong></p>
+<p class="src"><a href="https://github.com/fieldse/emudhra-ca-compromise-check"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>Source on GitHub</span></a></p>
+<h3>What it is</h3>
+<ul class="notes">
+<li>One file, <code>vuln-check-emudhra-ca-compromise.pyz</code>, a Python zipapp: a zip archive that <code>python3</code> runs as a program.</li>
+<li>It needs Python 3.9 or later, no packages and no root.</li>
+<li>It reads files and changes nothing. Its own code opens no network connection.</li>
+<li>It is open source, under the MIT license.</li>
+</ul>
+<h3>What it does</h3>
+<p>It looks in these places for the compromised certificates and for software older than its fix:</p>
+<ul class="notes">
+<li>OS, Homebrew and Perl trust stores, and the CA bundles in the directories it scans</li>
+<li>Java keystores</li>
+<li>Runtimes and packages: Node.js, Bun, Deno, Go, Python, certifi, pip and uv</li>
+<li>Go and Rust programs, and Electron apps</li>
+<li>Lockfiles and manifests for Rust, Python, PHP, Ruby, Elixir, Electron and Go</li>
+<li>Local container images, when you ask for them</li>
+</ul>
+<p>The <a href="detections.html">Checker rules page</a> lists what it looks for, with each rule’s condition, level and source. <a href="#resources">Documentation</a> explains how it works, and <a href="#proof">Verifying a finding</a> shows how to check a result.</p>
+<h3>What the checker can’t see</h3>
+<p><strong>The checker misses these, so check them by hand.</strong></p>
+<ul class="notes">
+<li>Electron apps on Windows, because it reads only macOS and Linux app layouts</li>
+<li>Go and Rust binaries outside a <code>bin</code>, <code>sbin</code> or <code>Contents/MacOS</code> directory, such as <code>go-bin/</code>, even when <code>-r</code> names that folder</li>
+<li>Go and Rust binaries, Electron apps and lockfiles inside container images</li>
+<li>When the checker runs as root, an ACL that lets a non-root user change a tool, because the checker looks only at owner and mode bits</li>
+<li>A file above 32 MiB that another process truncates during the read, which ends the run with <code>SIGBUS</code></li>
+</ul>
+<p class="muted"><a href="https://github.com/fieldse/emudhra-ca-compromise-check/blob/main/docs/how-it-works.md#what-it-does-not-cover-yet">What it does not cover yet</a> has the full list.</p>
+<h3>Usage</h3>
+<p>Run the checker with <code>./run-checks.sh</code>, which starts it with <code>python3 -I -S</code> to keep the machine’s own Python settings out of the check.</p>
+<div class="code"><button type="button">Copy</button><pre># Get the checker
+git clone https://github.com/fieldse/emudhra-ca-compromise-check.git
+cd emudhra-ca-compromise-check
+
+# Optional, recommended: review the source
+# Don't blindly run scripts from strangers!
+unzip -l scripts/vuln-check-emudhra-ca-compromise.pyz
+unzip -p scripts/vuln-check-emudhra-ca-compromise.pyz emudhra_check/cli.py | less
+less run-checks.sh
+
+# Scan your home directory and report problems only
+./run-checks.sh -q
+
+# Also check local container images
+./run-checks.sh -q -c</pre></div>
+<p class="muted">The archive holds the same code as <code>emudhra_check/</code> in the repository, and rebuilds from it to the same bytes. The <a href="https://github.com/fieldse/emudhra-ca-compromise-check#inspecting-and-rebuilding-the-archive">README</a> shows how.</p>
+<p><strong>Options</strong></p>
+<p>These options change where the checker looks and when it fails:</p>
+<div class="table-scroll"><table class="list tbl"><thead><tr><th>Option</th><th>What it does</th></tr></thead><tbody>
+<tr><td><code>-r DIR</code></td><td>Scan <code>DIR</code> instead of your home directory</td></tr>
+<tr><td><code>-x DIR</code></td><td>Never enter <code>DIR</code></td></tr>
+<tr><td><code>-q</code></td><td>Print only <code>FAIL</code>, <code>WARN</code> and <code>ERROR</code> lines and the summary</td></tr>
+<tr><td><code>-c</code></td><td>Also probe every local Podman image, with networking off. Docker images aren’t probed</td></tr>
+<tr><td><code>-i IMAGE</code></td><td>Probe only this local image</td></tr>
+<tr><td><code>--strict</code></td><td>Exit 1 on a <code>WARN</code> or <code>ERROR</code> as well, for CI</td></tr>
+<tr><td><code>--help</code></td><td>Print every option</td></tr>
+</tbody></table></div>
+<h3>Reading results</h3>
+<p>With <code>-q</code> the checker prints only problems, at one of three levels:</p>
+<dl class="levels">
+<dt class="fail">FAIL</dt><dd>Something to fix. A bundle, keystore or binary still holds a G3 root or a compromised certificate, or a release is older than its fix.</dd>
+<dt>WARN</dt><dd>Needs manual review. A store that holds AAA Certificate Services shows here, because the Sectigo cross-signs chain to it.</dd>
+<dt>ERROR</dt><dd>A check that failed to run. The rest of the run continues.</dd>
+</dl>
+<p>Each line reads <code>LEVEL subject [location] detail</code>. This one comes from the test suite, run against the certifi 2026.7.22 wheel:</p>
+<div class="code"><button type="button">Copy</button><pre>FAIL  certifi [/tmp/d/certifi-2026.7.22.dist-info] found 2026.7.22, fixed 2026.10.18 (vendors its own CA bundle)</pre></div>
+<p>The last line is <code>SUMMARY pass=N fail=N warn=N info=N skip=N error=N</code>.</p>
+<p>The checker exits 1 on any <code>FAIL</code>, 2 on a usage or environment error, and 0 otherwise.</p>
+</section>
+<section class="read" id="proof">
+<h2>Verifying a finding</h2>
+<p class="key"><strong>You can check any finding yourself from the original sources, without trusting the checker.</strong></p>
+<p class="read">The <a href="proof.html">proof page</a> maps each output line to the steps that verify it, with a shell, <code>openssl</code>, <code>curl</code> and a browser. Start at <a href="proof.html#find-your-finding">Find your finding</a>.</p>
+</section>
+<section id="resources">
+<h2>Documentation</h2>
+<p class="key"><strong>These documents describe how the checker works, the rules it applies and the sources behind them.</strong></p>
+<ul class="resources">
+  <li><a href="https://github.com/fieldse/emudhra-ca-compromise-check/blob/main/docs/how-it-works.md">How the check works</a><span>What it reads, how it matches certificates and how it picks a level</span></li>
+  <li><a href="detections.html">Checker rules</a><span>Every rule the checker applies, with its condition, level and source</span></li>
+  <li><a href="https://github.com/fieldse/emudhra-ca-compromise-check/blob/main/docs/weak-rules.md">Weak and unverifiable rules</a><span>The rules that rest on a weak source or none, and why</span></li>
+  <li><a href="https://github.com/fieldse/emudhra-ca-compromise-check/blob/main/docs/sources.md">Source index</a><span>Every source by S-number, with the date it was checked</span></li>
+</ul>
+</section>
+<aside class="cta" id="help" aria-label="Get help from Blacklight Security">
+  <span class="label">Blacklight Security</span>
+  <h3>Need help?</h3>
+  <p>Our in-house team at <a href="https://blacklight.security/">Blacklight Security</a> can find every trust store, keystore, bundle and image across your systems that still trusts the compromised certificates, help you replace them, and look for signs that a certificate issued under them was used against you.</p>
+  <div class="actions">
+    <a class="btn btn-primary" href="https://blacklight.security/contact">Contact us →</a>
+    <a class="btn btn-ghost" href="https://blacklight.security/">Our services</a>
+  </div>
+</aside>
+<section id="sources">
+<h2>References</h2>
+<p class="muted read">Every claim on these pages has a numbered row on the <a href="references.html">references page</a>, with its source, publisher and the date it was checked. The primary sources behind this page are below, grouped by who published them.</p>
+<h4>Root programs and browsers</h4>
+<ul class="sources"><li><a href='https://bugzilla.mozilla.org/show_bug.cgi?id=2083449'>Bug 2083449 - eMudhra: Private key compromise of Intermediate Certificates</a><span class='muted'> · Mozilla</span></li><li><a href='https://github.com/TrustedRootProgram/Program-Requirements/blob/main/Announcements.md'>Announcements - Microsoft Trusted Root Certificate Program</a><span class='muted'> · Microsoft</span></li><li><a href='https://blog.mozilla.org/security/2026/10/20/protecting-firefox-users-following-the-compromise-of-emudhra-intermediate-certificates/'>Protecting Firefox users following the compromise of eMudhra intermediate certificates</a><span class='muted'> · Mozilla</span></li><li><a href='https://www.microsoft.com/en-us/msrc/blog/2026/10/microsoft-response-to-compromised-emudhra-certificate-authority-keys'>Microsoft's response to compromised eMudhra certificate authority keys</a><span class='muted'> · Microsoft</span></li><li><a href='https://support.apple.com/en-us/149555'>About the compromised eMudhra intermediate CAs</a><span class='muted'> · Apple</span></li><li><a href='https://chromium.googlesource.com/chromium/src/+/5a6a4e78597add03dd32bc233e03f3145cd99b65/net/data/ssl/chrome_root_store/root_store.textproto'>Chrome Root Store v42 root_store.textproto</a><span class='muted'> · Chromium</span></li><li><a href='https://blog.google/security/protecting-chrome-and-android-users-from-compromised-emudhra-intermediate-ca-certificates/'>Protecting Chrome and Android Users from Compromised eMudhra Intermediate CA Certificates</a><span class='muted'> · Google</span></li><li><a href='https://bugzilla.mozilla.org/show_bug.cgi?id=2084101'>Bug 2084101 - Remove eMudhra emSign Root CA - G3 from NSS</a><span class='muted'> · Mozilla</span></li><li><a href='https://bugzilla.mozilla.org/show_bug.cgi?id=2086788'>Bug 2086788 - Firefox 115 ESR may still trust the compromised eMudhra certificates</a><span class='muted'> · Mozilla</span></li><li><a href='https://bugzilla.mozilla.org/show_bug.cgi?id=2085612'>Bug 2085612 - eMudhra: Access to CRLs blocked for certain User-Agent headers</a><span class='muted'> · Mozilla</span></li><li><a href='https://product-details.mozilla.org/1.0/firefox_versions.json'>Mozilla product-details firefox_versions.json</a><span class='muted'> · Mozilla</span></li><li><a href='https://chromium.googlesource.com/chromium/src/+/main/net/data/ssl/chrome_root_store/root_store.textproto'>Chrome Root Store v43 root_store.textproto</a><span class='muted'> · Chromium</span></li><li><a href='https://raw.githubusercontent.com/nss-dev/nss/master/lib/ckfw/builtins/certdata.txt'>NSS master certdata.txt</a><span class='muted'> · Mozilla</span></li><li><a href='https://github.com/nss-dev/nss'>NSS certdata.txt at release tags NSS_3_130 to NSS_3_132</a><span class='muted'> · Mozilla</span></li></ul>
+<h4>The CAs and the disclosure</h4>
+<ul class="sources"><li><a href='https://bugzilla.mozilla.org/attachment.cgi?id=9670867'>eMudhra response to Chrome Root Program questions on Bug 2083449</a><span class='muted'> · eMudhra</span></li><li><a href='https://www.sectigo.com/resource-library/advisory-on-compromised-emudhra-intermediate-certificates'>Advisory on compromised eMudhra intermediate certificates</a><span class='muted'> · Sectigo</span></li><li><a href='https://www.openwall.com/lists/oss-security/2026/10/20/1'>oss-security: eMudhra Intermediates Compromise</a><span class='muted'> · Openwall</span></li><li><a href='https://www.einpresswire.com/article/951482814/emudhra-to-exit-global-ssl-tls-certificate-business'>eMudhra to Exit global SSL/TLS Certificate Business</a><span class='muted'> · EIN Presswire</span></li><li><a href='https://emudhra.com/en/post/certificate-security-incident'>eMudhra status page, Update 7</a><span class='muted'> · eMudhra</span></li></ul>
+<h4>CVE records and advisories</h4>
+<ul class="sources"><li><a href='https://cveawg.mitre.org/api/cve/CVE-2026-111943'>CVE record CVE-2026-111943</a><span class='muted'> · CVE Program</span></li><li><a href='https://pkg.go.dev/vuln/GO-2026-6809'>GO-2026-6809</a><span class='muted'> · Go</span></li><li><a href='https://cveawg.mitre.org/api/cve/CVE-2026-114406'>CVE record CVE-2026-114406</a><span class='muted'> · CVE Program</span></li><li><a href='https://cveawg.mitre.org/api/cve/CVE-2026-114820'>CVE record CVE-2026-114820</a><span class='muted'> · CVE Program</span></li><li><a href='https://www.oracle.com/security-alerts/alert-cve-2026-114820.html'>Oracle Security Alert Advisory - CVE-2026-114820</a><span class='muted'> · Oracle</span></li><li><a href='https://cveawg.mitre.org/api/cve/CVE-2026-91403'>CVE record CVE-2026-91403</a><span class='muted'> · CVE Program</span></li><li><a href='https://www.oracle.com/security-alerts/alert-cve-2026-91403.html'>Oracle Security Alert Advisory - CVE-2026-91403</a><span class='muted'> · Oracle</span></li><li><a href='https://cveawg.mitre.org/api/cve/CVE-2026-113812'>CVE record CVE-2026-113812</a><span class='muted'> · CVE Program</span></li><li><a href='https://cveawg.mitre.org/api/cve/CVE-2026-115570'>CVE record CVE-2026-115570</a><span class='muted'> · CVE Program</span></li><li><a href='https://github.com/electron/electron/security/advisories/GHSA-jr5w-w6x2-84p9'>Mitigation for compromised eMudhra intermediate certificates (GHSA-jr5w-w6x2-84p9)</a><span class='muted'> · Electron</span></li><li><a href='https://cveawg.mitre.org/api/cve/CVE-2026-113470'>CVE record CVE-2026-113470</a><span class='muted'> · CVE Program</span></li><li><a href='https://github.com/dart-lang/sdk/security/advisories/GHSA-frr6-h895-5pxp'>TLS MitM vulnerability on Android, Windows, and Linux due to compromised eMudhra intermediate CA certificates</a><span class='muted'> · Dart</span></li></ul>
+<h4>Platforms and runtimes</h4>
+<ul class="sources"><li><a href='https://access.redhat.com/security/vulnerabilities/RHSB-2026-012'>RHSB-2026-012 Certificate compromise - eMudhra</a><span class='muted'> · Red Hat</span></li><li><a href='https://openjdk.org/emudhra'>Compromised Certificates and OpenJDK Java Runtimes</a><span class='muted'> · OpenJDK</span></li><li><a href='https://www.oracle.com/java/technologies/javase/27-0-1-0-3-relnotes.html'>Oracle JDK 27.0.1.0.3 release notes</a><span class='muted'> · Oracle</span></li><li><a href='https://nodejs.org/api/cli.html'>Command-line API</a><span class='muted'> · Node.js</span></li><li><a href='https://www.ibm.com/support/pages/node/7294729'>Security Bulletin: eMudhra CA Certificate Compromise (CVE-2026-91403 and CVE-2026-114820)</a><span class='muted'> · IBM</span></li><li><a href='https://github.com/golang/go/commit/90617fb7ceb59cf08bee7826bb51b8c8fb8c11de'>Go commit 90617fb</a><span class='muted'> · Go</span></li><li><a href='https://github.com/python/cpython/issues/160040'>ssl: distrust compromised eMudhra intermediate CA keys</a><span class='muted'> · Python Software Foundation</span></li></ul>
+</section>
 </main>
-
 <footer>
-  <div class="wrap"><p>eMudhra G3 intermediate CA key compromise, October 2026. Not affiliated with eMudhra, Sectigo or any root program.</p><p>Last checked 2026-10-31. <a href="https://github.com/fieldse/emudhra-ca-compromise-check">Source on GitHub</a>.</p></div>
+  <div class="wrap"><p>eMudhra G3 intermediate CA key compromise, October 2026. An independent guide, not affiliated with eMudhra or Sectigo.</p><p>Last updated 2026-11-05. <a href="https://github.com/fieldse/emudhra-ca-compromise-check">Source on GitHub</a>.</p></div>
 </footer>
 
 <script>

@@ -546,13 +546,15 @@ for finding in image_findings('patched', parse_probe_output(open('/out/probe-pat
   check "probe reads Debian's patched where() in certifi's core.py" "1" "$got"
 }
 
-# Lint the test scripts, the probe and the fake podman
+# Lint the test scripts, the probe, the fake podman and run-checks.sh
 function test_scripts() {
   local got
   got=$(run_in "$LAB_IMAGE" sh -c "shellcheck -S warning /repo/tests/*.sh >/dev/null 2>&1 && echo clean || echo findings")
   check "shellcheck -S warning" "clean" "$got"
   got=$(run_in "$LAB_IMAGE" sh -c "shellcheck -s sh /repo/emudhra_check/probe.sh && shellcheck /repo/tests/fixtures/fake-podman && echo clean")
   check "shellcheck on the probe and the fake podman" "clean" "$got"
+  got=$(run_in "$LAB_IMAGE" sh -c "shellcheck /repo/run-checks.sh && echo clean")
+  check "shellcheck on run-checks.sh" "clean" "$got"
 }
 
 # Parse arguments, build fixtures and run every test

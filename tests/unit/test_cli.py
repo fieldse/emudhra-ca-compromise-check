@@ -349,6 +349,11 @@ class BuildContextTest(unittest.TestCase):
     def roots(self, ctx: Context) -> list[Path]:
         return [r.path for r in ctx.scope.roots]
 
+    @property
+    def host_apps(self) -> list[Path]:
+        """The real /Applications, which a Darwin run adds as a root wherever it exists."""
+        return [Path("/Applications")] if Path("/Applications").is_dir() else []
+
     def test_brew_prefix_and_its_roots_without_excludes(self) -> None:
         ctx = self.build("-r", "scan")
         self.assertEqual(ctx.hostenv.brew_prefix, self.tmp / "brew")
@@ -356,6 +361,7 @@ class BuildContextTest(unittest.TestCase):
             self.roots(ctx),
             [
                 self.tmp / "scan",
+                *self.host_apps,
                 self.tmp / "brew" / "etc",
                 self.tmp / "brew" / "Caskroom",
             ],
@@ -364,7 +370,7 @@ class BuildContextTest(unittest.TestCase):
     def test_exclude_covering_the_brew_path_directory(self) -> None:
         ctx = self.build("-r", "scan", "-x", "brew/bin")
         self.assertIsNone(ctx.hostenv.brew_prefix)
-        self.assertEqual(self.roots(ctx), [self.tmp / "scan"])
+        self.assertEqual(self.roots(ctx), [self.tmp / "scan", *self.host_apps])
 
     def test_path_entry_inside_an_exclude(self) -> None:
         ctx = self.build("-r", "scan", "-x", "tools")
@@ -386,9 +392,10 @@ class BuildContextTest(unittest.TestCase):
 
     def test_header_names_the_roots(self) -> None:
         ctx = self.build("-r", "scan", "-x", "brew")
+        roots = " ".join(str(p) for p in [self.tmp / "scan", *self.host_apps])
         self.assertEqual(
             next(line for line in run(ctx)[1] if line.startswith("INFO  eMudhra")),
-            f"INFO  eMudhra CA compromise check; scan roots: {self.tmp}/scan containers=0",
+            f"INFO  eMudhra CA compromise check; scan roots: {roots} containers=0",
         )
 
 

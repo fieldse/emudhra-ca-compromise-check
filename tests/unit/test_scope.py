@@ -389,6 +389,7 @@ class ProgramPathTest(unittest.TestCase):
             ("/home/u/.cache/codex-runtimes/1.2/payload", True),
             ("/home/u/src/tool", False),
             ("/home/u/bin.d/tool", False),
+            ("/home/u/src/go-bin/tool", False),
         ]
         for path, want in rows:
             with self.subTest(path=path):

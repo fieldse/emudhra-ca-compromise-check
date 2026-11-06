@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eMudhra G3 CA compromise: Flow C, a version below a fix</title>
+<meta name="description" content="Flow C of verifying an eMudhra G3 checker finding by hand: trace a go or rust version from its security advisory to the fix in the source.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+:root {
+  /* Dark theme: flat near-black ground, zinc cards with faint borders, one purple accent. */
+  --bg: #0b0b0d;
+  --paper: #111114;
+  --raised: #16161a;
+  --ink: #f2f2f3;
+  --body: #c9c9cf;
+  --muted: #a1a1aa;
+  --rule: #232328;
+  --band: #0b0b0d;
+  --band-ink: #fafafa;
+  --band-muted: #a1a1aa;
+  --link: #b388f9;
+  --code-bg: #18181c;
+  --primary: #a855f7;
+  --bad: #f87171;
+  --good: #4ade80;
+  --limit: #fb923c;
+  --stripe: #0e0e11;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  --mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--sans); }
+a { color: var(--link); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
+.read { max-width: 70ch; }
+
+/* Header band */
+.band { background: var(--band); color: var(--band-ink); padding-block: 44px 40px; }
+.band .ids { font: 600 13px/1.4 var(--mono); color: var(--band-muted); letter-spacing: 0.02em; margin: 0 0 14px; }
+.band .ids b { color: var(--band-ink); font-weight: 600; }
+.band h1 { margin: 0 0 14px; font-size: clamp(28px, 4.6vw, 42px); line-height: 1.12; font-weight: 700; letter-spacing: -0.015em; text-wrap: balance; }
+.band p { margin: 0; font-size: 18px; color: var(--band-ink); max-width: 62ch; }
+
+main { padding-block: 40px 56px; display: grid; gap: 44px; }
+section { display: grid; gap: 16px; min-width: 0; }
+h2 { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 700; letter-spacing: -0.01em; padding-bottom: 8px; border-bottom: 2px solid var(--ink); }
+h3 { margin: 0; font-size: 18px; font-weight: 700; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+code { font: 0.86em var(--mono); background: var(--code-bg); padding: 1px 4px; border-radius: 3px; overflow-wrap: anywhere; }
+
+/* Introduction: label column beside bullets */
+dl.intro { margin: 0; display: grid; grid-template-columns: 11rem 1fr; border-top: 1px solid var(--rule); }
+dl.intro dt, dl.intro dd { margin: 0; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+dl.intro dt { font-weight: 700; padding-right: 20px; }
+dl.intro ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+@media (max-width: 640px) {
+  dl.intro { grid-template-columns: 1fr; }
+  dl.intro dt { border-bottom: 0; padding-bottom: 2px; }
+  dl.intro dd { padding-top: 0; }
+}
+
+/* Check table */
+.table-scroll { overflow-x: auto; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule); }
+table { border-collapse: collapse; width: 100%; min-width: 880px; font-size: 15px; background: var(--paper); }
+th, td { text-align: left; vertical-align: top; padding: 12px 14px; border-bottom: 1px solid var(--rule); }
+thead th { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); background: var(--bg); }
+tbody tr:nth-child(even) { background: var(--stripe); }
+tbody tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 700; white-space: nowrap; }
+td.check { min-width: 300px; }
+.cmd { display: flex; align-items: flex-start; gap: 6px; background: var(--code-bg); border: 1px solid var(--rule); border-radius: 4px; padding: 8px 8px 8px 12px; margin-bottom: 6px; }
+.cmd:last-of-type { margin-bottom: 0; }
+.cmd code { flex: 1; min-width: 0; background: none; padding: 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cmd .copy { flex: none; display: grid; place-items: center; width: 26px; height: 26px; margin: -3px 0; border: 1px solid transparent; border-radius: 4px; background: none; color: var(--muted); cursor: pointer; }
+.cmd .copy:hover { color: var(--ink); border-color: var(--rule); background: var(--paper); }
+.cmd .copy.done { color: var(--good); }
+td.bad { color: var(--bad); font-variant-numeric: tabular-nums; }
+td.good { color: var(--good); font-variant-numeric: tabular-nums; }
+td.bad code, td.good code { color: var(--ink); }
+td.bad ul, td.good ul { margin: 0; padding-left: 16px; display: grid; gap: 3px; }
+
+ul.notes { margin: 0; padding-left: 18px; display: grid; gap: 8px; max-width: 80ch; }
+
+/* Code blocks */
+.code { position: relative; background: var(--code-bg); border-left: 3px solid var(--band); min-width: 0; }
+.code pre { margin: 0; padding: 14px 16px; overflow-x: auto; font: 13.5px/1.6 var(--mono); }
+.code button {
+  position: absolute; top: 8px; right: 8px; font: 600 12px var(--sans);
+  background: var(--paper); color: var(--ink); border: 1px solid var(--rule); border-radius: 3px;
+  padding: 3px 10px; cursor: pointer;
+}
+.code button:hover { border-color: var(--ink); }
+
+dl.levels { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; }
+dl.levels dt { font: 700 13px/1.6 var(--mono); }
+dl.levels dt.fail { color: var(--bad); }
+dl.levels dd { margin: 0; }
+
+ul.sources { margin: 0; padding-left: 18px; display: grid; gap: 4px; columns: 2; column-gap: 32px; }
+ul.sources li { break-inside: avoid; }
+@media (max-width: 640px) { ul.sources { columns: 1; } }
+
+ul.resources { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 0 32px; }
+ul.resources li { display: grid; gap: 2px; padding: 12px 0; border-bottom: 1px solid var(--rule); min-width: 0; }
+ul.resources a { font-weight: 600; }
+ul.resources span { color: var(--muted); font-size: 14px; }
+
+.toc ol { margin: 0; padding-left: 20px; display: grid; gap: 10px; }
+.toc li a { font-weight: 700; }
+.toc li span { display: block; color: var(--muted); font-size: 14px; }
+.toc h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); border-bottom: 0; padding-bottom: 0; margin-bottom: 8px; }
+.toc ol { display: block; columns: 2; column-gap: 40px; }
+.toc li { break-inside: avoid; padding: 3px 0; }
+.toc li span { display: none; }
+@media (max-width: 640px) { .toc ol { columns: 1; } }
+[id] { scroll-margin-top: 16px; }
+.nw { white-space: nowrap; }
+.src { font-size: 14px; }
+.src a { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.back { display: inline-block; margin-bottom: 16px; color: var(--band-muted); font-size: 14px; text-decoration: none; }
+.back:hover { color: var(--band-ink); text-decoration: underline; }
+footer .wrap { display: grid; gap: 4px; }
+footer { border-top: 1px solid var(--rule); padding-block: 20px 32px; font-size: 14px; color: var(--muted); }
+
+@media print {
+  .band { background: none; color: #000; padding-block: 0 16px; border-bottom: 2px solid #000; }
+  .band .ids, .band p, .band .ids b { color: #000; }
+  .code button { display: none; }
+  .table-scroll { overflow: visible; }
+  table { min-width: 0; font-size: 11px; }
+  a { color: #000; }
+}
+
+/* Page treatment: centered hero, mono eyebrow pills, purple highlight word, rounded bordered cards. */
+body { color: var(--body); font-size: 18px; }
+table, table.list { font-size: 16px; }
+.cmd code, .code pre { font-size: 14.5px; }
+strong, b, td:first-child, dt, h1, h2, h3 { color: var(--ink); }
+.band { background: none; padding-block: 80px 24px; text-align: center; }
+.band .wrap { display: flex; flex-direction: column; align-items: center; }
+.band .ids { display: inline-block; margin: 0; padding: 4px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper);
+  font: 500 13px/1.5 var(--mono); color: var(--primary); letter-spacing: 0.01em; }
+.band .ids { max-width: none; white-space: nowrap; }
+@media (max-width: 640px) { .band .ids { white-space: normal; } }
+.band .ids b, .band .ids a { color: var(--primary); font-weight: 500; }
+.band .tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0 0 14px; }
+.band .tags span { padding: 3px 10px; border: 1px solid var(--rule); border-radius: 999px; font: 500 12px/1.5 var(--mono); color: var(--muted); letter-spacing: 0.02em; }
+.band h1 { margin: 24px 0 18px; font-size: clamp(30px, calc((100vw - 48px) / 18), 60px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--band-ink); max-width: none; }
+.band .wrap { max-width: 1440px; }
+.band p:not(.ids):not(.tags) { color: var(--muted); font-size: 19px; line-height: 1.6; max-width: 58ch; margin: 0 auto; }
+.hl { color: var(--primary); }
+main { gap: 72px; padding-block: 48px 80px; }
+h2 { border-bottom: 0; padding-bottom: 0; font-size: clamp(26px, 3.4vw, 36px); font-weight: 800; letter-spacing: -0.025em; }
+h2[data-eyebrow]::before { content: attr(data-eyebrow); display: block; width: fit-content; margin-bottom: 16px; padding: 3px 12px;
+  border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); font: 500 13px/1.5 var(--mono); color: var(--primary); letter-spacing: 0.01em; }
+h3 { font-size: 20px; }
+.muted { color: var(--muted); }
+a { color: var(--link); text-decoration-color: rgba(179, 136, 249, .4); text-underline-offset: 3px; }
+a:hover { text-decoration-color: currentColor; }
+code { background: var(--code-bg); color: #e4e4e7; border: 1px solid var(--rule); border-radius: 5px; padding: 0 5px; }
+
+/* Introduction as one card, labels as spaced capitals */
+dl.intro { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 4px 28px; }
+dl.intro dt, dl.intro dd { border-color: var(--rule); padding-block: 20px; }
+dl.intro > :nth-last-child(-n+2) { border-bottom: 0; }
+dl.intro dt { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--primary); padding-top: 24px; }
+dl.intro li::marker { color: var(--primary); }
+
+/* Tables in rounded cards */
+.table-scroll { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); }
+table, table.matrix, table.list { background: transparent; }
+thead th, .matrix thead th, .list thead th { background: var(--raised); color: var(--muted); letter-spacing: 0.08em; }
+th, td { border-color: var(--rule); }
+tbody tr:nth-child(even) { background: var(--stripe); }
+.cmd { background: var(--code-bg); border-color: var(--rule); border-radius: 8px; }
+.cmd .copy:hover { background: var(--raised); border-color: var(--rule); }
+td.bad { color: var(--bad); }
+td.good { color: var(--good); }
+
+/* Code blocks */
+.code { background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; }
+.code pre { color: #e4e4e7; }
+.code button { background: var(--raised); color: var(--ink); border: 1px solid var(--rule); border-radius: 8px; }
+.code button:hover { border-color: var(--primary); box-shadow: 0 0 16px rgba(168, 85, 247, .3); }
+dl.levels dt { color: var(--limit); }
+dl.levels dt.fail { color: var(--bad); }
+
+ul.resources li { border-color: var(--rule); }
+ul.sources li::marker, ul.notes li::marker, ul.plain li::marker { color: var(--primary); }
+
+/* Tests page */
+.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; border: 0; padding: 0; }
+.facts div { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 26px 16px; text-align: center; justify-items: center; }
+.facts b { font-size: 42px; font-weight: 800; letter-spacing: -0.02em; color: var(--primary); }
+.facts div:nth-child(2) b { color: var(--good); }
+.facts div:nth-child(3) b { color: var(--limit); }
+.facts span { color: var(--muted); font-size: 15px; }
+@media (max-width: 640px) { .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+nav.toc { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 20px 28px; max-width: none; }
+nav.toc h2 { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--primary); margin-bottom: 10px; }
+nav.toc ol { display: block; list-style: none; padding-left: 0; columns: 2; column-gap: 48px; counter-reset: toc; }
+nav.toc li { counter-increment: toc; display: flex; gap: 14px; padding: 5px 0; break-inside: avoid; }
+nav.toc li::before { content: counter(toc, decimal-leading-zero); font: 500 13px/1.75 var(--mono); color: var(--primary); }
+nav.toc li > a { color: var(--ink); font-weight: 600; text-decoration: none; }
+nav.toc li > a:hover { color: var(--primary); }
+nav.toc li span { display: none; }
+@media (max-width: 640px) { nav.toc ol { columns: 1; } }
+.band .back { margin-bottom: 20px; font: 500 13px var(--mono); color: var(--muted); }
+.band .back:hover { color: var(--primary); }
+.matrix tbody th { background: var(--paper); color: var(--ink); }
+.matrix tbody tr:nth-child(even) th, .matrix tbody tr:nth-child(even) td { background: var(--stripe); }
+.matrix thead th.grp { color: var(--primary); }
+.list tr.grp th { background: var(--raised); color: var(--primary); }
+.list td.tid { color: var(--ink); }
+.dot.limit { background: var(--limit); }
+
+.src { margin: 0; }
+.src a { display: inline-flex; align-items: center; gap: 8px; }
+.src a { padding: 6px 14px; border: 1px solid var(--rule); border-radius: 8px; background: var(--raised); color: var(--ink); font-weight: 600; font-size: 14px; text-decoration: none; }
+.src a:hover { border-color: var(--primary); box-shadow: 0 0 16px rgba(168, 85, 247, .3); }
+/* Call to action box */
+.cta { border: 1px solid rgba(168, 85, 247, .35); border-radius: 12px; padding: 32px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, .2) 0%, rgba(168, 85, 247, .06) 60%, rgba(168, 85, 247, .02) 100%), var(--paper);
+  display: grid; gap: 14px; }
+.cta .label { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--primary); }
+.cta h3 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+.cta p { margin: 0; max-width: 62ch; color: var(--body); }
+.cta .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
+.cta .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 15px; text-decoration: none; }
+.cta .btn-primary { background: linear-gradient(135deg, #a855f7, #c96ef7); border: 1px solid #be5eed; color: #fff; box-shadow: 0 0 20px rgba(168, 85, 247, .3); }
+.cta .btn-primary:hover { box-shadow: 0 0 28px rgba(168, 85, 247, .5); }
+.cta .btn-ghost { border: 1px solid var(--rule); background: var(--raised); color: var(--ink); }
+.cta .btn-ghost:hover { border-color: var(--primary); }
+footer { border-color: var(--rule); color: var(--muted); }
+@media print { .band h1, h2, .hl { color: #000; } h2[data-eyebrow]::before { display: none; } }
+
+/* List tables (checks and references pages) */
+table.list { border-collapse: collapse; width: 100%; min-width: 860px; font-size: 14.5px; background: var(--paper); }
+.list th, .list td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--rule); }
+.list thead th { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); background: var(--bg); }
+.list tr.grp th { background: var(--stripe); font: 700 12px var(--mono); text-transform: uppercase; letter-spacing: 0.05em; padding-top: 14px; }
+.list td.tid { font: 700 14px var(--mono); white-space: nowrap; }
+.list td.tid span { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+.list td.cks { font: 12.5px var(--mono); color: var(--muted); white-space: nowrap; }
+.list td.res { font-weight: 700; white-space: nowrap; }
+.list td.res.pass { color: var(--good); }
+.list td.res.gap { color: var(--bad); }
+.list td.res.limit { color: var(--limit); }
+.list tr.grp th { background: var(--raised); color: var(--primary); }
+.list td.tid { color: var(--ink); }
+
+/* References page */
+table.list.refs-table { min-width: 1100px; font-size: 15px; }
+.refs-table td.tid a { color: var(--ink); text-decoration: none; }
+.refs-table td.tid a:hover { color: var(--primary); }
+.refs-table td.stk { font-weight: 600; color: var(--ink); min-width: 160px; }
+.refs-table td.val { min-width: 220px; }
+.refs-table td.note { color: var(--muted); font-size: 14px; min-width: 180px; }
+.refs-table ol.refs { margin: 0; padding-left: 22px; display: grid; gap: 3px; font-size: 14px; min-width: 220px; }
+.refs-table ol.refs li::marker { color: var(--primary); font: 500 12px var(--mono); }
+.refs-table tr:target td { background: rgba(168, 85, 247, .12); }
+nav.toc li small { margin-left: auto; font: 500 13px/1.75 var(--mono); color: var(--muted); white-space: nowrap; }
+
+/* eMudhra pages: inline reference links, status chips, the checks table and the fingerprint table. */
+.rl { font: 500 0.74em var(--mono); color: var(--muted); white-space: nowrap; }
+.rl a { text-decoration: none; }
+.rl a:hover { text-decoration: underline; }
+.chip { display: inline-block; margin-bottom: 6px; padding: 1px 8px; border: 1px solid; border-radius: 6px; font: 600 12px/1.6 var(--mono); white-space: nowrap; }
+.chip.unfixed { color: var(--bad); border-color: rgba(248, 113, 113, .45); background: rgba(248, 113, 113, .08); }
+.chip.partial { color: var(--limit); border-color: rgba(251, 146, 60, .45); background: rgba(251, 146, 60, .08); }
+.chip.os { color: var(--muted); border-color: var(--rule); background: var(--raised); }
+table.list.checks { min-width: 1280px; font-size: 15px; }
+.checks td { padding: 12px 12px; }
+.checks td.item { font-weight: 700; color: var(--ink); white-space: normal; min-width: 150px; }
+.checks td.where { min-width: 170px; font-size: 14px; }
+.checks td.check { min-width: 320px; }
+.checks td.check .muted { display: block; margin-top: 4px; font-size: 13.5px; }
+.checks td.bad, .checks td.good { min-width: 160px; font-size: 14.5px; }
+.checks td.aaa { min-width: 170px; font-size: 14px; color: var(--body); }
+.checks td.rf, .fps td.rf { font: 500 13px var(--mono); white-space: nowrap; }
+.checks td.rf a, .fps td.rf a { display: block; text-decoration: none; }
+.checks td.bad ul, .checks td.good ul { margin: 0; padding-left: 16px; display: grid; gap: 3px; }
+.checks tr:target td { background: rgba(168, 85, 247, .12); }
+table.list.fps { min-width: 720px; font-size: 15px; }
+.fps td:first-child { white-space: normal; }
+.fps td.fp code { font-size: 12.5px; overflow-wrap: anywhere; }
+.refs-table td.dt { font: 500 13px var(--mono); white-space: nowrap; color: var(--muted); }
+.refs-table ol.refs li .meta { display: block; color: var(--muted); font-size: 13px; }
+.refs-table td.note strong { color: var(--limit); }
+.facts div:nth-child(4) b { color: var(--bad); }
+section.area { display: grid; gap: 12px; }
+section.area h3 { margin-top: 8px; }
+p.more a { font-weight: 600; font-size: 15px; }
+#manual > .read { max-width: 70ch; }
+
+/* Reading layout: quiet reference tags, sentence-case labels, lead-then-detail lists, compact tables with a Refs column. */
+.rl a { color: var(--muted); }
+.rl a:hover { color: var(--link); }
+dl.intro dt { font-size: 18px; letter-spacing: 0; text-transform: none; padding-top: 22px; }
+dl.intro dd > ul { gap: 12px; }
+dl.intro ul ul { margin-top: 4px; gap: 3px; }
+p.key { max-width: 70ch; font-size: 19px; line-height: 1.55; color: var(--ink); }
+section > h3 { margin-top: 12px; }
+ul.points { margin: 0; padding: 0; list-style: none; display: grid; gap: 22px; max-width: 80ch; }
+ul.points > li > strong:first-child { display: block; margin-bottom: 4px; }
+ul.points ul, ul.points ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+ul.points ul ul, ul.points ul ol { margin-top: 4px; gap: 2px; }
+ul.points li li::marker { color: var(--primary); }
+ul.points .code { margin-top: 4px; }
+table.list.tbl { min-width: 640px; font-size: 15.5px; }
+.tbl th, .tbl td { padding: 11px 14px; }
+.tbl td:first-child { width: 12rem; white-space: normal; font-weight: 600; color: var(--ink); }
+.tbl td ul { margin: 0; padding-left: 16px; display: grid; gap: 4px; }
+.tbl td.rf { width: 5rem; font: 500 13px var(--mono); white-space: nowrap; }
+.tbl td.rf a { display: block; text-decoration: none; }
+.tbl.when td:first-child { width: 10rem; white-space: nowrap; font: 500 14px var(--mono); color: var(--muted); }
+section.area { border-top: 1px solid var(--rule); padding-top: 28px; gap: 16px; }
+section.area h3 { margin-top: 0; }
+dl.levels + p, dl.levels + dl.levels { margin-top: 4px; }
+@media (max-width: 640px) {
+  table.list.tbl { min-width: 0; }
+  .tbl thead { display: none; }
+  .tbl, .tbl tbody, .tbl tr, .tbl td, .tbl tr.grp th { display: block; width: auto; }
+  .tbl tr { padding: 10px 0; border-bottom: 1px solid var(--rule); }
+  .tbl tr:last-child { border-bottom: 0; }
+  .tbl td, .tbl.when td:first-child { width: auto; border: 0; padding: 3px 16px; }
+  .tbl td:empty { display: none; }
+  .tbl td.rf a { display: inline; margin-right: 10px; }
+  dl.intro dt { padding-bottom: 4px; }
+  dl.intro dd { padding-top: 4px; }
+}
+
+/* Sister-page layout: the main check table, per-area caveat cards and the section Sources line. */
+#caveats { display: grid; gap: 32px; }
+.eco { display: grid; gap: 12px; }
+.eco h4 { margin: 12px 0 0; font-size: 16px; }
+table.caveats { min-width: 0; }
+table.caveats td:first-child { white-space: normal; width: 14rem; }
+table.caveats td ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+nav.toc h2 { font-size: 18px; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--primary); margin-bottom: 10px; }
+td.rf { font: 500 13px var(--mono); white-space: nowrap; }
+td.rf a { display: block; text-decoration: none; }
+.eco > p a { font-weight: 600; font-size: 15px; }
+p.refs-line { font-size: 14px; max-width: 80ch; }
+p.refs-line a { font: 500 13px var(--mono); text-decoration: none; }
+@media (max-width: 640px) { table.caveats td:first-child { width: auto; } }
+
+/* Manual checks: one card per stack. */
+.stacks { display: grid; gap: 28px; margin-top: 8px; }
+.stacks .eco { border-top: 1px solid var(--rule); padding-top: 24px; }
+.stacks .eco > p { max-width: 75ch; }
+
+/* Further reading: grouped primary sources. */
+#sources h4 { margin: 18px 0 6px; font-size: 13px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+
+/* Checks page: one card per item, with a status chip under its name. */
+.chip.fixed { color: var(--good); border-color: rgba(74, 222, 128, .45); background: rgba(74, 222, 128, .08); }
+.eco > p.status { margin-top: -6px; }
+.eco > p.status .chip { margin-bottom: 0; }
+.stacks .eco:target { outline: 1px solid var(--primary); outline-offset: 12px; border-radius: 4px; }
+
+/* Alias anchors kept for old links take no grid cell. */
+a[id]:empty { position: absolute; }
+section > h2 { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<header class="band">
+  <div class="wrap">
+    <a class="back" href="proof.html">← Back to verifying a finding</a>
+    <p class="tags"><span>eMudhra G3</span><span>CA key compromise</span><span>October 2026</span></p>
+    <p class="ids"><a href="index.html">Guide</a> &nbsp;·&nbsp; <a href="incident.html">Incident</a> &nbsp;·&nbsp; <a href="checks.html">Affected software</a> &nbsp;·&nbsp; <a href="fixes.html">Fixes</a> &nbsp;·&nbsp; <a href="detections.html">Checker rules</a> &nbsp;·&nbsp; <a href="proof.html">Proof</a> &nbsp;·&nbsp; <a href="references.html">References</a></p>
+    <h1><span class='hl'>Flow C</span><br>A version below a fix</h1>
+    <p>One of four flows for <a href="proof.html">verifying a finding</a> by hand, from the original sources. Trace a Go or Rust version from its security advisory to the fix in the source.</p>
+  </div>
+</header>
+<main class="wrap">
+<nav class="toc read" aria-label="Contents"><h2>Contents</h2><ol>
+  <li><a href="#about">About this flow</a><span>What it checks and why</span></li>
+  <li><a href="#step-1-make-an-empty-work-directory">Step 1. Make an empty work directory</a></li>
+  <li><a href="#step-2-read-the-installed-go-version">Step 2. Read the installed Go version</a></li>
+  <li><a href="#step-3-read-the-version-recorded-in-a-go-binary">Step 3. Read the version recorded in a Go binary</a></li>
+  <li><a href="#step-4-read-gos-vulnerability-entry">Step 4. Read Go's vulnerability entry</a></li>
+  <li><a href="#step-5-read-the-cve-record">Step 5. Read the CVE record</a></li>
+  <li><a href="#step-6-read-gos-release-history">Step 6. Read Go's release history</a></li>
+  <li><a href="#step-7-find-the-fix-in-gos-source-code">Step 7. Find the fix in Go's source code</a></li>
+  <li><a href="#step-8-compare-the-versions">Step 8. Compare the versions</a></li>
+  <li><a href="#the-same-trace-for-a-version-in-cargolock">The same trace for a version in Cargo.lock</a></li>
+  <li><a href="#result">Result</a></li>
+</ol></nav>
+<section id="about">
+<h2>About this flow</h2>
+<p class="key"><strong>Flow C checks a version rule by tracing the fixed version from its security advisory to the version recorded in the software. It does not run the check.</strong> A version rule states the first release that carries a fix.</p>
+<p class="read">The check reaches its verdict from rules in this repository. These steps rebuild the evidence for one finding from primary artifacts, so you can confirm it without trusting the checker. <a href="proof.html#setup">Setup</a> lists the tools this flow needs.</p>
+<ul>
+<li><strong>Example:</strong> the Go toolchain on a Mac, Go 1.27.1, below the fix in Go 1.27.3.</li>
+<li><strong>Trace:</strong> from Go's vulnerability entry, its CVE record, its release history and its source code to the fixed release, and from the <code>go</code> binary to the toolchain version recorded in it.</li>
+<li><strong>Lockfiles:</strong> a dependency pinned in a lockfile, such as <code>webpki-roots</code> in <code>Cargo.lock</code>, is checked the same way, from its advisory to the version the lockfile names.</li>
+</ul>
+<h3 id="the-line-being-checked">The line being checked</h3>
+<p>On a Mac with Go 1.27.1 installed from Homebrew, the check printed this line:</p>
+<div class="code"><button type="button">Copy</button><pre>FAIL  go [host] found 1.27.1, fixed 1.27.3 (CVE-2026-111943, rebuild binaries after upgrading)</pre></div>
+<ul>
+<li><code>go [host]</code> is the <code>go</code> command on <code>PATH</code>.</li>
+<li><code>found 1.27.1</code> is the version <code>go version</code> prints.</li>
+<li><code>fixed 1.27.3</code> is the first 1.27 release with Go's fix for CVE-2026-111943.</li>
+<li>A Go program carries the standard library it was built with. A program built with Go 1.27.1 keeps the unfixed code after the toolchain is upgraded, so the note asks for a rebuild.</li>
+</ul>
+<h3 id="what-the-steps-do">What the steps do</h3>
+<ul>
+<li><strong>Steps 1 to 3:</strong> read the Go version on the machine, from the <code>go</code> command and from the build record inside the <code>go</code> binary.</li>
+<li><strong>Steps 4 to 7:</strong> trace the fix through four primary artifacts: Go's vulnerability entry, the CVE record, Go's release history and Go's source code.</li>
+<li><strong>Step 8:</strong> compare the machine's version with the fix, and with the value in <code>emudhra_check/fixes.py</code>.</li>
+<li><strong>Cargo.lock:</strong> run the same trace for <code>webpki-roots</code>, from its advisory to a version pinned in a hand-written lockfile.</li>
+</ul>
+<p>The versions in steps 2 and 3 depend on the machine.</p>
+</section>
+<section id="step-1-make-an-empty-work-directory">
+<h2>Step 1. Make an empty work directory</h2>
+<p><code>mktemp -d</code> makes a new empty directory. <code>GOTOOLCHAIN=local</code> makes <code>go</code> use the installed toolchain and never download another one.</p>
+<div class="code"><button type="button">Copy</button><pre>cd "$(mktemp -d)"
+export GOTOOLCHAIN=local
+ls -A | wc -l</pre></div>
+<div class="code"><button type="button">Copy</button><pre>       0</pre></div>
+</section>
+<section id="step-2-read-the-installed-go-version">
+<h2>Step 2. Read the installed Go version</h2>
+<div class="code"><button type="button">Copy</button><pre>go version</pre></div>
+<div class="code"><button type="button">Copy</button><pre>go version go1.27.1 darwin/arm64</pre></div>
+<p><code>go1.27.1</code> is the toolchain version. <code>darwin/arm64</code> is the operating system and processor.</p>
+</section>
+<section id="step-3-read-the-version-recorded-in-a-go-binary">
+<h2>Step 3. Read the version recorded in a Go binary</h2>
+<p>Go writes a build record into every program it builds, and the first line names the toolchain that built it. <code>go version -m</code> reads the record from the file without running the program. The <code>go</code> command is itself a Go program, so its own file is the example.</p>
+<div class="code"><button type="button">Copy</button><pre>go version -m "$(go env GOROOT)/bin/go" | head -n 4</pre></div>
+<div class="code"><button type="button">Copy</button><pre>/opt/homebrew/Cellar/go/1.27.1/libexec/bin/go: go1.27.1
+	path	cmd/go
+	build	-buildmode=exe
+	build	-compiler=gc</pre></div>
+<p><code>go env GOROOT</code> prints where the toolchain is installed. The record names Go 1.27.1, the same version as step 2.</p>
+<p><code>go list -deps</code> lists every package a program is built from. <code>crypto/x509</code>, the package the fix changes, is one of the packages in the <code>go</code> command:</p>
+<div class="code"><button type="button">Copy</button><pre>go list -deps cmd/go | grep -x crypto/x509</pre></div>
+<div class="code"><button type="button">Copy</button><pre>crypto/x509</pre></div>
+<p>A program whose list has no <code>crypto/x509</code> does not contain the code the fix changes.</p>
+</section>
+<section id="step-4-read-gos-vulnerability-entry">
+<h2>Step 4. Read Go's vulnerability entry</h2>
+<p>Go publishes its vulnerabilities in its own database. The entry for this fix is GO-2026-6809, shown in a browser at <a href="https://pkg.go.dev/vuln/GO-2026-6809">pkg.go.dev/vuln/GO-2026-6809</a>. The machine-readable record is one long line of JSON, so <code>grep -o</code> prints only the three fields used below.</p>
+<div class="code"><button type="button">Copy</button><pre>curl -sS https://vuln.go.dev/ID/GO-2026-6809.json | grep -o -E '"(aliases|events|symbols)":\[[^]]*\]'</pre></div>
+<div class="code"><button type="button">Copy</button><pre>"aliases":["CVE-2026-111943"]
+"events":[{"introduced":"0"},{"fixed":"1.26.10"},{"introduced":"1.27.0-0"},{"fixed":"1.27.3"}]
+"symbols":["Certificate.Verify"]</pre></div>
+<ul>
+<li><code>aliases</code> ties the entry to CVE-2026-111943.</li>
+<li><code>events</code> lists the affected ranges, and a <code>fixed</code> version is the first one not affected:<ul>
+<li>every version from <code>0</code> up to <code>1.26.10</code></li>
+<li>every version from <code>1.27.0-0</code> up to <code>1.27.3</code></li>
+</ul></li>
+<li><code>1.27.0-0</code> is the lowest possible 1.27.0 pre-release, so the 1.27 release candidates are in the range too.</li>
+<li><code>symbols</code> names the affected function, <code>Certificate.Verify</code>.</li>
+</ul>
+</section>
+<section id="step-5-read-the-cve-record">
+<h2>Step 5. Read the CVE record</h2>
+<p>Go assigns CVE IDs for its own vulnerabilities, so Go also wrote the CVE record. The CVE Program serves it as JSON.</p>
+<div class="code"><button type="button">Copy</button><pre>curl -sS https://cveawg.mitre.org/api/cve/CVE-2026-111943 | grep -o -E '"(assignerShortName|packageName)":"[^"]*"|"versions":\[[^]]*\]'</pre></div>
+<div class="code"><button type="button">Copy</button><pre>"assignerShortName":"Go"
+"packageName":"crypto/x509"
+"versions":[{"version":"0","lessThan":"1.26.10","status":"affected","versionType":"semver"},{"version":"1.27.0-0","lessThan":"1.27.3","status":"affected","versionType":"semver"}]</pre></div>
+<ul>
+<li><code>assignerShortName</code> shows that Go assigned the CVE.</li>
+<li><code>packageName</code> is <code>crypto/x509</code>.</li>
+<li><code>versions</code> gives the same two ranges as step 4, with <code>lessThan</code> in place of <code>fixed</code>.</li>
+</ul>
+</section>
+<section id="step-6-read-gos-release-history">
+<h2>Step 6. Read Go's release history</h2>
+<p>Go lists every release with its date and a one-line summary at <a href="https://go.dev/doc/devel/release">go.dev/doc/devel/release</a>. The command prints the entries for the two fixed releases, without blank lines.</p>
+<div class="code"><button type="button">Copy</button><pre>curl -sS https://go.dev/doc/devel/release | grep -A10 -E 'id="go1\.(27\.3|26\.10)"' | grep -v -E '^[[:space:]]*$'</pre></div>
+<div class="code"><button type="button">Copy</button><pre>		&lt;p id="go1.27.3"&gt;
+		go1.27.3
+		(released 2026-10-19)
+			includes
+				security
+				fixes to the &lt;code&gt;crypto/x509&lt;/code&gt; package.
+--
+		&lt;p id="go1.26.10"&gt;
+		go1.26.10
+		(released 2026-10-19)
+			includes
+				security
+				fixes to the &lt;code&gt;crypto/x509&lt;/code&gt; package.</pre></div>
+<p>Both releases came out on 19 October 2026 with security fixes to <code>crypto/x509</code>. On the same page, the entries for 1.27.1 and 1.27.2 name no <code>crypto/x509</code> fix.</p>
+</section>
+<section id="step-7-find-the-fix-in-gos-source-code">
+<h2>Step 7. Find the fix in Go's source code</h2>
+<p>The vulnerability entry links the change that made the fix, <a href="https://go.dev/cl/851047">CL 851047</a>, and the Go issue, <a href="https://go.dev/issue/82345">82345</a>. Gerrit, Go's code review site, serves the change as JSON. Its times are in UTC.</p>
+<div class="code"><button type="button">Copy</button><pre>curl -sS "https://go-review.googlesource.com/changes/851047?o=CURRENT_COMMIT&amp;o=CURRENT_REVISION" | grep -o -E '"(status|submitted)":"[^"]*"|crypto/x509: distrust a handful of intermediates|Fixes CVE-[0-9-]+|For golang/go#[0-9]+' | sort -u</pre></div>
+<div class="code"><button type="button">Copy</button><pre>"status":"MERGED"
+"submitted":"2026-10-20 02:40:26.000000000"
+crypto/x509: distrust a handful of intermediates
+Fixes CVE-2026-111943
+For golang/go#82345</pre></div>
+<p>That change went into Go's main branch. Go tracks the copy for each older release line as a backport issue, and the issue's milestone is the release that shipped it.</p>
+<div class="code"><button type="button">Copy</button><pre>for n in 82348 82349; do curl -sS https://api.github.com/repos/golang/go/issues/$n | grep -E '^  "title"|^    "title"'; done</pre></div>
+<div class="code"><button type="button">Copy</button><pre>  "title": "security: fix CVE-2026-111943 [1.26 backport]",
+    "title": "Go1.26.10",
+  "title": "security: fix CVE-2026-111943 [1.27 backport]",
+    "title": "Go1.27.3",</pre></div>
+<p>The first title of each pair is the issue and the second is its milestone.</p>
+<p>The change adds a denylist called <code>distrustedSPKIHashes</code> to <code>src/crypto/x509/verify.go</code>. It holds the SHA-256 hashes of the public keys of the distrusted intermediates. Counting the name in that file at each release tag shows which releases carry the denylist:</p>
+<div class="code"><button type="button">Copy</button><pre>for t in go1.26.9 go1.26.10 go1.27.2 go1.27.3; do printf '%s %s\n' "$t" "$(curl -sS https://raw.githubusercontent.com/golang/go/$t/src/crypto/x509/verify.go | grep -c distrustedSPKIHashes)"; done</pre></div>
+<div class="code"><button type="button">Copy</button><pre>go1.26.9 0
+go1.26.10 4
+go1.27.2 0
+go1.27.3 4</pre></div>
+<p>The source of the installed toolchain has no denylist:</p>
+<div class="code"><button type="button">Copy</button><pre>grep -c distrustedSPKIHashes "$(go env GOROOT)/src/crypto/x509/verify.go"</pre></div>
+<div class="code"><button type="button">Copy</button><pre>0</pre></div>
+<p><code>grep -c</code> prints <code>0</code> for a file with no match, and an error for a file that does not exist.</p>
+</section>
+<section id="step-8-compare-the-versions">
+<h2>Step 8. Compare the versions</h2>
+<p>The check keeps its fixed versions in <code>emudhra_check/fixes.py</code>. The command reads the copy published with release <code>v2.0.0</code>.</p>
+<div class="code"><button type="button">Copy</button><pre>curl -sS https://raw.githubusercontent.com/fieldse/emudhra-ca-compromise-check/v2.0.0/emudhra_check/fixes.py | grep -n -A6 '^GO_FIXED'</pre></div>
+<div class="code"><button type="button">Copy</button><pre>23:GO_FIXED: Final = FixRule(  # PKG-002 (R206)
+24-    (("1.26", "1.26.10"), ("1.27", "1.27.3")),
+25-    2,
+26-    Level.FAIL,
+27-    Level.FAIL,
+28-    "CVE-2026-111943, rebuild binaries after upgrading",
+29-)</pre></div>
+<ul>
+<li>Line 24 holds one fix per release line, 1.26.10 for 1.26 and 1.27.3 for 1.27. These are the two <code>fixed</code> values from step 4.</li>
+<li>The <code>2</code> on line 25 makes the check pick the release line by the first two numbers of the version, so 1.27.1 is judged against 1.27.3.</li>
+<li>Line 26 sets <code>FAIL</code> for a version below its line's fix.</li>
+<li>Line 27 sets <code>FAIL</code> for a release line with no listed fix, such as 1.25.</li>
+<li>Line 28 is the note at the end of the printed line.</li>
+<li><code>R206</code> is the entry on the <a href="references.html#r206">references page</a> that cites the sources in steps 4 to 6.</li>
+</ul>
+<p><code>sort -V</code> sorts version numbers, so the lower of the two prints first.</p>
+<div class="code"><button type="button">Copy</button><pre>printf '%s\n' 1.27.3 1.27.1 | sort -V | head -n 1</pre></div>
+<div class="code"><button type="button">Copy</button><pre>1.27.1</pre></div>
+</section>
+<section id="the-same-trace-for-a-version-in-cargolock">
+<h2>The same trace for a version in Cargo.lock</h2>
+<p>A Rust project's <code>Cargo.lock</code> records the exact version of every crate, or Rust package, it builds with. The crate <code>webpki-roots</code> carries its own copy of Mozilla's trusted roots, and the check judges its version against <code>WEBPKI_ROOTS_FIXED</code> in <code>fixes.py</code>.</p>
+<p>The lockfile below is written by hand. It pins <code>webpki-roots</code> 1.0.9.</p>
+<div class="code"><button type="button">Copy</button><pre>mkdir demo
+cat &gt; demo/Cargo.lock &lt;&lt;'EOF'
+version = 4
+
+[[package]]
+name = "demo"
+version = "0.1.0"
+dependencies = ["webpki-roots"]
+
+[[package]]
+name = "webpki-roots"
+version = "1.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+EOF
+grep -A1 '^name = "webpki-roots"' demo/Cargo.lock</pre></div>
+<div class="code"><button type="button">Copy</button><pre>name = "webpki-roots"
+version = "1.0.9"</pre></div>
+<p>Run on this directory, the check printed the line below. <code>&lt;work dir&gt;</code> stands for the directory from step 1.</p>
+<div class="code"><button type="button">Copy</button><pre>FAIL  webpki-roots [&lt;work dir&gt;/demo/Cargo.lock] found 1.0.9, fixed 1.0.10</pre></div>
+<p>RustSec, the Rust security advisory database, lists the fix as RUSTSEC-2026-0381. The command reads the advisory's source file at a fixed commit of the database and prints the lines that name the fix.</p>
+<div class="code"><button type="button">Copy</button><pre>curl -sS https://raw.githubusercontent.com/rustsec/advisory-db/8c25400939ad3954d97553d4dc48664c0771e1a7/crates/webpki-roots/RUSTSEC-2026-0381.md | sed -n '3,4p;13,17p;29,34p'</pre></div>
+<div class="code"><button type="button">Copy</button><pre>id = "RUSTSEC-2026-0381"
+package = "webpki-roots"
+aliases = ["CVE-2026-111943"]
+
+[versions]
+patched = ["&gt;= 1.0.10"]
+unaffected = ["= 0.26.11"]
+Version 1.0.10+ removes this root.
+
+The `webpki-roots` 0.26.11 compatibility package contains no independent trust
+store and re-exports the roots from its separately resolved 1.x dependency.
+That parent dependency must resolve to 1.0.10 or newer; an older parent remains
+affected by this advisory.</pre></div>
+<ul>
+<li><code>patched</code> makes 1.0.10 the first fixed release.</li>
+<li>The root it removes is <code>emSign ECC Root CA - G3</code>, named earlier in the same file.</li>
+<li>0.26.11 has no roots of its own. It is safe only when the lockfile resolves its 1.x dependency to 1.0.10 or later.</li>
+<li><code>aliases</code> reuses Go's CVE ID.</li>
+</ul>
+<p>The <code>webpki-roots</code> release note for 1.0.10 names the removed root:</p>
+<div class="code"><button type="button">Copy</button><pre>curl -sS "https://api.github.com/repos/rustls/webpki-roots/releases/tags/v%2F1.0.10" | grep -E -o '"(tag_name|published_at)": *"[^"]*"|Removed \\"[^\\]*\\"'</pre></div>
+<div class="code"><button type="button">Copy</button><pre>"tag_name": "v/1.0.10"
+"published_at": "2026-10-19T20:12:29Z"
+Removed \"emSign ECC Root CA - G3\"</pre></div>
+<p>The check's value is on line 66 of <code>fixes.py</code>, and line 67 holds the 0.26.11 version from the advisory:</p>
+<div class="code"><button type="button">Copy</button><pre>curl -sS https://raw.githubusercontent.com/fieldse/emudhra-ca-compromise-check/v2.0.0/emudhra_check/fixes.py | grep -n -B1 '^WEBPKI'</pre></div>
+<div class="code"><button type="button">Copy</button><pre>65-# PKG-020 (R216), PKG-027 (R220)
+66:WEBPKI_ROOTS_FIXED: Final = FixRule.single("1.0.10", Level.FAIL)
+67:WEBPKI_WRAPPER: Final = "0.26.11"  # PKG-024 (R218)</pre></div>
+<p><code>FixRule.single</code> is one fixed version with no release lines. A plain <code>sort</code> puts <code>1.0.10</code> before <code>1.0.9</code>, so the comparison needs <code>sort -V</code>.</p>
+<div class="code"><button type="button">Copy</button><pre>printf '%s\n' 1.0.10 1.0.9 | sort -V | head -n 1</pre></div>
+<div class="code"><button type="button">Copy</button><pre>1.0.9</pre></div>
+</section>
+<section id="result">
+<h2>Result</h2>
+<ul>
+<li><strong>Go:</strong> the <code>go</code> command on this Mac is Go 1.27.1, and the build record in the <code>go</code> binary names the same toolchain.</li>
+<li><strong>Fix:</strong> Go's entry GO-2026-6809 and the CVE record for CVE-2026-111943 give 1.27.3 as the first fixed 1.27 release and 1.26.10 as the first fixed 1.26 release.</li>
+<li><strong>Release:</strong> Go released both on 19 October 2026 with <code>crypto/x509</code> security fixes.</li>
+<li><strong>Source:</strong> the denylist from CL 851047 is in <code>verify.go</code> at <code>go1.26.10</code> and <code>go1.27.3</code>.<ul>
+<li>It is missing at <code>go1.26.9</code>, at <code>go1.27.2</code> and in the installed 1.27.1.</li>
+</ul></li>
+<li><strong>Check:</strong> <code>fixes.py</code> holds the same two versions.<ul>
+<li>1.27.1 is below 1.27.3, so the <code>FAIL</code> line is correct for this machine.</li>
+</ul></li>
+<li><strong>Cargo.lock:</strong> RUSTSEC-2026-0381 and the 1.0.10 release note make 1.0.10 the first <code>webpki-roots</code> release without the G3 root.<ul>
+<li><code>fixes.py</code> holds 1.0.10, and a lockfile that pins 1.0.9 is below it.</li>
+</ul></li>
+</ul>
+<p>Each claim in Flow C rests on one of these original sources:</p>
+<div class="table-scroll"><table><thead><tr><th>Claim</th><th>Step</th><th>Source and what to look for</th></tr></thead><tbody>
+<tr><td>Go's fix is in 1.27.3 and 1.26.10</td><td>Step 4</td><td><a href="https://pkg.go.dev/vuln/GO-2026-6809">GO-2026-6809 on pkg.go.dev</a>. Alias <code>CVE-2026-111943</code>, fixed versions <code>1.27.3</code> and <code>1.26.10</code>, symbol <code>Certificate.Verify</code>. <a href="https://web.archive.org/web/20261024213223/https://pkg.go.dev/vuln/GO-2026-6809">Archived copy</a></td></tr>
+<tr><td>Go assigned the CVE, for <code>crypto/x509</code></td><td>Step 5</td><td><a href="https://cveawg.mitre.org/api/cve/CVE-2026-111943">CVE record for CVE-2026-111943</a>. <code>"assignerShortName":"Go"</code>, <code>"packageName":"crypto/x509"</code> and <code>"lessThan":"1.27.3"</code>. <a href="https://web.archive.org/web/20261025025616/https://cveawg.mitre.org/api/cve/CVE-2026-111943">Archived copy</a></td></tr>
+<tr><td>Go 1.27.3 and 1.26.10 came out on 19 October 2026 with <code>crypto/x509</code> security fixes</td><td>Step 6</td><td><a href="https://go.dev/doc/devel/release">Go release history</a>. "go1.27.3 (released 2026-10-19) includes security fixes to the crypto/x509 package." <a href="https://web.archive.org/web/20261027021802/https://go.dev/doc/devel/release">Archived copy</a></td></tr>
+<tr><td>CL 851047 is Go's fix</td><td>Step 7</td><td><a href="https://go.dev/cl/851047">CL 851047</a>. "crypto/x509: distrust a handful of intermediates", "Fixes CVE-2026-111943", merged 2026-10-20</td></tr>
+<tr><td>The 1.27 backport shipped in Go 1.27.3</td><td>Step 7</td><td><a href="https://api.github.com/repos/golang/go/issues/82349">Go issue 82349 in the GitHub API</a>. <code>"title": "security: fix CVE-2026-111943 [1.27 backport]"</code> and the milestone's <code>"title": "Go1.27.3"</code></td></tr>
+<tr><td><code>go1.27.3</code> carries the denylist and <code>go1.27.2</code> does not</td><td>Step 7</td><td><a href="https://raw.githubusercontent.com/golang/go/go1.27.3/src/crypto/x509/verify.go"><code>verify.go</code> at tag <code>go1.27.3</code></a>. <code>distrustedSPKIHashes</code>, 4 times. The same file at tag <code>go1.27.2</code> has none</td></tr>
+<tr><td>The check's fixed versions for Go and <code>webpki-roots</code></td><td>Step 8 and the Cargo.lock trace</td><td><a href="https://raw.githubusercontent.com/fieldse/emudhra-ca-compromise-check/v2.0.0/emudhra_check/fixes.py"><code>emudhra_check/fixes.py</code> at release <code>v2.0.0</code></a>. Line 24 <code>(("1.26", "1.26.10"), ("1.27", "1.27.3"))</code> and line 66 <code>FixRule.single("1.0.10", Level.FAIL)</code></td></tr>
+<tr><td><code>webpki-roots</code> 1.0.10 is the first fixed release</td><td>Cargo.lock trace</td><td><a href="https://raw.githubusercontent.com/rustsec/advisory-db/8c25400939ad3954d97553d4dc48664c0771e1a7/crates/webpki-roots/RUSTSEC-2026-0381.md">RUSTSEC-2026-0381 at advisory-db commit <code>8c25400</code></a>. <code>patched = ["&gt;= 1.0.10"]</code>, <code>unaffected = ["= 0.26.11"]</code> and <code>aliases = ["CVE-2026-111943"]</code></td></tr>
+<tr><td><code>webpki-roots</code> 1.0.10 removes the G3 root</td><td>Cargo.lock trace</td><td><a href="https://github.com/rustls/webpki-roots/releases/tag/v%2F1.0.10"><code>webpki-roots</code> v/1.0.10 release note</a>. <code>Removed "emSign ECC Root CA - G3"</code>. <a href="https://web.archive.org/web/20261025230830/https://github.com/rustls/webpki-roots/releases/tag/v%2F1.0.10">Archived copy</a></td></tr>
+</tbody></table></div>
+</section>
+</main>
+<footer>
+  <div class="wrap"><p>eMudhra G3 intermediate CA key compromise, October 2026. An independent guide, not affiliated with eMudhra or Sectigo.</p><p>Last updated 2026-11-05. <a href="https://github.com/fieldse/emudhra-ca-compromise-check">Source on GitHub</a>.</p></div>
+</footer>
+
+<script>
+document.querySelectorAll(".cmd .copy").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var code = btn.parentElement.querySelector("code");
+    function flash() { btn.classList.add("done"); btn.title = "Copied"; setTimeout(function () { btn.classList.remove("done"); btn.title = "Copy"; }, 1500); }
+    function selectIt() {
+      var r = document.createRange(); r.selectNodeContents(code);
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    }
+    try { navigator.clipboard.writeText(code.textContent).then(flash, selectIt); } catch (e) { selectIt(); }
+  });
+});
+document.querySelectorAll(".code button").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var pre = btn.parentElement.querySelector("pre");
+    function done(label) { btn.textContent = label; setTimeout(function () { btn.textContent = "Copy"; }, 1500); }
+    function selectIt() {
+      var r = document.createRange(); r.selectNodeContents(pre);
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      done("Selected");
+    }
+    try {
+      navigator.clipboard.writeText(pre.innerText).then(function () { done("Copied"); }, selectIt);
+    } catch (e) { selectIt(); }
+  });
+});
+</script>
+</body>
+</html>

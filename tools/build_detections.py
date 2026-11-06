@@ -1,11 +1,14 @@
-"""build_detections.py: build detections.html from the rule register.
+"""build_detections.py: build detections.html and docs/weak-rules.md from the rule register.
 
-Reads rules/detection-rules.csv and the stylesheet of checks.html, and writes detections.html with
-one section per detection in the order of the check's registry. Each section explains what the
-detection reads and lists its rules with their level, value, sources and verification status. The
-register is the only source of the rule rows, so the page is rebuilt whenever the register changes.
+Reads rules/detection-rules.csv, site/checks.md and site/style.css. Writes detections.html with one
+section per detection in the order of the check's registry. Each section links the checks.html cards
+that name it and lists its rules with their condition, level, value and sources, with a tag on each
+rule that is not verified. Writes docs/weak-rules.md with the status counts, the weak rules by level,
+the weak facts and unverifiable rules with their gap text, and every weak decision with its full
+condition and basis. Both are dated by the latest checked date in the register, so they are rebuilt
+whenever the register or checks.md changes.
 
-Usage: python3 -I tools/build_detections.py [--out PATH]
+Usage: python3 -I tools/build_detections.py [--out PATH] [--weak-out PATH]
 """
 
 from __future__ import annotations
@@ -16,13 +19,26 @@ import html
 import re
 import sys
 from collections import Counter
+from datetime import date
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 REGISTER = Path("rules") / "detection-rules.csv"
-CHECKS_PAGE = "checks.html"
+STYLESHEET = "site/style.css"
+CHECKS = Path("site") / "checks.md"
+CARD_START = re.compile(r"^:::\s*\{\.eco\s+#c-([\w.-]+)[^}]*\}\s*$")
+RULE_LINK = re.compile(r"detections\.html#(d-[a-z0-9]+)")
 OUTPUT = "detections.html"
-CHECKED = "2026-11-02"
+WEAK_OUTPUT = "docs/weak-rules.md"
+PROOF = "https://fieldse.github.io/emudhra-ca-compromise-check/proof.html"
+STATUS_WORDS = (
+    ("VERIFIED", "verified"),
+    ("WEAK", "weak"),
+    ("UNVERIFIABLE", "unverifiable"),
+    ("WRONG", "under review"),
+)
+DEFERRED_LEVELS = frozenset({"matcher", "rules"})
+LEVEL_ORDER = ("FAIL", "WARN", "INFO", "PASS", "SKIP")
 FONTS = (
     "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800"
     "&family=JetBrains+Mono:wght@400;500;600&display=swap"
@@ -39,6 +55,7 @@ FIELDS = (
     "basis",
     "status",
     "checked",
+    "gap",
 )
 
 # Matcher and Shared hold rules every detection uses. The 27 detections follow in registry order.
@@ -46,210 +63,154 @@ SECTIONS = (
     (
         "Matcher",
         "Certificate matcher",
-        "Every bundle, keystore and binary the check reads goes through one matcher. It finds the 16"
-        " compromised intermediates, the three G3 roots with their two cross-certificates and AAA"
-        " Certificate Services by the SHA-256 of"
-        " each PEM block, by their DER bytes and by the first base64 line, and by public key when no"
-        " full certificate is there. A full intermediate or G3 root is FAIL, AAA is WARN, and a bare"
-        " intermediate key is INFO, because fixed software ships those keys as a blocklist.",
+        "Every bundle, keystore and binary the checker reads goes through this matcher.",
     ),
     (
         "Shared",
         "Rules every detection shares",
-        "These rules apply wherever the check runs a tool, compares a version or reads a file. A"
-        " version it cannot compare, a tool it will not run and a file over its size cap each get a"
-        " line of their own instead of a guess.",
+        "Rules for any tool the checker runs, version it compares or file it reads.",
     ),
     (
         "OsTrustStore",
         "OS CA bundles",
-        "Reads the OS CA bundle files at their standard paths for Debian, Ubuntu, RHEL, Fedora,"
-        " openSUSE, Alpine and macOS, and passes each through the certificate matcher. On macOS it adds"
-        " a note on what Apple blocks and which tools read /etc/ssl/cert.pem.",
+        "Reads the OS CA bundle files at their standard paths.",
     ),
     (
         "CaCertificatesPackage",
         "OS ca-certificates package",
-        "Asks dpkg, apk, rpm or pacman for the installed ca-certificates build and compares it with"
-        " the first fixed build for that distribution and release. The distribution comes from"
-        " /etc/os-release and, for rpm, from the release part of the version. A family with no listed"
-        " fix is WARN and left to the bundle check.",
+        "Asks dpkg, apk, rpm or pacman for the installed ca-certificates build.",
     ),
     (
         "HomebrewTrustStore",
         "Homebrew CA bundles",
-        "Finds the newest ca-certificates formula in Homebrew's Cellar and compares its date and"
-        " revision with the fixed formula. It passes Homebrew's cert.pem files through the matcher,"
-        " warns when a fixed formula left a stale bundle, and on macOS notes the system roots keychain"
-        " the old formula copied from.",
+        "Reads Homebrew's ca-certificates formula and its cert.pem files.",
     ),
     (
         "BunHost",
         "Bun",
-        "Runs bun --version from PATH and compares it with Bun 1.4.4, the first release whose bundled"
-        " roots drop emSign ECC Root CA - G3. It also passes the bun binary through the matcher.",
+        "Runs bun --version from PATH and reads the bun binary.",
     ),
     (
         "NodeHost",
         "Node.js on PATH",
-        "Runs node --version from PATH and reads the binary node names as process.execPath. It judges"
-        " the version against the fixed release on each Node line, then checks whether the binary"
-        " still holds emSign ECC Root CA - G3.",
+        "Runs node --version from PATH and reads the node binary.",
     ),
     (
         "DenoHost",
         "Deno",
-        "Runs deno --version from PATH, compares it with Deno 2.9.8 and passes the deno binary"
-        " through the matcher. A fixed Deno holds the compromised keys as a blocklist, which shows up"
-        " as INFO.",
+        "Runs deno --version from PATH and reads the deno binary.",
     ),
     (
         "GoToolchain",
         "Go toolchain",
-        "Runs go version from PATH and compares the toolchain with the fixed Go 1.26 and 1.27"
-        " releases. It also reads the toolchain line of each go.mod under the scan roots, which only"
-        " suggests a toolchain, so a low one is INFO.",
+        "Runs go version from PATH and reads the toolchain line of each go.mod.",
     ),
     (
         "CPythonHost",
         "CPython",
-        "Runs python3 --version from PATH, and judges the interpreter running the check when it"
-        " differs. A CPython below its fix is WARN, because the fixed releases add a key block in the"
-        " ssl module and the pip and certifi checks decide the CA files.",
+        "Runs python3 --version from PATH, and judges the interpreter running the checker.",
     ),
     (
         "ElectronApps",
         "Electron apps",
-        "Finds Electron apps as macOS bundles and Linux app directories, reads each app's Electron"
-        " version from the framework's Info.plist or from the Electron/ string in its binary, and"
-        " compares it with the first fixed release on that Electron branch. It also passes the binary"
-        " through the matcher.",
+        "Reads the Electron version of each macOS and Linux app, and its binary.",
     ),
     (
         "UpdaterCaches",
         "Electron updater caches",
-        "Looks in Squirrel.Mac ShipIt updater caches for Electron apps an update left behind, judged"
-        " by version only. A cached app below its fix is WARN, since the app does not run from the"
-        " cache.",
+        "Reads the Electron version of apps left in Squirrel.Mac ShipIt updater caches.",
     ),
     (
         "NodeVersionDirs",
         "Node.js version managers",
-        "Lists Node.js installs made by nvm, volta, asdf, fnm and mise, takes the version from each"
-        " directory name and judges it with the Node rules. It scans each install's binary when"
-        " present.",
+        "Reads Node.js installs made by nvm, volta, asdf, fnm and mise.",
     ),
     (
         "BundledNodeBinaries",
         "Node.js binaries in apps",
-        "Finds Node binaries that apps and tools ship outside PATH and the version managers, reads"
-        " the version from the release URL built into each binary, and judges it with the Node"
-        " rules.",
+        "Reads Node binaries that apps and tools ship outside PATH.",
     ),
     (
         "PythonDistInfo",
         "certifi, pip and uv packages",
-        "Reads certifi, pip and uv dist-info directories under the scan roots and judges the version"
-        " in each directory name. A package with no bundle of its own, or whose bundle links out of"
-        " the package or comes from a distribution package, is judged by the bundle it uses.",
+        "Reads certifi, pip and uv dist-info directories and their bundles.",
     ),
     (
         "PythonPins",
         "certifi pins",
-        "Reads certifi pins in requirements files, poetry.lock, uv.lock and Pipfile.lock and judges"
-        " each pinned version with the certifi rules.",
+        "Reads certifi pins in requirements files, poetry.lock, uv.lock and Pipfile.lock.",
     ),
     (
         "HostPythonPackages",
         "certifi and pip of python3",
-        "Asks the python3 on PATH, from package metadata only, which certifi and pip it has, and"
-        " judges them with the same rules as the dist-info check.",
+        "Asks the python3 on PATH which certifi and pip it has.",
     ),
     (
         "UvHost",
         "uv",
-        "Runs uv --version from PATH and compares it with uv 0.13.4, the first release whose bundled"
-        " roots drop emSign ECC Root CA - G3. It also passes the uv binary through the matcher.",
+        "Runs uv --version from PATH and reads the uv binary.",
     ),
     (
         "ElectronPackages",
         "Electron in node_modules and package.json",
-        "Reads the installed node_modules/electron version and the Electron versions package.json"
-        " files declare. An installed or exact version below its branch's fix is FAIL, and a range"
-        " that starts below the fix is WARN, since it may resolve to a fixed release.",
+        "Reads node_modules/electron and the Electron versions package.json files declare.",
     ),
     (
         "GoBinaries",
         "Go binaries",
-        "Reads the build info of Go binaries in the program directories and scan roots, compares the"
-        " toolchain that built each with the fixed Go releases, and checks the x509roots/fallback"
-        " module version. It also passes each binary through the matcher.",
+        "Reads the build info of Go binaries in program and bin directories.",
     ),
     (
         "RustBinaries",
         "Rust binaries",
-        "Reads the webpki-roots, webpki-root-certs and rustls-webpki versions from the registry"
-        " source paths a Rust binary embeds, and judges them with the Cargo rules. It also passes"
-        " each binary through the matcher.",
+        "Reads the webpki-roots, webpki-root-certs and rustls-webpki versions a Rust binary embeds.",
     ),
     (
         "CargoLocks",
         "Cargo.lock",
-        "Reads webpki-roots, webpki-root-certs and rustls-webpki in each Cargo.lock and judges each"
-        " version against the fix on its line. A Cargo.lock inside downloaded crate source is"
-        " skipped with INFO.",
+        "Reads webpki-roots, webpki-root-certs and rustls-webpki in each Cargo.lock.",
     ),
     (
         "ComposerLocks",
         "composer.lock",
-        "Reads composer/ca-bundle in each composer.lock and compares it with the fixed 1.4 and 1.6"
-        " releases.",
+        "Reads composer/ca-bundle in each composer.lock.",
     ),
     (
         "GemfileLocks",
         "Gemfile.lock",
-        "Reads excon in each Gemfile.lock and compares it with excon 1.8.0.",
+        "Reads excon in each Gemfile.lock.",
     ),
     (
         "MixLocks",
         "mix.lock",
-        "Reads castore and Hex certifi in each mix.lock and compares them with castore 1.0.22 and"
-        " certifi 2.18.0.",
+        "Reads castore and Hex certifi in each mix.lock.",
     ),
     (
         "PemBundles",
         "PEM bundles",
-        "Reads files under the scan roots whose names suggest a CA bundle and that hold a PEM block,"
-        " passes each through the matcher, and lists a file only when it holds a certificate the"
-        " check looks for.",
+        "Reads files whose names suggest a CA bundle.",
     ),
     (
         "JavaKeystores",
         "Java keystores",
-        "Reads the cacerts of each Java home and every file named cacerts under the scan roots, as"
-        " JKS, JCEKS or PKCS12 without keytool, and passes the certificates through the matcher. A"
-        " password-protected PKCS12 is WARN.",
+        "Reads the cacerts of each Java home and every file named cacerts.",
     ),
     (
         "PerlMozillaCa",
         "Perl Mozilla::CA",
-        "Asks the perl on PATH for its Mozilla::CA version and the bundle path SSL_ca_file returns."
-        " The module's own bundle below 20261020 is FAIL, and a bundle patched to point elsewhere is"
-        " judged by content.",
+        "Asks the perl on PATH for its Mozilla::CA version and bundle.",
     ),
     (
         "PodmanImages",
         "Podman images",
-        "With -c or -i, runs a shell probe in each local Podman image with networking off. The probe"
-        " reports runtimes, Python packages and the ca-certificates package, and dumps CA bundles and"
-        " keystores, which the check judges with the host rules.",
+        "With -c or -i, runs a probe in each local Podman image and judges what it reports.",
     ),
 )
 SHARED_SECTIONS = ("Matcher", "Shared")
-STATUS_LABELS = {
-    "VERIFIED": ("verified", "ok"),
+# The tag a rule that is not VERIFIED shows under its ID, with its badge class.
+STATUS_TAGS = {
     "WEAK": ("weak", "weak"),
-    "UNVERIFIABLE": ("unverified", "unv"),
+    "UNVERIFIABLE": ("unverifiable", "unv"),
     "WRONG": ("under review", "bad"),
 }
 EXTRA_CSS = """
@@ -258,6 +219,7 @@ section.det { display: grid; gap: 12px; scroll-margin-top: 16px; }
 section.det h2 small { font: 500 13px var(--mono); color: var(--muted); margin-left: 10px; letter-spacing: 0; }
 table.list.rules { min-width: 900px; }
 .rules td.rid { font: 700 13px var(--mono); white-space: nowrap; }
+.rules td.rid .badge { display: table; margin-top: 6px; text-decoration: none; }
 .rules td.lvl { font: 600 13px var(--mono); white-space: nowrap; }
 .rules td.val { font: 13px var(--mono); overflow-wrap: anywhere; min-width: 200px; max-width: 320px; }
 .rules td.cond .muted { display: block; margin-top: 4px; font-size: 13.5px; }
@@ -265,17 +227,9 @@ table.list.rules { min-width: 900px; }
 .rules td.rf a { display: block; text-decoration: none; }
 .badge { display: inline-block; font: 600 12px var(--mono); padding: 2px 8px; border-radius: 999px;
   border: 1px solid currentColor; white-space: nowrap; }
-.badge.ok { color: var(--good); }
 .badge.weak { color: var(--limit); }
 .badge.unv { color: var(--muted); }
 .badge.bad { color: var(--bad); }
-.facts { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-@media (max-width: 640px) { .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.facts div:nth-child(4) b { color: var(--muted); }
-.facts div:nth-child(5) b { color: var(--bad); }
-dl.levels dt.ok { color: var(--good); }
-dl.levels dt.weak { color: var(--limit); }
-dl.levels dt.unv { color: var(--muted); }
 """
 
 
@@ -288,13 +242,74 @@ def read_rules(repo: Path) -> list[dict[str, str]]:
         return list(reader)
 
 
+def last_updated(rules: list[dict[str, str]]) -> str:
+    """Return the latest checked date in the register."""
+    return max(rule["checked"] for rule in rules)
+
+
+def long_date(day: str) -> str:
+    """Return an ISO date as D Month YYYY, such as 2 November 2026."""
+    parsed = date.fromisoformat(day)
+    return f"{parsed.day} {parsed.strftime('%B')} {parsed.year}"
+
+
+def card_title(text: str) -> str:
+    """Return a checks.md card title as plain text, without backticks or HTML entities."""
+    return html.unescape(text.replace("`", "")).strip()
+
+
+def card_links(text: str) -> list[tuple[str, str, list[str]]]:
+    """Return (card id, title, linked section anchors) for each checks.md card, in file order.
+
+    A card opens with a ::: {.eco #c-<id> ...} line, has its ### title on the next line and closes
+    at a ::: line. Its anchors are every detections.html#d-<name> link inside it, each once.
+    """
+    cards = []
+    card: tuple[str, str, list[str]] | None = None
+    expect_title = False
+    for number, line in enumerate(text.splitlines(), 1):
+        start = CARD_START.match(line)
+        if start:
+            if card is not None:
+                raise ValueError(f"{CHECKS}:{number}: card c-{start.group(1)} opens inside c-{card[0]}")
+            card = (start.group(1), "", [])
+            expect_title = True
+            continue
+        if card is None:
+            continue
+        if expect_title:
+            if not line.startswith("### "):
+                raise ValueError(f"{CHECKS}:{number}: card c-{card[0]} has no ### title")
+            card = (card[0], card_title(line[4:]), card[2])
+            expect_title = False
+            continue
+        if line.strip() == ":::":
+            cards.append(card)
+            card = None
+            continue
+        for link in RULE_LINK.findall(line):
+            if link not in card[2]:
+                card[2].append(link)
+    if card is not None:
+        raise ValueError(f"{CHECKS}: card c-{card[0]} is not closed")
+    return cards
+
+
+def affected_software(repo: Path, anchors: set[str]) -> dict[str, list[tuple[str, str]]]:
+    """Return, for each section anchor, the (card id, title) of the checks.md cards linking it."""
+    out: dict[str, list[tuple[str, str]]] = {}
+    for card_id, title, links in card_links((repo / CHECKS).read_text(encoding="utf-8")):
+        for link in links:
+            if link not in anchors:
+                raise ValueError(f"{CHECKS}: card c-{card_id} links detections.html#{link}, which has no section")
+            out.setdefault(link, []).append((card_id, title))
+    return out
+
+
 def stylesheet(repo: Path) -> str:
-    """Return the checks page's stylesheet, without its comments, plus the detections page's additions."""
-    text = (repo / CHECKS_PAGE).read_text(encoding="utf-8")
-    match = re.search(r"<style>\n(.*?)</style>", text, re.S)
-    if match is None:
-        raise ValueError(f"{CHECKS_PAGE}: no stylesheet")
-    return re.sub(r"[ \t]*/\*.*?\*/\n?", "", match.group(1), flags=re.S) + EXTRA_CSS
+    """Return the site stylesheet, without its comments, plus the detections page's additions."""
+    text = (repo / STYLESHEET).read_text(encoding="utf-8")
+    return re.sub(r"[ \t]*/\*.*?\*/\n?", "", text, flags=re.S) + EXTRA_CSS
 
 
 def esc(text: str) -> str:
@@ -321,23 +336,50 @@ def sources_cell(rule: dict[str, str]) -> str:
     return f"<td class='rf'>{links}</td>"
 
 
+def rule_tag(rule: dict[str, str]) -> str:
+    """Return the badge for a rule no source fully backs, linked to the proof page's Limitations."""
+    if rule["status"] == "VERIFIED":
+        return ""
+    label, css = STATUS_TAGS[rule["status"]]
+    return f"<a class='badge {css}' href='proof.html#limitations'>{label}</a>"
+
+
+def level_cell(level: str) -> str:
+    """Return the Level cell, with matcher linked to its section and rules spelled out."""
+    if level == "-":
+        return "–"
+    words = {"matcher": "<a href='#d-matcher'>matcher</a>", "rules": "per named rule"}
+    return "/".join(words.get(part, esc(part)) for part in level.split("/"))
+
+
 def rule_row(rule: dict[str, str], first: bool) -> str:
     """Return one table row for a rule. The first appearance of a rule carries its anchor."""
-    label, css = STATUS_LABELS[rule["status"]]
     rid = rule["id"].lower()
     row_id = f" id='{rid}'" if first else ""
     basis = f"<span class='muted'>{esc(rule['basis'])}</span>" if rule["basis"] else ""
-    level = "–" if rule["level"] == "-" else esc(rule["level"])
+    level = level_cell(rule["level"])
     return (
-        f"<tr{row_id}><td class='rid'><a href='#{rid}'>{esc(rule['id'])}</a></td>"
+        f"<tr{row_id}><td class='rid'><a href='#{rid}'>{esc(rule['id'])}</a>{rule_tag(rule)}</td>"
         f"<td class='cond'>{esc(rule['condition'])}{basis}</td><td class='lvl'>{level}</td>"
-        f"<td class='val'>{esc(rule['value'])}</td>{sources_cell(rule)}"
-        f"<td><span class='badge {css}'>{label}</span></td></tr>"
+        f"<td class='val'>{esc(rule['value'])}</td>{sources_cell(rule)}</tr>"
     )
 
 
+def affected_line(cards: list[tuple[str, str]]) -> str:
+    """Return the line linking a section's checks.html cards, or nothing when none link it."""
+    if not cards:
+        return ""
+    links = ", ".join(f"<a href='checks.html#c-{esc(cid)}'>{esc(title)}</a>" for cid, title in cards)
+    return f"\n    <p class=\"read\">Affected software: {links}</p>"
+
+
 def section(
-    name: str, title: str, text: str, rules: list[dict[str, str]], seen: set[str]
+    name: str,
+    title: str,
+    text: str,
+    rules: list[dict[str, str]],
+    cards: list[tuple[str, str]],
+    seen: set[str],
 ) -> str:
     """Return the section for one detection with its rules table."""
     rows = []
@@ -348,12 +390,17 @@ def section(
     tag = "" if name in SHARED_SECTIONS else f"<small>{esc(name)}</small>"
     return f"""  <section class="det" id="{anchor(name)}">
     <h2>{esc(title)}{tag}</h2>
-    <p class="read">{esc(text)}</p>
+    <p class="read">{esc(text)}</p>{affected_line(cards)}
     <div class="table-scroll"><table class='list rules'><thead>
-<tr><th>Rule</th><th>Condition</th><th>Level</th><th>Value</th><th>Sources</th><th>Status</th></tr></thead><tbody>
+<tr><th>Rule</th><th>Condition</th><th>Level</th><th>Value</th><th>Sources</th></tr></thead><tbody>
 {body}
 </tbody></table></div>
   </section>"""
+
+
+def count(n: int, noun: str) -> str:
+    """Return a count with its noun, plural unless the count is one."""
+    return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
 
 
 def build(repo: Path) -> str:
@@ -366,15 +413,15 @@ def build(repo: Path) -> str:
             if name not in by_section:
                 raise ValueError(f"{rule['id']}: unknown detection {name}")
             by_section[name].append(rule)
-    counts = Counter(rule["status"] for rule in rules)
-    kinds = Counter(rule["kind"] for rule in rules)
+    affected = affected_software(repo, {anchor(name) for name in names})
+    updated = last_updated(rules)
     toc = "".join(
-        f"<li><a href='#{anchor(name)}'>{esc(title)}</a><small>{len(by_section[name])} rules</small></li>"
+        f"<li><a href='#{anchor(name)}'>{esc(title)}</a><small>{count(len(by_section[name]), 'rule')}</small></li>"
         for name, title, _ in SECTIONS
     )
     seen: set[str] = set()
     sections = "\n\n".join(
-        section(name, title, text, by_section[name], seen)
+        section(name, title, text, by_section[name], affected.get(anchor(name), []), seen)
         for name, title, text in SECTIONS
     )
     return f"""<!doctype html>
@@ -382,8 +429,8 @@ def build(repo: Path) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>eMudhra G3 detections</title>
-<meta name="description" content="Every rule the eMudhra G3 check applies, with its sources and status.">
+<title>eMudhra G3 checker rules</title>
+<meta name="description" content="Every rule the eMudhra G3 checker applies, with its level, value and sources.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="{FONTS}">
@@ -395,53 +442,16 @@ def build(repo: Path) -> str:
 <header class="band">
   <div class="wrap">
     <a class="back" href="./">← Back to the guide</a>
-    <p class="ids"><b>eMudhra G3</b> &nbsp;·&nbsp; <a href="./">Guide</a> &nbsp;·&nbsp;
-      <a href="checks.html">Checks</a> &nbsp;·&nbsp; Detections &nbsp;·&nbsp;
-      <a href="references.html">References</a></p>
-    <h1>Detection <span class='hl'>rules</span></h1>
-    <p>Every rule the check applies, by detection: what it looks for, the level it reports, the value it
-      compares, its sources and whether the sources back it. Checked {CHECKED}.</p>
+    <p class="tags"><span>eMudhra G3</span><span>CA key compromise</span><span>October 2026</span></p>
+    <p class="ids"><a href="./">Guide</a> &nbsp;·&nbsp; <a href="incident.html">Incident</a> &nbsp;·&nbsp; <a href="checks.html">Affected software</a> &nbsp;·&nbsp; <a href="fixes.html">Fixes</a> &nbsp;·&nbsp; Checker rules &nbsp;·&nbsp; <a href="proof.html">Proof</a> &nbsp;·&nbsp; <a href="references.html">References</a></p>
+    <h1>Checker <span class='hl'>rules</span></h1>
+    <p>Every rule the checker applies, in one table per detection. Each row gives what the checker looks
+      for, the level it reports, the value it compares and the sources that back it. The rules were last
+      checked on {long_date(updated)}.</p>
   </div>
 </header>
 
 <main class="wrap">
-
-  <section>
-    <div class="facts">
-      <div><b>{len(rules)}</b><span>rules</span></div>
-      <div><b>{counts["VERIFIED"]}</b><span>verified</span></div>
-      <div><b>{counts["WEAK"]}</b><span>weak</span></div>
-      <div><b>{counts["UNVERIFIABLE"]}</b><span>unverified</span></div>
-      <div><b>{counts["WRONG"]}</b><span>under review</span></div>
-    </div>
-    <ul class="plain read">
-      <li><strong>A rule</strong> is one decision the check makes: a condition it looks for and the level it
-        reports. Node.js 22 below 22.23.4 giving <code>FAIL</code> is one rule. A table of eight fixed distro
-        builds is eight rules.</li>
-      <li><strong>Facts and decisions:</strong> {kinds["fact"]} rules are facts, such as a fixed version, taken
-        from a vendor, project or tracker document. {kinds["decision"]} are decisions the project made, such
-        as which level a case gets, and each says the reason under its condition.</li>
-      <li><strong>Sources:</strong> a verified or weak rule links the rows of the
-        <a href="references.html">references page</a> that back it. A decision with no outside source says
-        so. An unverified rule and a rule under review show no links.</li>
-      <li><strong>Level:</strong> <code>matcher</code> means the certificate matcher's levels apply, and
-        <code>rules</code> means the levels of the rules the condition names.</li>
-      <li><strong>Rules with problems are shown here too.</strong> {counts["WRONG"]} rules are under review
-        because a source contradicts them, and {counts["UNVERIFIABLE"]} could not be checked. A rule under
-        review shows no source link until it is fixed, and an unverified rule none until a source is
-        reached.</li>
-    </ul>
-    <dl class="levels read">
-      <dt class="ok">verified</dt>
-      <dd>Two independent checks against the sources both found that the source states the rule.</dd>
-      <dt class="weak">weak</dt>
-      <dd>Support is indirect, or the rule is a project decision that no outside source can confirm.</dd>
-      <dt class="unv">unverified</dt><dd>No source was reached for the rule.</dd>
-      <dt class="fail">under review</dt><dd>A source contradicts the rule. The fix is pending.</dd>
-    </dl>
-    <p class="read muted">The rules come from the register <code>rules/detection-rules.csv</code> in the
-      repository, which also gives each rule's code line.</p>
-  </section>
 
   <nav class='toc read' aria-label='Contents'><h2>Contents</h2><ol>{toc}</ol></nav>
 
@@ -450,8 +460,8 @@ def build(repo: Path) -> str:
 </main>
 
 <footer>
-  <div class="wrap"><p>eMudhra G3 intermediate CA key compromise, October 2026. Not affiliated with eMudhra,
-    Sectigo or any root program.</p><p>Last checked {CHECKED}.
+  <div class="wrap"><p>eMudhra G3 intermediate CA key compromise, October 2026. An independent guide, not
+    affiliated with eMudhra or Sectigo.</p><p>Last updated {updated}.
     <a href="https://github.com/fieldse/emudhra-ca-compromise-check">Source on GitHub</a>.</p></div>
 </footer>
 
@@ -460,17 +470,153 @@ def build(repo: Path) -> str:
 """
 
 
+def series(items: list[str], last: str = "and") -> str:
+    """Join items as an English list: a, b and c."""
+    if len(items) < 2:
+        return "".join(items)
+    return ", ".join(items[:-1]) + f" {last} " + items[-1]
+
+
+def ids(rules: list[dict[str, str]]) -> str:
+    """Return the rule IDs as an English list of code spans."""
+    return series([f"`{rule['id']}`" for rule in rules])
+
+
+def cell(text: str) -> str:
+    """Escape the pipes that would split a Markdown table cell."""
+    return text.replace("|", "\\|")
+
+
+def plain(text: str) -> str:
+    """Escape the characters Markdown would read as emphasis or an HTML tag in plain register text."""
+    return re.sub(r"([\\*<])", r"\\\1", text)
+
+
+def table(header: tuple[str, ...], rows: list[tuple[str, ...]]) -> str:
+    """Return a Markdown table, or a line saying there are none."""
+    if not rows:
+        return "None."
+    lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
+    lines += ["| " + " | ".join(cell(c) for c in row) + " |" for row in rows]
+    return "\n".join(lines)
+
+
+def levels_section(weak: list[dict[str, str]]) -> str:
+    """Return the section that sorts the weak rules by the level they can report."""
+    fail = [r for r in weak if "FAIL" in r["level"].split("/")]
+    rest = [r for r in weak if r not in fail]
+    deferred = [r for r in rest if DEFERRED_LEVELS & set(r["level"].split("/"))]
+    unlevelled = [r for r in rest if r["level"] == "-"]
+    others = [r for r in rest if r not in deferred and r not in unlevelled]
+    found = {part for r in others for part in r["level"].split("/")}
+    words = [f"`{lv}`" for lv in LEVEL_ORDER if lv in found]
+    words += [f"`{lv}`" for lv in sorted(found - set(LEVEL_ORDER))]
+    has = "has" if len(fail) == 1 else "have"
+    lines = [
+        f"**{len(fail)} of the {len(weak)} weak rules {has} `FAIL` as their level:** {ids(fail)}.",
+        "",
+    ]
+    if deferred:
+        takes = "takes its" if len(deferred) == 1 else "take their"
+        lines.append(
+            f"- **{len(deferred)} {takes} level from the certificate matcher or from other rules,**"
+            f" which can report `FAIL`: {ids(deferred)}."
+        )
+    if unlevelled:
+        has = "has" if len(unlevelled) == 1 else "have"
+        lines.append(f"- **{len(unlevelled)} {has} no level (`-`):** {ids(unlevelled)}.")
+    if others:
+        lines.append(f"- **The other {len(others)}** report {series(words, 'or')}.")
+    return "## Weak rules by level\n\n" + "\n".join(lines).rstrip()
+
+
+def build_weak_rules(repo: Path) -> str:
+    """Return docs/weak-rules.md built from the register."""
+    rules = read_rules(repo)
+    counts = Counter(rule["status"] for rule in rules)
+    weak = [r for r in rules if r["status"] == "WEAK"]
+    facts = [r for r in weak if r["kind"] == "fact"]
+    decisions = [r for r in weak if r["kind"] == "decision"]
+    unverifiable = [r for r in rules if r["status"] == "UNVERIFIABLE"]
+    tally = series(
+        [
+            f"{counts[status]} {'is' if counts[status] == 1 else 'are'} {word}"
+            for status, word in STATUS_WORDS
+            if counts[status]
+        ]
+    )
+    fact_rows = [(f"`{r['id']}`", r["level"], r["gap"]) for r in facts]
+    unverifiable_rows = [(f"`{r['id']}`", r["level"], r["gap"]) for r in unverifiable]
+    decision_rows = [
+        (f"`{r['id']}`", r["level"], plain(r["condition"]), plain(r["basis"]))
+        for r in decisions
+    ]
+    return f"""# Weak and unverifiable rules
+
+**If a `FAIL` comes from one of these rules, verify it by hand.** The [proof page]({PROOF}) shows how to \
+check a rule against its original sources.
+
+Of the {len(rules)} rules the check applies, {tally}. `tools/build_detections.py` writes this page \
+from the rule register, `rules/detection-rules.csv`, last updated {last_updated(rules)}.
+
+- A weak fact is a rule that a source backs only in part.
+- A weak decision is a project choice with no outside source to check it against.
+- An unverifiable rule is one no primary source could be found for.
+
+{levels_section(weak)}
+
+## Weak facts ({len(facts)})
+
+**A source confirms most of each of these claims.** The last column names the part it does not.
+
+{table(("Rule", "Level", "What is weak"), fact_rows)}
+
+## Unverifiable rules ({len(unverifiable)})
+
+**No primary source could be found for these rules.** The last column says why.
+
+{table(("Rule", "Level", "Why"), unverifiable_rows)}
+
+## Weak decisions ({len(decisions)})
+
+**Each of these rules makes a choice that no outside source can check.** The level a rule gives is \
+one such choice. The facts a decision rests on are confirmed where a source exists.
+
+{table(("Rule", "Level", "Condition", "Basis"), decision_rows)}
+
+## How the rules were reviewed
+
+LLM agents reviewed each rule in two passes. One pass looked for a source that supports the rule, \
+and the other tried to refute it. A rule is `VERIFIED` only when both passes agree, and otherwise it \
+takes the worse result. No person ran either pass, so a status guarantees nothing. Treat it as a \
+lead to check.
+
+## Checking a rule yourself
+
+1. Find the rule in `rules/detection-rules.csv` or on `detections.html`.
+2. Open the R-numbers in its `refs` column on `references.html` and read the source each one links.
+3. Compare the source to the rule's condition. If they disagree, the rule is wrong, whatever its \
+status says. [Reporting mistakes]({PROOF}#reporting) on the proof page says how to report it.
+"""
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
-        description="Build detections.html from the rule register."
+        description="Build detections.html and docs/weak-rules.md from the rule register."
     )
     parser.add_argument(
         "--out",
         default=str(REPO / OUTPUT),
-        help="output path (default: detections.html)",
+        help="detections page path (default: detections.html)",
+    )
+    parser.add_argument(
+        "--weak-out",
+        default=str(REPO / WEAK_OUTPUT),
+        help="weak rules page path (default: docs/weak-rules.md)",
     )
     args = parser.parse_args(argv)
     Path(args.out).write_text(build(REPO), encoding="utf-8")
+    Path(args.weak_out).write_text(build_weak_rules(REPO), encoding="utf-8")
     return 0
 
 

@@ -1,12 +1,14 @@
-"""test_register.py: contracts between the rule register, the source, references.html and detections.html.
+"""test_register.py: contracts between the rule register, the source, references.html and the pages built from it.
 
 Checks that every fixed version in fixes.py has a register row that cites its line and holds it as a
 value, that every version a row citing fixes.py holds is still in the constants it cites, that each
 FixRule's level and AAA_LEVEL appear in the level column of the rows citing them, that every
 certificate in certdata.py is a row value, that every code citation points at lines that exist, that
 every R-number the register, the source comments and the detections page use is a row on
-references.html, that detections.html equals a fresh build from the register, and that the register
-rows themselves are well formed.
+references.html, that detections.html and docs/weak-rules.md equal a fresh build from the register
+and site/checks.md, that every detections.html anchor site/checks.md links is a section on the page,
+and that the register rows themselves are well formed, with a gap for every weak fact and
+unverifiable rule.
 """
 
 from __future__ import annotations
@@ -32,6 +34,8 @@ REGISTER = REPO / "rules" / "detection-rules.csv"
 FIXES = REPO / "emudhra_check" / "fixes.py"
 REFERENCES = REPO / "references.html"
 DETECTIONS = REPO / "detections.html"
+WEAK_RULES = REPO / "docs" / "weak-rules.md"
+CHECKS_MD = REPO / "site" / "checks.md"
 BUILD = REPO / "tools" / "build_detections.py"
 SOURCE = REPO / "emudhra_check"
 
@@ -292,6 +296,14 @@ class RegisterRowsTest(unittest.TestCase):
             with self.subTest(rule=row["id"]):
                 self.assertEqual(bool(row["basis"]), row["kind"] == "decision")
 
+    def test_weak_facts_and_unverifiable_rules_name_a_gap(self) -> None:
+        for row in self.rows:
+            wanted = row["status"] == "UNVERIFIABLE" or (
+                row["status"] == "WEAK" and row["kind"] == "fact"
+            )
+            with self.subTest(rule=row["id"]):
+                self.assertEqual(bool(row["gap"]), wanted)
+
     def test_facts_have_a_source(self) -> None:
         for row in self.rows:
             if row["kind"] == "fact" and row["status"] != "WRONG":
@@ -337,10 +349,66 @@ class DetectionsPageTest(unittest.TestCase):
         builder = load_builder()
         self.assertEqual(DETECTIONS.read_text(encoding="utf-8"), builder.build(REPO))
 
+    def test_weak_rules_page_equals_a_fresh_build(self) -> None:
+        builder = load_builder()
+        self.assertEqual(WEAK_RULES.read_text(encoding="utf-8"), builder.build_weak_rules(REPO))
+
+    def test_checks_md_anchors_are_sections(self) -> None:
+        page = set(re.findall(r'<section class="det" id="(d-[a-z0-9]+)">', DETECTIONS.read_text(encoding="utf-8")))
+        linked = set(re.findall(r"detections\.html#(d-[a-z0-9]+)", CHECKS_MD.read_text(encoding="utf-8")))
+        self.assertEqual(linked - page, set(), "site/checks.md links sections detections.html lacks")
+
     def test_sections_follow_the_registry(self) -> None:
         builder = load_builder()
         names = [name for name, _, _ in builder.SECTIONS]
         self.assertEqual(names, list(SHARED) + [type(d).__name__ for d in REGISTRY])
+
+
+CHECKS_FIXTURE = """\
+::: {.stacks}
+
+::: {.eco #c-rt-01 status=fixed}
+### Node.js `node` &amp; npm
+
+**Checker rules:** [Node on PATH](detections.html#d-nodehost), [Node managers](detections.html#d-nodeversiondirs)
+
+See also [Node.js on PATH](detections.html#d-nodehost).
+:::
+
+::: {.eco #c-rt-02 status=unfixed}
+### Oracle JDK 11
+
+**Checker rules:** none. The checker reads only the keystore.
+:::
+
+:::
+"""
+
+
+class CardLinksTest(unittest.TestCase):
+    def test_parser_reads_cards_and_links(self) -> None:
+        builder = load_builder()
+        self.assertEqual(
+            builder.card_links(CHECKS_FIXTURE),
+            [
+                ("rt-01", "Node.js node & npm", ["d-nodehost", "d-nodeversiondirs"]),
+                ("rt-02", "Oracle JDK 11", []),
+            ],
+        )
+
+    def test_parser_reads_no_cards(self) -> None:
+        self.assertEqual(load_builder().card_links("# Affected software\n"), [])
+
+    def test_unclosed_card_is_an_error(self) -> None:
+        with self.assertRaises(ValueError):
+            load_builder().card_links("::: {.eco #c-x status=fixed}\n### X\n")
+
+    def test_affected_line_escapes_titles(self) -> None:
+        line = load_builder().affected_line([("rt-01", "Node.js node & npm"), ("rt-02", "<b>")])
+        self.assertIn(
+            "<a href='checks.html#c-rt-01'>Node.js node &amp; npm</a>, <a href='checks.html#c-rt-02'>&lt;b&gt;</a>",
+            line,
+        )
 
 
 class HelperSelfTest(unittest.TestCase):

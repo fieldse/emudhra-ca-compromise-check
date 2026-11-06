@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Optional, Union
 
-from emudhra_check.limits import MAX_NUMBER_DIGITS
+from emudhra_check.limits import MAX_JSON_DEPTH, MAX_NUMBER_DIGITS
 
 TomlValue = Union[str, tuple[str, ...]]
 SPECIAL = re.compile(r"[\"'\[\]{}#\n]")
@@ -228,8 +228,30 @@ def bounded_float(literal: str) -> Optional[float]:
     return float(literal) if bounded_number(literal) is not None else None
 
 
+JSON_STRUCTURE = re.compile(r'"(?:[^"\\]|\\.)*"|[\[\]{}]')
+
+
+def too_deep(text: str) -> bool:
+    """Return True when the JSON text nests arrays or objects more than MAX_JSON_DEPTH deep."""
+    depth = 0
+    for token in JSON_STRUCTURE.finditer(text):
+        char = token.group()
+        if char in "[{":
+            depth += 1
+            if depth > MAX_JSON_DEPTH:
+                return True
+        elif char in "]}":
+            depth -= 1
+    return False
+
+
 def bounded_json(text: str) -> Optional[Any]:
-    """Parse JSON with numbers longer than MAX_NUMBER_DIGITS read as None, or return None when it does not parse."""
+    """Parse JSON with numbers longer than MAX_NUMBER_DIGITS read as None.
+
+    Return None when the text does not parse or nests deeper than MAX_JSON_DEPTH.
+    """
+    if too_deep(text):
+        return None
     try:
         return json.loads(text, parse_int=bounded_int, parse_float=bounded_float)
     except (ValueError, RecursionError):

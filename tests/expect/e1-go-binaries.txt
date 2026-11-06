@@ -1,5 +1,6 @@
-# Three programs with hand-built Go build information: go1.27.2 with the fallback roots module from before
-# the fix and the G3 root as DER, go1.27.3 with the fixed module, and a header from before Go 1.18.
+# Four programs with hand-built Go build information: go1.27.2 with the fallback roots module from before
+# the fix and the G3 root as DER, go1.27.3 with the fixed module, a header from before Go 1.18, and go1.27.2
+# without the name of crypto/x509's certificate Verify.
 # setup: python3 -I /repo/tests/fixtures/make_binaries.py go
 # args: -r /tmp/fx
 # exit: 1
@@ -9,4 +10,5 @@ FAIL  go binary [/tmp/fx/bin/go-old] contains emSign ECC Root CA - G3 (removed r
 PASS  go binary [/tmp/fx/bin/go-new] found 1.27.3, fixed 1.27.3
 !FAIL  go fallback roots [/tmp/fx/bin/go-new]
 FAIL  go binary [/tmp/fx/bin/go-legacy] found a toolchain older than Go 1.18, no fix for that branch, rebuild
+WARN  go binary [/tmp/fx/bin/go-noverify] found 1.27.2, fixed 1.27.3 (built with an affected toolchain, rebuild) (crypto/x509 Verify not found, the program may never verify certificates)
 !Traceback

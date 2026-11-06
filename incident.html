@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eMudhra G3 CA compromise: what happened</title>
+<meta name="description" content="What happened in the eMudhra G3 intermediate CA key compromise: the cause, the downstream impact, which clients are exposed, the timeline, root program actions and CVE IDs.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+:root {
+  /* Dark theme: flat near-black ground, zinc cards with faint borders, one purple accent. */
+  --bg: #0b0b0d;
+  --paper: #111114;
+  --raised: #16161a;
+  --ink: #f2f2f3;
+  --body: #c9c9cf;
+  --muted: #a1a1aa;
+  --rule: #232328;
+  --band: #0b0b0d;
+  --band-ink: #fafafa;
+  --band-muted: #a1a1aa;
+  --link: #b388f9;
+  --code-bg: #18181c;
+  --primary: #a855f7;
+  --bad: #f87171;
+  --good: #4ade80;
+  --limit: #fb923c;
+  --stripe: #0e0e11;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  --mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--sans); }
+a { color: var(--link); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
+.read { max-width: 70ch; }
+
+/* Header band */
+.band { background: var(--band); color: var(--band-ink); padding-block: 44px 40px; }
+.band .ids { font: 600 13px/1.4 var(--mono); color: var(--band-muted); letter-spacing: 0.02em; margin: 0 0 14px; }
+.band .ids b { color: var(--band-ink); font-weight: 600; }
+.band h1 { margin: 0 0 14px; font-size: clamp(28px, 4.6vw, 42px); line-height: 1.12; font-weight: 700; letter-spacing: -0.015em; text-wrap: balance; }
+.band p { margin: 0; font-size: 18px; color: var(--band-ink); max-width: 62ch; }
+
+main { padding-block: 40px 56px; display: grid; gap: 44px; }
+section { display: grid; gap: 16px; min-width: 0; }
+h2 { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 700; letter-spacing: -0.01em; padding-bottom: 8px; border-bottom: 2px solid var(--ink); }
+h3 { margin: 0; font-size: 18px; font-weight: 700; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+code { font: 0.86em var(--mono); background: var(--code-bg); padding: 1px 4px; border-radius: 3px; overflow-wrap: anywhere; }
+
+/* Introduction: label column beside bullets */
+dl.intro { margin: 0; display: grid; grid-template-columns: 11rem 1fr; border-top: 1px solid var(--rule); }
+dl.intro dt, dl.intro dd { margin: 0; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+dl.intro dt { font-weight: 700; padding-right: 20px; }
+dl.intro ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+@media (max-width: 640px) {
+  dl.intro { grid-template-columns: 1fr; }
+  dl.intro dt { border-bottom: 0; padding-bottom: 2px; }
+  dl.intro dd { padding-top: 0; }
+}
+
+/* Check table */
+.table-scroll { overflow-x: auto; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule); }
+table { border-collapse: collapse; width: 100%; min-width: 880px; font-size: 15px; background: var(--paper); }
+th, td { text-align: left; vertical-align: top; padding: 12px 14px; border-bottom: 1px solid var(--rule); }
+thead th { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); background: var(--bg); }
+tbody tr:nth-child(even) { background: var(--stripe); }
+tbody tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 700; white-space: nowrap; }
+td.check { min-width: 300px; }
+.cmd { display: flex; align-items: flex-start; gap: 6px; background: var(--code-bg); border: 1px solid var(--rule); border-radius: 4px; padding: 8px 8px 8px 12px; margin-bottom: 6px; }
+.cmd:last-of-type { margin-bottom: 0; }
+.cmd code { flex: 1; min-width: 0; background: none; padding: 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cmd .copy { flex: none; display: grid; place-items: center; width: 26px; height: 26px; margin: -3px 0; border: 1px solid transparent; border-radius: 4px; background: none; color: var(--muted); cursor: pointer; }
+.cmd .copy:hover { color: var(--ink); border-color: var(--rule); background: var(--paper); }
+.cmd .copy.done { color: var(--good); }
+td.bad { color: var(--bad); font-variant-numeric: tabular-nums; }
+td.good { color: var(--good); font-variant-numeric: tabular-nums; }
+td.bad code, td.good code { color: var(--ink); }
+td.bad ul, td.good ul { margin: 0; padding-left: 16px; display: grid; gap: 3px; }
+
+ul.notes { margin: 0; padding-left: 18px; display: grid; gap: 8px; max-width: 80ch; }
+
+/* Code blocks */
+.code { position: relative; background: var(--code-bg); border-left: 3px solid var(--band); min-width: 0; }
+.code pre { margin: 0; padding: 14px 16px; overflow-x: auto; font: 13.5px/1.6 var(--mono); }
+.code button {
+  position: absolute; top: 8px; right: 8px; font: 600 12px var(--sans);
+  background: var(--paper); color: var(--ink); border: 1px solid var(--rule); border-radius: 3px;
+  padding: 3px 10px; cursor: pointer;
+}
+.code button:hover { border-color: var(--ink); }
+
+dl.levels { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; }
+dl.levels dt { font: 700 13px/1.6 var(--mono); }
+dl.levels dt.fail { color: var(--bad); }
+dl.levels dd { margin: 0; }
+
+ul.sources { margin: 0; padding-left: 18px; display: grid; gap: 4px; columns: 2; column-gap: 32px; }
+ul.sources li { break-inside: avoid; }
+@media (max-width: 640px) { ul.sources { columns: 1; } }
+
+ul.resources { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 0 32px; }
+ul.resources li { display: grid; gap: 2px; padding: 12px 0; border-bottom: 1px solid var(--rule); min-width: 0; }
+ul.resources a { font-weight: 600; }
+ul.resources span { color: var(--muted); font-size: 14px; }
+
+.toc ol { margin: 0; padding-left: 20px; display: grid; gap: 10px; }
+.toc li a { font-weight: 700; }
+.toc li span { display: block; color: var(--muted); font-size: 14px; }
+.toc h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); border-bottom: 0; padding-bottom: 0; margin-bottom: 8px; }
+.toc ol { display: block; columns: 2; column-gap: 40px; }
+.toc li { break-inside: avoid; padding: 3px 0; }
+.toc li span { display: none; }
+@media (max-width: 640px) { .toc ol { columns: 1; } }
+[id] { scroll-margin-top: 16px; }
+.nw { white-space: nowrap; }
+.src { font-size: 14px; }
+.src a { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.back { display: inline-block; margin-bottom: 16px; color: var(--band-muted); font-size: 14px; text-decoration: none; }
+.back:hover { color: var(--band-ink); text-decoration: underline; }
+footer .wrap { display: grid; gap: 4px; }
+footer { border-top: 1px solid var(--rule); padding-block: 20px 32px; font-size: 14px; color: var(--muted); }
+
+@media print {
+  .band { background: none; color: #000; padding-block: 0 16px; border-bottom: 2px solid #000; }
+  .band .ids, .band p, .band .ids b { color: #000; }
+  .code button { display: none; }
+  .table-scroll { overflow: visible; }
+  table { min-width: 0; font-size: 11px; }
+  a { color: #000; }
+}
+
+/* Page treatment: centered hero, mono eyebrow pills, purple highlight word, rounded bordered cards. */
+body { color: var(--body); font-size: 18px; }
+table, table.list { font-size: 16px; }
+.cmd code, .code pre { font-size: 14.5px; }
+strong, b, td:first-child, dt, h1, h2, h3 { color: var(--ink); }
+.band { background: none; padding-block: 80px 24px; text-align: center; }
+.band .wrap { display: flex; flex-direction: column; align-items: center; }
+.band .ids { display: inline-block; margin: 0; padding: 4px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper);
+  font: 500 13px/1.5 var(--mono); color: var(--primary); letter-spacing: 0.01em; }
+.band .ids { max-width: none; white-space: nowrap; }
+@media (max-width: 640px) { .band .ids { white-space: normal; } }
+.band .ids b, .band .ids a { color: var(--primary); font-weight: 500; }
+.band .tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0 0 14px; }
+.band .tags span { padding: 3px 10px; border: 1px solid var(--rule); border-radius: 999px; font: 500 12px/1.5 var(--mono); color: var(--muted); letter-spacing: 0.02em; }
+.band h1 { margin: 24px 0 18px; font-size: clamp(30px, calc((100vw - 48px) / 18), 60px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--band-ink); max-width: none; }
+.band .wrap { max-width: 1440px; }
+.band p:not(.ids):not(.tags) { color: var(--muted); font-size: 19px; line-height: 1.6; max-width: 58ch; margin: 0 auto; }
+.hl { color: var(--primary); }
+main { gap: 72px; padding-block: 48px 80px; }
+h2 { border-bottom: 0; padding-bottom: 0; font-size: clamp(26px, 3.4vw, 36px); font-weight: 800; letter-spacing: -0.025em; }
+h2[data-eyebrow]::before { content: attr(data-eyebrow); display: block; width: fit-content; margin-bottom: 16px; padding: 3px 12px;
+  border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); font: 500 13px/1.5 var(--mono); color: var(--primary); letter-spacing: 0.01em; }
+h3 { font-size: 20px; }
+.muted { color: var(--muted); }
+a { color: var(--link); text-decoration-color: rgba(179, 136, 249, .4); text-underline-offset: 3px; }
+a:hover { text-decoration-color: currentColor; }
+code { background: var(--code-bg); color: #e4e4e7; border: 1px solid var(--rule); border-radius: 5px; padding: 0 5px; }
+
+/* Introduction as one card, labels as spaced capitals */
+dl.intro { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 4px 28px; }
+dl.intro dt, dl.intro dd { border-color: var(--rule); padding-block: 20px; }
+dl.intro > :nth-last-child(-n+2) { border-bottom: 0; }
+dl.intro dt { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--primary); padding-top: 24px; }
+dl.intro li::marker { color: var(--primary); }
+
+/* Tables in rounded cards */
+.table-scroll { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); }
+table, table.matrix, table.list { background: transparent; }
+thead th, .matrix thead th, .list thead th { background: var(--raised); color: var(--muted); letter-spacing: 0.08em; }
+th, td { border-color: var(--rule); }
+tbody tr:nth-child(even) { background: var(--stripe); }
+.cmd { background: var(--code-bg); border-color: var(--rule); border-radius: 8px; }
+.cmd .copy:hover { background: var(--raised); border-color: var(--rule); }
+td.bad { color: var(--bad); }
+td.good { color: var(--good); }
+
+/* Code blocks */
+.code { background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; }
+.code pre { color: #e4e4e7; }
+.code button { background: var(--raised); color: var(--ink); border: 1px solid var(--rule); border-radius: 8px; }
+.code button:hover { border-color: var(--primary); box-shadow: 0 0 16px rgba(168, 85, 247, .3); }
+dl.levels dt { color: var(--limit); }
+dl.levels dt.fail { color: var(--bad); }
+
+ul.resources li { border-color: var(--rule); }
+ul.sources li::marker, ul.notes li::marker, ul.plain li::marker { color: var(--primary); }
+
+/* Tests page */
+.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; border: 0; padding: 0; }
+.facts div { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 26px 16px; text-align: center; justify-items: center; }
+.facts b { font-size: 42px; font-weight: 800; letter-spacing: -0.02em; color: var(--primary); }
+.facts div:nth-child(2) b { color: var(--good); }
+.facts div:nth-child(3) b { color: var(--limit); }
+.facts span { color: var(--muted); font-size: 15px; }
+@media (max-width: 640px) { .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+nav.toc { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 20px 28px; max-width: none; }
+nav.toc h2 { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--primary); margin-bottom: 10px; }
+nav.toc ol { display: block; list-style: none; padding-left: 0; columns: 2; column-gap: 48px; counter-reset: toc; }
+nav.toc li { counter-increment: toc; display: flex; gap: 14px; padding: 5px 0; break-inside: avoid; }
+nav.toc li::before { content: counter(toc, decimal-leading-zero); font: 500 13px/1.75 var(--mono); color: var(--primary); }
+nav.toc li > a { color: var(--ink); font-weight: 600; text-decoration: none; }
+nav.toc li > a:hover { color: var(--primary); }
+nav.toc li span { display: none; }
+@media (max-width: 640px) { nav.toc ol { columns: 1; } }
+.band .back { margin-bottom: 20px; font: 500 13px var(--mono); color: var(--muted); }
+.band .back:hover { color: var(--primary); }
+.matrix tbody th { background: var(--paper); color: var(--ink); }
+.matrix tbody tr:nth-child(even) th, .matrix tbody tr:nth-child(even) td { background: var(--stripe); }
+.matrix thead th.grp { color: var(--primary); }
+.list tr.grp th { background: var(--raised); color: var(--primary); }
+.list td.tid { color: var(--ink); }
+.dot.limit { background: var(--limit); }
+
+.src { margin: 0; }
+.src a { display: inline-flex; align-items: center; gap: 8px; }
+.src a { padding: 6px 14px; border: 1px solid var(--rule); border-radius: 8px; background: var(--raised); color: var(--ink); font-weight: 600; font-size: 14px; text-decoration: none; }
+.src a:hover { border-color: var(--primary); box-shadow: 0 0 16px rgba(168, 85, 247, .3); }
+/* Call to action box */
+.cta { border: 1px solid rgba(168, 85, 247, .35); border-radius: 12px; padding: 32px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, .2) 0%, rgba(168, 85, 247, .06) 60%, rgba(168, 85, 247, .02) 100%), var(--paper);
+  display: grid; gap: 14px; }
+.cta .label { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--primary); }
+.cta h3 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+.cta p { margin: 0; max-width: 62ch; color: var(--body); }
+.cta .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
+.cta .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 15px; text-decoration: none; }
+.cta .btn-primary { background: linear-gradient(135deg, #a855f7, #c96ef7); border: 1px solid #be5eed; color: #fff; box-shadow: 0 0 20px rgba(168, 85, 247, .3); }
+.cta .btn-primary:hover { box-shadow: 0 0 28px rgba(168, 85, 247, .5); }
+.cta .btn-ghost { border: 1px solid var(--rule); background: var(--raised); color: var(--ink); }
+.cta .btn-ghost:hover { border-color: var(--primary); }
+footer { border-color: var(--rule); color: var(--muted); }
+@media print { .band h1, h2, .hl { color: #000; } h2[data-eyebrow]::before { display: none; } }
+
+/* List tables (checks and references pages) */
+table.list { border-collapse: collapse; width: 100%; min-width: 860px; font-size: 14.5px; background: var(--paper); }
+.list th, .list td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--rule); }
+.list thead th { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); background: var(--bg); }
+.list tr.grp th { background: var(--stripe); font: 700 12px var(--mono); text-transform: uppercase; letter-spacing: 0.05em; padding-top: 14px; }
+.list td.tid { font: 700 14px var(--mono); white-space: nowrap; }
+.list td.tid span { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+.list td.cks { font: 12.5px var(--mono); color: var(--muted); white-space: nowrap; }
+.list td.res { font-weight: 700; white-space: nowrap; }
+.list td.res.pass { color: var(--good); }
+.list td.res.gap { color: var(--bad); }
+.list td.res.limit { color: var(--limit); }
+.list tr.grp th { background: var(--raised); color: var(--primary); }
+.list td.tid { color: var(--ink); }
+
+/* References page */
+table.list.refs-table { min-width: 1100px; font-size: 15px; }
+.refs-table td.tid a { color: var(--ink); text-decoration: none; }
+.refs-table td.tid a:hover { color: var(--primary); }
+.refs-table td.stk { font-weight: 600; color: var(--ink); min-width: 160px; }
+.refs-table td.val { min-width: 220px; }
+.refs-table td.note { color: var(--muted); font-size: 14px; min-width: 180px; }
+.refs-table ol.refs { margin: 0; padding-left: 22px; display: grid; gap: 3px; font-size: 14px; min-width: 220px; }
+.refs-table ol.refs li::marker { color: var(--primary); font: 500 12px var(--mono); }
+.refs-table tr:target td { background: rgba(168, 85, 247, .12); }
+nav.toc li small { margin-left: auto; font: 500 13px/1.75 var(--mono); color: var(--muted); white-space: nowrap; }
+
+/* eMudhra pages: inline reference links, status chips, the checks table and the fingerprint table. */
+.rl { font: 500 0.74em var(--mono); color: var(--muted); white-space: nowrap; }
+.rl a { text-decoration: none; }
+.rl a:hover { text-decoration: underline; }
+.chip { display: inline-block; margin-bottom: 6px; padding: 1px 8px; border: 1px solid; border-radius: 6px; font: 600 12px/1.6 var(--mono); white-space: nowrap; }
+.chip.unfixed { color: var(--bad); border-color: rgba(248, 113, 113, .45); background: rgba(248, 113, 113, .08); }
+.chip.partial { color: var(--limit); border-color: rgba(251, 146, 60, .45); background: rgba(251, 146, 60, .08); }
+.chip.os { color: var(--muted); border-color: var(--rule); background: var(--raised); }
+table.list.checks { min-width: 1280px; font-size: 15px; }
+.checks td { padding: 12px 12px; }
+.checks td.item { font-weight: 700; color: var(--ink); white-space: normal; min-width: 150px; }
+.checks td.where { min-width: 170px; font-size: 14px; }
+.checks td.check { min-width: 320px; }
+.checks td.check .muted { display: block; margin-top: 4px; font-size: 13.5px; }
+.checks td.bad, .checks td.good { min-width: 160px; font-size: 14.5px; }
+.checks td.aaa { min-width: 170px; font-size: 14px; color: var(--body); }
+.checks td.rf, .fps td.rf { font: 500 13px var(--mono); white-space: nowrap; }
+.checks td.rf a, .fps td.rf a { display: block; text-decoration: none; }
+.checks td.bad ul, .checks td.good ul { margin: 0; padding-left: 16px; display: grid; gap: 3px; }
+.checks tr:target td { background: rgba(168, 85, 247, .12); }
+table.list.fps { min-width: 720px; font-size: 15px; }
+.fps td:first-child { white-space: normal; }
+.fps td.fp code { font-size: 12.5px; overflow-wrap: anywhere; }
+.refs-table td.dt { font: 500 13px var(--mono); white-space: nowrap; color: var(--muted); }
+.refs-table ol.refs li .meta { display: block; color: var(--muted); font-size: 13px; }
+.refs-table td.note strong { color: var(--limit); }
+.facts div:nth-child(4) b { color: var(--bad); }
+section.area { display: grid; gap: 12px; }
+section.area h3 { margin-top: 8px; }
+p.more a { font-weight: 600; font-size: 15px; }
+#manual > .read { max-width: 70ch; }
+
+/* Reading layout: quiet reference tags, sentence-case labels, lead-then-detail lists, compact tables with a Refs column. */
+.rl a { color: var(--muted); }
+.rl a:hover { color: var(--link); }
+dl.intro dt { font-size: 18px; letter-spacing: 0; text-transform: none; padding-top: 22px; }
+dl.intro dd > ul { gap: 12px; }
+dl.intro ul ul { margin-top: 4px; gap: 3px; }
+p.key { max-width: 70ch; font-size: 19px; line-height: 1.55; color: var(--ink); }
+section > h3 { margin-top: 12px; }
+ul.points { margin: 0; padding: 0; list-style: none; display: grid; gap: 22px; max-width: 80ch; }
+ul.points > li > strong:first-child { display: block; margin-bottom: 4px; }
+ul.points ul, ul.points ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+ul.points ul ul, ul.points ul ol { margin-top: 4px; gap: 2px; }
+ul.points li li::marker { color: var(--primary); }
+ul.points .code { margin-top: 4px; }
+table.list.tbl { min-width: 640px; font-size: 15.5px; }
+.tbl th, .tbl td { padding: 11px 14px; }
+.tbl td:first-child { width: 12rem; white-space: normal; font-weight: 600; color: var(--ink); }
+.tbl td ul { margin: 0; padding-left: 16px; display: grid; gap: 4px; }
+.tbl td.rf { width: 5rem; font: 500 13px var(--mono); white-space: nowrap; }
+.tbl td.rf a { display: block; text-decoration: none; }
+.tbl.when td:first-child { width: 10rem; white-space: nowrap; font: 500 14px var(--mono); color: var(--muted); }
+section.area { border-top: 1px solid var(--rule); padding-top: 28px; gap: 16px; }
+section.area h3 { margin-top: 0; }
+dl.levels + p, dl.levels + dl.levels { margin-top: 4px; }
+@media (max-width: 640px) {
+  table.list.tbl { min-width: 0; }
+  .tbl thead { display: none; }
+  .tbl, .tbl tbody, .tbl tr, .tbl td, .tbl tr.grp th { display: block; width: auto; }
+  .tbl tr { padding: 10px 0; border-bottom: 1px solid var(--rule); }
+  .tbl tr:last-child { border-bottom: 0; }
+  .tbl td, .tbl.when td:first-child { width: auto; border: 0; padding: 3px 16px; }
+  .tbl td:empty { display: none; }
+  .tbl td.rf a { display: inline; margin-right: 10px; }
+  dl.intro dt { padding-bottom: 4px; }
+  dl.intro dd { padding-top: 4px; }
+}
+
+/* Sister-page layout: the main check table, per-area caveat cards and the section Sources line. */
+#caveats { display: grid; gap: 32px; }
+.eco { display: grid; gap: 12px; }
+.eco h4 { margin: 12px 0 0; font-size: 16px; }
+table.caveats { min-width: 0; }
+table.caveats td:first-child { white-space: normal; width: 14rem; }
+table.caveats td ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+nav.toc h2 { font-size: 18px; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--primary); margin-bottom: 10px; }
+td.rf { font: 500 13px var(--mono); white-space: nowrap; }
+td.rf a { display: block; text-decoration: none; }
+.eco > p a { font-weight: 600; font-size: 15px; }
+p.refs-line { font-size: 14px; max-width: 80ch; }
+p.refs-line a { font: 500 13px var(--mono); text-decoration: none; }
+@media (max-width: 640px) { table.caveats td:first-child { width: auto; } }
+
+/* Manual checks: one card per stack. */
+.stacks { display: grid; gap: 28px; margin-top: 8px; }
+.stacks .eco { border-top: 1px solid var(--rule); padding-top: 24px; }
+.stacks .eco > p { max-width: 75ch; }
+
+/* Further reading: grouped primary sources. */
+#sources h4 { margin: 18px 0 6px; font-size: 13px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+
+/* Checks page: one card per item, with a status chip under its name. */
+.chip.fixed { color: var(--good); border-color: rgba(74, 222, 128, .45); background: rgba(74, 222, 128, .08); }
+.eco > p.status { margin-top: -6px; }
+.eco > p.status .chip { margin-bottom: 0; }
+.stacks .eco:target { outline: 1px solid var(--primary); outline-offset: 12px; border-radius: 4px; }
+
+/* Alias anchors kept for old links take no grid cell. */
+a[id]:empty { position: absolute; }
+section > h2 { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<header class="band">
+  <div class="wrap">
+    <a class="back" href="index.html">← Back to the guide</a>
+    <p class="tags"><span>eMudhra G3</span><span>CA key compromise</span><span>October 2026</span></p>
+    <p class="ids"><a href="index.html">Guide</a> &nbsp;·&nbsp; Incident &nbsp;·&nbsp; <a href="checks.html">Affected software</a> &nbsp;·&nbsp; <a href="fixes.html">Fixes</a> &nbsp;·&nbsp; <a href="detections.html">Checker rules</a> &nbsp;·&nbsp; <a href="proof.html">Proof</a> &nbsp;·&nbsp; <a href="references.html">References</a></p>
+    <h1><span class='hl'>eMudhra G3</span> CA compromise<br>What happened</h1>
+    <p>How eight eMudhra G3 intermediate CAs came to have private keys anyone can compute, what that lets an attacker do, and which clients are still exposed. <a href="index.html#helper">Jump to the checker</a>.</p>
+  </div>
+</header>
+<main class="wrap">
+<nav class="toc read" aria-label="Contents"><h2>Contents</h2><ol>
+  <li><a href="#what">What happened</a><span>The cause, the downstream impact and what eMudhra has done since</span></li>
+  <li><a href="#exposed">Who is exposed</a><span>Which clients still trust the chains, and the AAA cross-sign path</span></li>
+  <li><a href="#background">Timeline, root programs and CVEs</a><span>Dates from disclosure to root removal, what each root program did and the CVE IDs</span></li>
+  <li><a href="#sources">Sources</a><span>Where each claim comes from</span></li>
+</ol></nav>
+<section id="what">
+<h2>What happened</h2>
+<p class="key"><strong>On 17 October 2026 a researcher found that eight eMudhra G3 intermediate CAs had private keys anyone can compute. With them, anyone can issue a TLS certificate for any website, or sign malware that Windows treats as coming from a trusted publisher.</strong></p>
+<dl class="intro">
+<dt>Cause</dt><dd><ul>
+<li><strong>A rehearsal step in the key ceremony:</strong> At the 30 April 2025 ceremony, eMudhra issued the CA certificates over re-imported key objects instead of the original keys.</li>
+<li><strong>Which keys:</strong> Only the P-384 keys of series B and C, made on Utimaco HSMs, are affected.</li>
+<li><strong>Two accounts:</strong> eMudhra first blamed similar key labels, then said the ceremony script itself chose the re-imported keys.</li>
+</ul></dd>
+<dt>Downstream impact</dt><dd><ul>
+<li><strong>Forged websites:</strong> Anyone can issue a TLS certificate for any website under the six TLS CAs, and every client that still trusts the chain accepts it.</li>
+<li><strong>Signed malware:</strong> The two code-signing keys can make malware look like it comes from a trusted publisher on Windows.</li>
+<li><strong>Forged certificates already exist:</strong> One commenter counted 107,107 certificates logged under six of the keys after disclosure, 106,050 of them proof-of-concept certificates for google[.]com. Nobody has confirmed the count.</li>
+</ul></dd>
+<dt>What eMudhra has done since</dt><dd><ul>
+<li><strong>Leaving TLS:</strong> eMudhra decided on 22 October to leave the global TLS certificate market.</li>
+<li><strong>Certificates still valid:</strong> 25,058 G3 certificates were still valid on 28 October, and eMudhra is moving their subscribers to other roots.</li>
+<li><strong>Report still owed:</strong> eMudhra had not filed its promised root-cause report by 31 October.</li>
+<li><strong>KPMG review:</strong> eMudhra says KPMG is reviewing it, a claim only its own status page makes.</li>
+</ul></dd>
+</dl>
+</section>
+<section id="exposed">
+<h2>Who is exposed</h2>
+<p class="key"><strong>Browsers on default settings are covered by pushed blocks and root store changes, and anything that carries its own trust store stays exposed until it gets its own update.</strong></p>
+<p class="muted read">Software with its own trust store includes OS bundles, language packages, JDK <code>cacerts</code>, runtimes, Electron apps and container images.</p>
+<h3>By client</h3>
+<dl class="intro">
+<dt>Browsers on default settings</dt><dd><ul>
+<li>Covered. Chrome's CRLSet reached users on 17 October.</li>
+<li>Mozilla says Firefox's OneCRL block did too, though its NSS 3.131.1 announcement says 19 October.</li>
+<li>Apple, Windows and Edge pushed their own blocks between 19 and 22 October.</li>
+</ul></dd>
+<dt>New Firefox ESR 115 profile</dt><dd>Can still trust the chains until OneCRL loads after 20 idle seconds.</dd>
+<dt>Apps with their own CA bundle</dt><dd><ul>
+<li>Need their own update, even on a patched Windows host.</li>
+<li>Microsoft says software that doesn't reliably check revocation or its disallowed list can still accept the chains if it keeps or restores trust in the removed roots.</li>
+</ul></dd>
+<dt>macOS command-line tools</dt><dd>Tools that read <code>/etc/ssl/cert.pem</code>, including curl, git, python3, ruby, perl and openssl, skip Apple's block and still accept the chains.</dd>
+<dt>Containers</dt><dd>A container trusts the CA bundle inside its image, so a patched host does not protect it.</dd>
+<dt>Node.js</dt><dd>Bundles a Mozilla snapshot fixed at release time, so only a Node.js upgrade changes it.</dd>
+<dt>JDKs</dt><dd><ul>
+<li>A JDK update fixes only its bundled <code>cacerts</code>.</li>
+<li>An app's own JKS or PKCS12 truststore needs the roots removed from that file.</li>
+</ul></dd>
+<dt>Electron apps</dt><dd><ul>
+<li>Electron's advisory gives 42.11.16, 43.8.1, 44.9.1 and 45.0.0-beta.6 as the first releases that block the intermediates in its Chromium networking and Node.js TLS.</li>
+<li>Each Electron app needs its own release on one of them.</li>
+<li>Fixed Electron builds still contain the G3 root, so check each app's Electron version to tell fixed from unfixed.</li>
+</ul></dd>
+</dl>
+<h3>The AAA Certificate Services path</h3>
+<ul class="notes">
+<li><strong>A store with AAA Certificate Services and no G3 root can still trust a forged chain.</strong> Sectigo cross-signed all eight compromised intermediates under its AAA Certificate Services root, and each cross-sign reuses the same weak key. A forged leaf can chain through those cross-signed copies to AAA, so removing emSign ECC Root CA - G3 alone does not block it.</li>
+<li><strong>Before the incident Apple and Microsoft still trusted AAA.</strong> Mozilla and Chrome had removed it.</li>
+<li><strong>Fixes that block by public key also catch the cross-signs.</strong> Go's <code>crypto/x509</code> denylist, <code>rustls-webpki</code> 0.103.16 and CPython's <code>ssl</code> block match the compromised keys. So do Chrome's CRLSet and the Windows Disallowed CTL. A fix that only removes the G3 root leaves the AAA path open wherever AAA is still trusted.</li>
+</ul>
+<p class="read">How each root program and Sectigo handle AAA and the cross-signs:</p>
+<dl class="intro">
+<dt>Microsoft</dt><dd><ul>
+<li>Removed AAA. Windows dropped it on 26 October, and Edge and WebView2 on 27 October.</li>
+<li>The 20 October Disallowed CTL block matches the keys, so it covers the cross-signs too.</li>
+</ul></dd>
+<dt>Mozilla</dt><dd><ul>
+<li>Trusts AAA for email only. NSS and Firefox carry the root without TLS trust.</li>
+<li>Mozilla left the cross-signs out of OneCRL, saying the root is not in its root store.</li>
+</ul></dd>
+<dt>Apple</dt><dd><ul>
+<li>Blocks the six TLS cross-signs. They are among the 12 TLS certificates Apple blocks.</li>
+<li>In <code>/etc/ssl/cert.pem</code> they still verify through AAA, so Apple's interim steps offer removing AAA as well as G3.</li>
+</ul></dd>
+<dt>Chrome</dt><dd><ul>
+<li>Its store holds no AAA root. Chrome Root Store v41, v42 and v43 do not contain it.</li>
+<li>Chrome's CRLSet blocks by public key, so it covers the cross-signs anyway.</li>
+</ul></dd>
+<dt>Sectigo</dt><dd><ul>
+<li>Revoked the cross-signs on 19 October.</li>
+<li>Its AAA Certificate Services CRL backdates the revocations to 14 May 2025.</li>
+<li>Clients that skip revocation checks, such as the macOS tools that read <code>/etc/ssl/cert.pem</code>, still accept the chains.</li>
+</ul></dd>
+</dl>
+<h3>Revocation and CT</h3>
+<ul class="notes">
+<li><strong>Common tools could not fetch eMudhra's revocation data until 26 October.</strong> eMudhra's firewall refused HTTP CRL and OCSP requests from curl, Wget, Python-urllib and libwww-perl user agents from 28 September 2022 to 10:32 UTC on 26 October 2026. The blocked files include the two CRLs that carry the eight revocations. HTTPS was no fallback, because the certificates name HTTP CRL URLs.</li>
+<li><strong>Clients that don't enforce CT are more exposed.</strong> CT-enforcing clients reject a leaf that was never logged. Non-browser clients such as curl usually don't enforce CT.</li>
+<li><strong>106,058 post-disclosure CT certificates chain through the AAA cross-signs, by one count.</strong> Nobody has replicated the count.</li>
+</ul>
+</section>
+<section id="background">
+<h2>Timeline, root programs and CVEs</h2>
+<p class="key"><strong>Chrome blocked the keys within hours of the 17 October disclosure, and Mozilla, Apple and Microsoft removed or blocked emSign ECC Root CA - G3 between 20 and 27 October.</strong></p>
+<h3>Timeline</h3>
+<div class="table-scroll"><table class="list tbl when"><thead><tr><th>Date and time (UTC)</th><th>Event</th></tr></thead><tbody>
+<tr><td>17 Oct 16:27</td><td>A researcher scanning certificates disclosed in CCADB found the weak keys.</td></tr>
+<tr><td>17 Oct 18:05</td><td>The researcher reported them to Apple, Chrome, Microsoft, Mozilla and eMudhra.</td></tr>
+<tr><td>17 Oct 19:45</td><td>Chrome's CRLSet blocked the keys.</td></tr>
+<tr><td>17 Oct about 21:28</td><td>eMudhra acknowledged and said EM DV TLS CA - G3C had been live.</td></tr>
+<tr><td>17 Oct 21:48</td><td>Mozilla recovered the keys on its own.</td></tr>
+<tr><td>17 Oct by 22:59</td><td>Firefox's OneCRL block reached all Firefox users on standard settings. The day is disputed.</td></tr>
+<tr><td>18 Oct 09:24 to 09:38</td><td>eMudhra revoked the eight with reason cACompromise.</td></tr>
+<tr><td>18 Oct 12:06</td><td>Mozilla opened Bug 2083449.</td></tr>
+<tr><td>19 Oct</td><td>Sectigo revoked the cross-signs. Its CRL backdates the revocations to 14 May 2025. Sectigo also revoked its other eMudhra cross-signs and ended the relationship.</td></tr>
+<tr><td>19 Oct</td><td>Mozilla warned downstream trust store maintainers.</td></tr>
+<tr><td>19 Oct around 22:00</td><td>Android got the Chrome block through Google Play services.</td></tr>
+<tr><td>20 Oct</td><td>Mozilla chose emergency removal of emSign ECC Root CA - G3, and Chrome committed to the same.</td></tr>
+<tr><td>20 Oct</td><td>Mozilla published its blog post on the incident.</td></tr>
+<tr><td>20 Oct</td><td>NSS 3.131.1 removed emSign ECC Root CA - G3.</td></tr>
+<tr><td>20 Oct</td><td>Firefox 158.0.1, ESR 153.5.1 and ESR 115.43.1 shipped with the block built in.</td></tr>
+<tr><td>20 Oct</td><td>The Windows Disallowed CTL blocked the eight keys, and Edge CRLSet 2026.10.20 blocked the TLS keys.</td></tr>
+<tr><td>20 Oct 16:27</td><td>eMudhra confirmed it had stopped all G3 issuance.</td></tr>
+<tr><td>22 Oct</td><td>eMudhra decided to leave the global TLS certificate market.</td></tr>
+<tr><td>23 Oct</td><td>Apple's block of emSign ECC Root CA - G3 started.</td></tr>
+<tr><td>26 Oct</td><td>A Windows out-of-band update (KB5134133, KB5134137) removed six emSign G3 roots and AAA Certificate Services.</td></tr>
+<tr><td>26 Oct 10:32</td><td>eMudhra's firewall stopped refusing HTTP CRL and OCSP requests from curl, Wget, Python-urllib and libwww-perl.</td></tr>
+<tr><td>27 Oct</td><td>Edge and WebView2 removed the same roots, in PKI Metadata 72.0.0.0.</td></tr>
+<tr><td>27 Oct</td><td>Google expected Chrome Root Store v43, which removes emSign ECC Root CA - G3, on all devices that morning (Pacific time). No source we read confirms it shipped.</td></tr>
+</tbody></table></div>
+<ul class="notes">
+<li><strong>The day of the OneCRL block is disputed.</strong> Mozilla's blog and the bug say 17 October. The NSS 3.131.1 announcement relayed on oss-security says OneCRL went out on Saturday 19th.</li>
+</ul>
+<h3>Root programs</h3>
+<dl class="intro">
+<dt>Chrome</dt><dd><ul>
+<li>Removed emSign ECC Root CA - G3 in Chrome Root Store v43. Version 42 still has it.</li>
+<li>Google expected v43 on all devices on the morning of 27 October (Pacific time). No source we read confirms it shipped.</li>
+<li>The 17 October CRLSet blocks by public key, so it also covers the Sectigo cross-signs.</li>
+</ul></dd>
+<dt>Mozilla</dt><dd><ul>
+<li>Removed the root in NSS 3.131.1 on 20 October. The release also removes emSign Root CA - C1 and emSign ECC Root CA - C3.</li>
+<li>Firefox 158.0.1, ESR 153.5.1 and ESR 115.43.1 shipped the same day with the block built in, for users whose settings keep OneCRL from updating.</li>
+<li>Whether ESR 115.43.1 is fixed is disputed.</li>
+</ul></dd>
+<dt>Microsoft</dt><dd><ul>
+<li>Removed six emSign G3 roots and AAA Certificate Services.</li>
+<li>Windows removed them in a 26 October out-of-band update (KB5134133, KB5134137).</li>
+<li>Edge and WebView2 removed them on 27 October, in PKI Metadata 72.0.0.0.</li>
+<li>On 20 October the Windows Disallowed CTL had already blocked the eight keys, and Edge CRLSet 2026.10.20 had blocked the TLS keys.</li>
+</ul></dd>
+<dt>Apple</dt><dd><ul>
+<li>Blocks the 12 TLS certificates and the G3 ECC root. The 12 are the six eMudhra TLS CAs and their six Sectigo cross-signs.</li>
+<li>The root block started on 23 October.</li>
+<li>Apple dates the first block to 19 October. The community tracker says 22 October.</li>
+<li>Command-line tools that read <code>/etc/ssl/cert.pem</code> skip Apple's block.</li>
+</ul></dd>
+</dl>
+<ul class="notes">
+<li><strong>No root program has removed emSign Root CA - G1.</strong> Chrome Root Store v43 and NSS master still carry it. Mozilla said on 20 October it was not removing it at that time. Microsoft is evaluating the remaining eMudhra roots. OpenJDK's interim fix deletes the G1 alias anyway.</li>
+</ul>
+<h3>CVE IDs</h3>
+<p class="read"><strong>The compromise has no CVE of its own.</strong> Red Hat says it is not a software vulnerability, and the CVEs track downstream trust store updates.</p>
+<div class="table-scroll"><table class="list tbl"><thead><tr><th>CVE</th><th>Assigner</th><th>Covers</th></tr></thead><tbody>
+<tr><td>CVE-2026-114820</td><td>Oracle CNA</td><td>Java SE and GraalVM updates that remove the eMudhra roots.</td></tr>
+<tr><td>CVE-2026-91403</td><td>Oracle CNA</td><td>Java updates that distrust the intermediates.</td></tr>
+<tr><td>CVE-2026-111943</td><td>Go CNA</td><td>Adds a <code>crypto/x509</code> denylist, fixed in Go 1.26.10 and 1.27.3.</td></tr>
+<tr><td>CVE-2026-114406</td><td>Red Hat</td><td>The RHEL <code>ca-certificates</code> package.</td></tr>
+<tr><td>CVE-2026-113470</td><td>Mozilla</td><td>The Firefox and Thunderbird block lists.</td></tr>
+<tr><td>CVE-2026-115570</td><td>GitHub (GHSA-jr5w-w6x2-84p9)</td><td>Electron before 42.11.16, 43.8.1, 44.9.1 and 45.0.0-beta.6.</td></tr>
+<tr><td>CVE-2026-113812</td><td>CPANSec</td><td>Perl <code>Mozilla::CA</code> before 20261020.</td></tr>
+</tbody></table></div>
+<ul class="notes">
+<li>OpenJDK's own advisory reuses CVE-2026-114820, with issue JDK-8395690 as its fix marker.</li>
+<li>Every fixed Electron release checked still carries the G3 root, because the fix blocks the intermediates and leaves the root in place.</li>
+</ul>
+<p class="read">CVE-2026-111944 has no CVE record.</p>
+</section>
+<section id="sources">
+<h2>Sources</h2>
+<p class="read">The <a href="references.html">references page</a> lists the sources for every claim on this page, with each source’s publisher and date.</p>
+</section>
+</main>
+<footer>
+  <div class="wrap"><p>eMudhra G3 intermediate CA key compromise, October 2026. An independent guide, not affiliated with eMudhra or Sectigo.</p><p>Last updated 2026-11-05. <a href="https://github.com/fieldse/emudhra-ca-compromise-check">Source on GitHub</a>.</p></div>
+</footer>
+
+<script>
+document.querySelectorAll(".cmd .copy").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var code = btn.parentElement.querySelector("code");
+    function flash() { btn.classList.add("done"); btn.title = "Copied"; setTimeout(function () { btn.classList.remove("done"); btn.title = "Copy"; }, 1500); }
+    function selectIt() {
+      var r = document.createRange(); r.selectNodeContents(code);
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    }
+    try { navigator.clipboard.writeText(code.textContent).then(flash, selectIt); } catch (e) { selectIt(); }
+  });
+});
+document.querySelectorAll(".code button").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var pre = btn.parentElement.querySelector("pre");
+    function done(label) { btn.textContent = label; setTimeout(function () { btn.textContent = "Copy"; }, 1500); }
+    function selectIt() {
+      var r = document.createRange(); r.selectNodeContents(pre);
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      done("Selected");
+    }
+    try {
+      navigator.clipboard.writeText(pre.innerText).then(function () { done("Copied"); }, selectIt);
+    } catch (e) { selectIt(); }
+  });
+});
+</script>
+</body>
+</html>

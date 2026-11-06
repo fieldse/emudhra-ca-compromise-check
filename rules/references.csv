@@ -1,0 +1,888 @@
+id,group,item,claim,value,checked,sources,note
+R001,incident,Eight eMudhra G3B and G3C intermediates,"Eight eMudhra intermediates made at a 30 April 2025 key ceremony have P-384 private keys below 256, so anyone can recover the keys from the public certificates. Six are TLS CAs under emSign Root TLS CA - G3 and two are code-signing CAs under emSign Root CS CA - G3. The G3B CAs belong to eMudhra BV (Netherlands) and the G3C CAs to eMudhra Inc (US). They came from a batch of 24 intermediates generated that day, and only the P-384 keys of series B and C are affected.","Private keys: <code>4, 56, 66, 115, 155, 156, 230, 237</code>",2026-10-31,"S1
+S2","Verified by inspecting the 16 certificates, 2026-10-31."
+R002,incident,Sectigo cross-signs under AAA Certificate Services,"Sectigo cross-signed all eight intermediates under its AAA Certificate Services root, and each cross-sign reuses the same weak key, so 16 certificates are affected. eMudhra's eight are dated 30 April 2025 and expire on 28 April 2040. Sectigo's eight are dated 14 May 2025.",,2026-10-31,"S2
+S3
+S1","Verified by inspecting the 16 certificates, 2026-10-31."
+R003,incident,The 16 compromised certificates,"Each of the 16 certificates was matched to its serial, SHA-256 fingerprint and private key value. All 16 match the repo's rules/iocs.csv.","16 certificates: 8 issued by eMudhra, 8 Sectigo cross-signs",2026-10-31,"S2
+S3","Verified by inspecting the 16 certificates, 2026-10-31."
+R004,incident,What the leaked keys allow,"Anyone holding one of the six TLS keys can issue a certificate for any website, and a client that still trusts the chain will accept it, which allows interception. The two code-signing keys could make malware appear to come from a trusted publisher on Windows.",,2026-10-31,"S4
+S5 | date: 2026-10-27",
+R005,incident,emSign ECC Root CA - G3,"Browsers trust the TLS intermediates through emSign ECC Root CA - G3, which cross-signs emSign Root TLS CA - G3. Mozilla, Chrome, Apple and Microsoft all trusted it.",SHA-256 <code>86A1ECBA089C4A8D3BBE2734C612BA341D813E043CF9E8A862CD5C57A36BBE6B</code>,2026-10-31,"S6
+S7
+S8","Verified by inspecting the root certificate, 2026-10-31."
+R006,incident,emSign Root TLS CA - G3 and emSign Root CS CA - G3,The two G3 roots that issued the compromised intermediates were trusted as roots only by Microsoft.,TLS: <code>7DD78D5F4F13459A83DFF9ABBBA62EDBAF6F2D102BF257FD712F4D9F2746ED8D</code><br>CS: <code>F2EDAAFF3D9B701FB4D14C9F285F8C0BAD90FC3BCC1FA07D47F4718EDABA34A5</code>,2026-10-31,"S7
+S3","Verified by inspecting the root certificates, 2026-10-31."
+R007,incident,AAA Certificate Services,"AAA Certificate Services is a Sectigo root. Mozilla and Chrome had removed it before the incident, and Apple and Microsoft still trusted it.",SHA-256 <code>D7A7A0FB5D7E2731D771E9484EBCDEF71D5F0C3E0A2948782BC83EE0EA699EF4</code>,2026-10-31,"S1 | title: Bug 2083449, comment 6 (Sectigo)
+S7",
+R008,incident,eMudhra's account of the cause,"eMudhra says its ceremony script generated each B and C series key and then, as a rehearsal, wrapped it, unwrapped it and imported it again, and the CA certificates were issued over the re-imported key objects. The affected keys were generated on Utimaco HSMs. Series A and A-1 were generated on Entrust nShield HSMs and did not go through the rehearsal.",,2026-10-31,"S9
+S1 | title: Bug 2083449, comment 10 (eMudhra) | date: 2026-10-19",
+R009,incident,Why the weak keys signed the CSRs,eMudhra has given two accounts. On 19 October it said staff used the weak keys for the CSRs by mistake because the key labels were similar. On 28 October it said the ceremony script itself specified the re-imported keys.,,2026-10-31,"S1 | title: Bug 2083449, comment 11 (eMudhra) | date: 2026-10-19
+S9","<strong>Disputed.</strong> On 19 October eMudhra blamed similar key labels for a mistaken key choice (<a href=""https://bugzilla.mozilla.org/show_bug.cgi?id=2083449"">Bug 2083449, comment 11</a>). On 28 October it said the ceremony script specified the re-imported keys (<a href=""https://bugzilla.mozilla.org/attachment.cgi?id=9670867"">eMudhra's answers to Chrome, Q9</a>)."
+R010,incident,"Discovery and report, 17 October","A researcher scanning certificates disclosed in CCADB found the weak keys at 16:27 UTC on 17 October 2026 and sent the report, with proof of key control, to Apple, Chrome, Microsoft, Mozilla and eMudhra at 18:05 UTC. eMudhra acknowledged at about 21:28 UTC and said EM DV TLS CA - G3C had been live and was now disabled. Mozilla, which got the report through Chrome at 20:06 UTC, recovered the keys on its own at 21:48 UTC.",,2026-10-31,"S1
+S10
+S4",The reporter gives 21:28 UTC for eMudhra's acknowledgement and Mozilla gives 21:29 UTC.
+R011,incident,Revocations by eMudhra and Sectigo,"eMudhra revoked all eight intermediates with reason cACompromise between 09:24 and 09:38 UTC on 18 October 2026. Sectigo revoked its eight cross-signs on 19 October by its advisory. Its AAA Certificate Services CRL dates all eight revocations 14 May 2025, the day the cross-signs were issued (<a href='#r310'>R310</a>). Sectigo also revoked the other eMudhra intermediates it had cross-signed, ending the cross-signing relationship.",,2026-10-31,"S1
+S2
+S11","Corrected 2026-11-02: an earlier version gave a CRL revocation time of 10:35:36 UTC, which the live CRL does not show."
+R012,incident,Bug 2083449 and Mozilla's notices,Mozilla opened Bug 2083449 at 12:06 UTC on 18 October 2026. It warned downstream trust store maintainers on 19 October and published its blog post on 20 October.,,2026-10-31,"S1
+S12
+S4",
+R013,incident,"107,107 CT certificates (one commenter)","A commenter on Bug 2083449 counted 107,107 certificates signed with six of the keys in e-Szignó's 2026h2 and 2027h1 CT logs, logged between 09:40 UTC on 20 October and 22:02 UTC on 21 October. The same commenter counted 106,050 of them as proof-of-concept certificates for google[.]com and 106,058 as chaining through the AAA cross-signs. Nobody has replicated the count.",,2026-10-31,"S1 | title: Bug 2083449, comment 44 (individual commenter) | date: 2026-10-25
+S10","<strong>Disputed.</strong> One individual commenter counted 107,107 post-disclosure certificates (<a href=""https://bugzilla.mozilla.org/show_bug.cgi?id=2083449"">Bug 2083449, comment 44</a>). No root program has published or replicated the count. Google's statement covers only certificates logged before Chrome's block and reports none (<a href=""https://blog.google/security/protecting-chrome-and-android-users-from-compromised-emudhra-intermediate-ca-certificates/"">Google</a>)."
+R014,incident,Misuse status,None of the root program or CA statements read reports misuse of the keys against users. eMudhra says it issued no end-entity certificates from the eight CAs and put only EM DV TLS CA - G3C into production. Whether anyone used the keys against clients that do not enforce CT before disclosure is unknown.,,2026-10-31,"S1
+S13
+S4
+S10
+S5 | date: 2026-10-27",
+R015,incident,eMudhra leaves the TLS business,eMudhra's board decided on 22 October 2026 to leave the global SSL/TLS certificate market. eMudhra says its G1 RSA roots will keep serving customers until the transition is complete.,,2026-10-31,S14,
+R016,incident,Remaining G3 certificates and re-issuance,"eMudhra confirmed on 20 October that it had stopped all G3 issuance, and 25,058 of the 29,349 G3 certificates valid then were still unexpired and unrevoked on 28 October, all under InCommon DVG3C and OVG3C. It routes new requests to G1 without forcing replacement of existing certificates. US ACME subscribers move to a G1 hierarchy with no date yet for moving them off it, and non-US subscribers are re-issued through Sectigo under its R46 or E46 roots by an expected 15 November.","Still valid on 28 October: <code>25,058</code><br>Non-US re-issuance target: 15 November 2026",2026-10-31,"S1 | title: Bug 2083449, comments 19 and 21 (eMudhra) | date: 2026-10-20
+S9",
+R017,incident,KPMG review,eMudhra says it appointed KPMG as its independent external reviewer on 30 October 2026. Only eMudhra's own status page reports this.,,2026-10-31,S15,No KPMG statement or stock-exchange filing was found.
+R018,incident,eMudhra's root-cause report,eMudhra promised a full root-cause analysis through CCADB and said on 25 October that it was within CCADB's 14-day window. It had filed no full incident report on Bug 2083449 by 02:21 UTC on 31 October 2026.,No full report as of 31 October 2026,2026-10-31,"S15 | title: eMudhra status page, Update 5 | date: 2026-10-26
+S14
+S1",
+R019,incident,No CVE for the incident itself,The compromise has no CVE of its own. Red Hat says it is not a software vulnerability and that the CVEs track downstream trust store updates. CVE-2026-111944 has no CVE record.,,2026-10-31,"S16
+S17",
+R020,incident,CVE-2026-111943 (Go),"CVE-2026-111943, published by the Go CNA, adds a crypto/x509 denylist that rejects the compromised intermediates.","Vulnerable: before <code>1.26.10</code>, <code>1.27.0</code> to <code>1.27.2</code><br>Fixed: <code>1.26.10</code>, <code>1.27.3</code>",2026-10-31,"S18
+S19",
+R021,incident,CVE-2026-114406 (Red Hat),"CVE-2026-114406, published by Red Hat, covers the RHEL ca-certificates package.","Fixed: RHEL 10 <code>2026.2.92_v9.0.319-100.3.el10_2</code>, RHEL 9 <code>-90.3.el9_8</code>, RHEL 8 <code>-81.3.el8_10</code>, RHEL 7 ELS <code>-70.3.el7_9</code>",2026-10-31,"S20
+S16",
+R022,incident,CVE-2026-114820 (Oracle),"CVE-2026-114820 is an Oracle CNA record for Oracle Java SE and GraalVM updates that remove the impacted eMudhra root certificates. OpenJDK's own advisory reuses the ID, with issue JDK-8395690 as the marker for fixed vendor runtimes.","Affected per the CVE record: Java SE <code>8u511-b32</code>, <code>11.0.33.0.2</code>, <code>17.0.21.0.2</code>, <code>21.0.13.0.2</code>, <code>25.0.5.0.2</code>, <code>27.0.1.0.2</code>",2026-10-31,"S21
+S22
+S23",The CVE record is Oracle's. OpenJDK's advisory is a separate document.
+R023,incident,CVE-2026-91403 (Oracle),"CVE-2026-91403 is an Oracle CNA record for Java updates that distrust the impacted intermediates. The CVE text does not name eMudhra, but Oracle's security alert does.","Affected per the CVE record: Java SE <code>8u511</code>, <code>11.0.33</code>, <code>17.0.21</code>, <code>21.0.13</code>, <code>25.0.5</code>, <code>27.0.1</code>",2026-10-31,"S24
+S25",
+R024,incident,CVE-2026-113812 (Perl Mozilla::CA),"CVE-2026-113812, published by CPANSec, covers Perl Mozilla::CA before 20261020, which bundles emSign ECC Root CA - G3.",Vulnerable: before <code>20261020</code><br>Fixed: <code>20261020</code>,2026-10-31,S26,
+R025,incident,CVE-2026-115570 (Electron),"CVE-2026-115570, published by GitHub as GHSA-jr5w-w6x2-84p9, covers Electron's Chromium networking and Node.js TLS. Electron before 42.11.16, 43.8.1, 44.9.1 and 45.0.0-beta.6 does not block the compromised intermediates.","Fix list in the record: <code>42.11.16</code>, <code>43.8.1</code>, <code>44.9.1</code>, <code>45.0.0-beta.6</code>",2026-10-31,"S27
+S28","Fixed Electron binaries still hold the G3 root, because Electron's fix blocks the intermediates and does not remove the root. A G3 root inside a fixed Electron binary is expected and does not show that a build is unfixed. See the Electron 44 row under Browsers and apps."
+R304,incident,crt.sh records of the eight eMudhra-issued intermediates,"crt.sh holds each of the eight compromised intermediates eMudhra issued, with the SHA-256, serial and issuer the check lists. Mozilla's bug lists the same eight with their CCADB IDs.","8 certificates, issued by emSign Root TLS CA - G3 or emSign Root CS CA - G3",2026-11-02,"S29
+S30
+S31
+S32
+S33
+S34
+S35
+S36
+S37","Added from the rule verification, 2026-11-02."
+R305,incident,crt.sh records of the eight Sectigo cross-signs,"crt.sh holds each of Sectigo's eight cross-signs of the compromised intermediates, issued by AAA Certificate Services, with the SHA-256 and serial the check lists. Microsoft's announcement lists the same fingerprints.","8 certificates, issued by AAA Certificate Services",2026-11-02,"S38
+S39
+S40
+S41
+S42
+S43
+S44
+S45","Added from the rule verification, 2026-11-02."
+R306,incident,crt.sh records of the three G3 roots,crt.sh holds the three self-signed emSign G3 roots with the SHA-256 and serial the check lists. Debian's copy of Mozilla's certdata.txt gives the same fingerprint and serial for emSign ECC Root CA - G3.,"emSign ECC Root CA - G3, emSign Root TLS CA - G3, emSign Root CS CA - G3",2026-11-02,"S46
+S47
+S48
+S49","Added from the rule verification, 2026-11-02."
+R307,incident,crt.sh record of AAA Certificate Services,crt.sh and Debian's bookworm certdata.txt give AAA Certificate Services (Comodo AAA Services root) serial 1 and the SHA-256 the check lists. Debian names the file Comodo_AAA_Services_root.crt.,"<code>D7A7A0FB…9EF4</code>, serial 1",2026-11-02,"S50
+S51","Added from the rule verification, 2026-11-02."
+R308,incident,Two certificates per compromised key,"A crt.sh search by subject key identifier finds exactly two certificates for each of the eight compromised keys, the eMudhra certificate and its Sectigo cross-sign. So the 16 certificates cover every certificate that carries one of the keys.","8 keys, 16 certificates",2026-11-02,"S52
+S53","Added from the rule verification, 2026-11-02."
+R309,incident,G3 root cross-certificates,"emSign ECC Root CA - G3 cross-certified emSign Root TLS CA - G3 and emSign Root CS CA - G3 on 11 July 2024. Each cross-certificate carries the same public key as the self-signed root, so it chains the compromised intermediates to emSign ECC Root CA - G3.","2 cross-certificates, serials <code>00961a3efb1359576ed04005b4684a5b</code> and <code>14c6754e93e5d94c638d3fc90fad76</code>",2026-11-02,"S54
+S55
+S56
+S57","Added from the rule verification, 2026-11-02."
+R310,incident,AAA Certificate Services CRL,"Sectigo's CRL for AAA Certificate Services lists all eight cross-sign serials as revoked with reason CA Compromise. Its revocation date field reads 14 May 2025, the day the cross-signs were issued, while Sectigo's advisory gives 19 October 2026.","8 serials revoked, reason CA Compromise",2026-11-02,"S58
+S59","Added from the rule verification, 2026-11-02."
+R026,roots,Chrome CRLSet and Android,"Chrome's CRLSet blocked the public keys of the affected intermediates at 19:45 UTC on 17 October 2026, which also blocks the Sectigo cross-signs that share those keys. Android received an equivalent block through Google Play services around 22:00 UTC on Monday 19 October.",,2026-10-31,S10,
+R027,roots,Firefox OneCRL,Mozilla's OneCRL block reached all Firefox users with standard settings by 22:59 UTC on 17 October 2026. The NSS 3.131.1 announcement gives a different day.,,2026-10-31,"S4
+S1
+S60","<strong>Disputed.</strong> Mozilla's blog and Bug 2083449 put the OneCRL update on Saturday 17 October (<a href=""https://blog.mozilla.org/security/2026/10/20/protecting-firefox-users-following-the-compromise-of-emudhra-intermediate-certificates/"">Mozilla blog</a>). Mozilla's NSS 3.131.1 announcement, as relayed on oss-security, says it was delivered on Saturday 19th (<a href=""https://www.openwall.com/lists/oss-security/2026/10/20/30"">oss-security</a>)."
+R028,roots,Decision to remove emSign ECC Root CA - G3,"On 20 October 2026 Mozilla decided to remove trust in emSign ECC Root CA - G3 on an emergency basis, after several people had recovered the keys independently. Chrome committed the same day to the same removal.",,2026-10-31,"S1 | title: Bug 2083449, comments 18 and 20 | date: 2026-10-20",
+R029,roots,NSS 3.131.1,"NSS 3.131.1, released on 20 October 2026, removes emSign ECC Root CA - G3 (Bug 2084101). It also removes emSign Root CA - C1 and emSign ECC Root CA - C3 under Bug 2083709.",Vulnerable: before <code>3.131.1</code><br>Fixed: <code>3.131.1</code>,2026-10-31,"S60
+S61
+S62","Verified by inspecting the source file, 2026-10-31."
+R030,roots,Firefox releases with the block built in (CVE-2026-113470),"Firefox 158.0.1, ESR 153.5.1 and ESR 115.43.1 shipped on 20 October with the block built in, for users whose settings keep OneCRL from updating, and Firefox for Android 158.0.2 followed on 21 October. Mozilla tracks these, with Thunderbird 158.0.1 and 153.5.1, as CVE-2026-113470. Whether ESR 115.43.1 is fixed is disputed.","Fixed: Firefox <code>158.0.1</code>, ESR <code>153.5.1</code>, Android <code>158.0.2</code><br>ESR 115: disputed, no released fix confirmed",2026-10-31,"S4
+S63
+S64
+S65","Verified by inspecting the source file, 2026-10-31. <strong>Disputed.</strong> Mozilla's CVE-2026-113470 record lists Firefox ESR 115.43.1 as fixed (<a href=""https://cveawg.mitre.org/api/cve/CVE-2026-113470"">CVE record</a>). Bug 2086788 shows ESR 115 loads OneCRL only after 20 idle seconds, so a new 115.43.1 profile can trust the chains until then, and Mozilla verified the fix only in a 115.45.0 pre-release (<a href=""https://bugzilla.mozilla.org/show_bug.cgi?id=2086788"">Bug 2086788</a>). The newest released ESR 115 on 31 October 2026 is 115.44.0esr (<a href=""https://product-details.mozilla.org/1.0/firefox_versions.json"">firefox_versions.json</a>)."
+R031,roots,Chrome Root Store v43,"Chrome Root Store version 43 removes emSign ECC Root CA - G3, and version 42 still contains it. Google expected the removal to reach all devices that rely on the Chrome Root Store on the morning of 27 October 2026, Pacific time.",Vulnerable: <code>42</code> and earlier<br>Fixed: <code>43</code>,2026-10-31,"S66
+S8
+S10","Verified by inspecting the source files, 2026-10-31. No source read confirms that the v43 rollout shipped."
+R032,roots,emSign Root CA - G1,"No root program has removed emSign Root CA - G1. Chrome Root Store v43 and NSS 3.131.1 still trust it, Mozilla said on 20 October it was not removing it at that time, and Microsoft is evaluating the remaining eMudhra roots separately.",Still trusted on 31 October 2026,2026-10-31,"S66
+S62
+S1 | title: Bug 2083449, comment 18 (Mozilla) | date: 2026-10-20
+S5 | date: 2026-10-27","Verified by inspecting the source files, 2026-10-31."
+R033,roots,Windows Disallowed CTL and Edge CRLSet,"On 20 October 2026 Microsoft updated the Windows Disallowed Certificate Trust List to block the eight compromised keys by public key, which also covers the Sectigo cross-signs. The same day it shipped Edge and WebView2 CRLSet 2026.10.20, which blocks the affected TLS keys.",Windows CTL sequence number <code>01dd5f6ca45c9d86</code><br>Edge and WebView2 CRLSet <code>2026.10.20</code>,2026-10-31,"S3
+S5 | date: 2026-10-27",
+R034,roots,Windows and Edge root removal,"A Windows out-of-band update on 26 October 2026 removed six eMudhra G3 roots and AAA Certificate Services from the Windows trust list. Edge and WebView2 removed the same seven on 27 October. The seven are emSign ECC Root CA - G3, the emSign Client Auth, CS, SMIME, TLS and TSA G3 roots, and AAA Certificate Services.","Windows: <code>KB5134133</code> (Windows 11), <code>KB5134137</code> (Server 2025)<br>Edge and WebView2: PKI Metadata <code>72.0.0.0</code>",2026-10-31,"S3
+S5 | date: 2026-10-27
+S7","Microsoft calls the seventh entry an AAA cross-sign, but its thumbprint is that of the AAA Certificate Services root itself."
+R035,roots,Apple platforms,"Apple blocks 12 TLS certificates, the six eMudhra-issued TLS intermediates and their six Sectigo cross-signs, through configuration data sent to devices, and has blocked emSign ECC Root CA - G3 since 23 October 2026. Apple says its frameworks don't trust the two code-signing CAs. The start date of the first block is disputed.",,2026-10-31,"S6
+S13","<strong>Disputed.</strong> Apple says it began blocking the 12 TLS certificates on 19 October 2026 (<a href=""https://support.apple.com/en-us/149555"">Apple</a>). The community tracker says Apple products have blocked them since 22 October (<a href=""https://emudhra.we-have-a-problem.com/"">community tracker</a>)."
+R036,roots,Weak-key checks across CAs,"Within an hour of the report, Chrome checked every Chrome-trusted CA certificate in its PKI monitoring data and in CCADB with paranoid_crypto, and found no other weak CA keys of the kinds it detects. Chrome filed mozilla/CCADB-Tools#185 to make automated weak-key checks a gate before CA certificates can be disclosed to CCADB.",,2026-10-31,"S1 | title: Bug 2083449, comment 50 (Chrome) | date: 2026-10-27
+S10",
+R037,exposure,OpenJDK interim fix,"For runtimes without an update, OpenJDK's interim fix deletes four cacerts aliases: emsigneccrootcag3, comodoaaaca, emsignrootcag1 and emsignrootcag2. In OpenJDK-derived cacerts, comodoaaaca is AAA Certificate Services.",<code>keytool -list -cacerts | grep -iE 'emsign|comodoaaaca'</code>,2026-10-31,"S23
+S67",
+R038,exposure,Software with its own trust store,"The community tracker says its local Windows block applies only to clients that use the Windows certificate store, and that apps with their own CA bundle still need their own update. A Linux container trusts the CA bundle inside its image, so a patched host does not protect it.",,2026-10-31,"S5
+S68
+S13 | publisher: we-have-a-problem.com",
+R039,exposure,Node.js and JDK trust stores,"Node.js bundles a snapshot of the Mozilla CA store fixed at release time, so only a Node.js upgrade changes it. Updating a JDK fixes only its bundled cacerts. Applications that ship their own JKS or PKCS12 truststore must have the roots removed from that file.",,2026-10-31,"S69
+S70",
+R040,exposure,AAA Certificate Services cross-sign path,"Removing only emSign ECC Root CA - G3 does not block the six Sectigo TLS cross-signs, because they chain to AAA Certificate Services. For macOS /etc/ssl/cert.pem, Apple's interim steps remove G3 and optionally AAA for this reason.",,2026-10-31,"S13
+S6",
+R041,exposure,AAA Certificate Services at Mozilla,"NSS and Firefox carry AAA Certificate Services trusted for email only. Mozilla did not add the Sectigo cross-signs to OneCRL, saying AAA Certificate Services is not in its root store.",,2026-10-31,"S1 | title: Bug 2083449, comment 25 (Mozilla) | date: 2026-10-21
+S71","Verified by inspecting the source files, 2026-10-31."
+R042,exposure,AAA Certificate Services at Chrome,"Chrome Root Store versions 41, 42 and 43 do not contain AAA Certificate Services.",,2026-10-31,"S8
+S72","Verified by inspecting the source files, 2026-10-31."
+R043,exposure,Blocks that match the public key,"Go's crypto/x509 denylist, the rustls-webpki 0.103.16 key list and CPython's ssl block match the compromised public keys, so they also reject the Sectigo cross-signs. CPython's block does not apply when certificate verification is off.",,2026-10-31,"S73
+S74
+S75","Verified by inspecting the package and the certificates, 2026-10-31."
+R044,exposure,macOS /etc/ssl/cert.pem,"macOS command-line tools that read /etc/ssl/cert.pem, such as curl, git, python3, ruby, perl and openssl, skip Apple's block and revocation checks, so they still accept the compromised chains until a future macOS update. The community tracker reports that macOS 27.2 undid user edits to that file.",No fix yet (31 October 2026),2026-10-31,"S6
+S13",
+R045,exposure,eMudhra CRL and OCSP user-agent block (Bug 2085612),"eMudhra's web application firewall answered HTTP 403 to requests on its HTTP CRL, OCSP and repository hosts whose User-Agent named curl, Wget, Python-urllib or libwww-perl, from 28 September 2022 to 10:32 UTC on 26 October 2026. The blocked files included the two CRLs that carry the eight revocations, and HTTPS was no fallback because the certificates point to HTTP CRL URLs. Bug 2085612 was still UNCONFIRMED on 31 October 2026.",Blocked: <code>2022-09-28</code> to <code>2026-10-26 10:32 UTC</code>,2026-10-31,S76,"<strong>Disputed.</strong> eMudhra's report lists the crl-c and ocsp-c hosts among seven filtered hostnames (<a href=""https://bugzilla.mozilla.org/show_bug.cgi?id=2085612"">Bug 2085612, comment 3</a>). A third party's tests, posted earlier on the same bug, found those two hosts unfiltered (<a href=""https://bugzilla.mozilla.org/show_bug.cgi?id=2085612"">Bug 2085612, comment 1</a>)."
+R046,exposure,Certificate Transparency,"Google says no TLS certificate chaining to the six TLS intermediates was logged to CT before Chrome's block, so clients that enforce CT could not have been attacked. Clients that enforce CT reject leaf certificates that were never logged, and non-browser clients such as curl usually do not enforce it.",,2026-10-31,"S10
+S13",
+R047,exposure,Mozilla's advice to distributions,"Mozilla asked distributions to distrust the eight intermediates where their trust store can. Otherwise it asked them to consider removing the roots that signed them, AAA Certificate Services, emSign Root TLS CA - G3 and emSign ECC Root CA - G3.",,2026-10-31,S12,
+R311,exposure,Trust anchors stored as a public key,"rustls webpki-roots stores each trust anchor as its subject public key, without the certificate. Its entry for emSign ECC Root CA - G3 holds the same bytes as the check's key value for that root, so a key without its certificate can be a trust anchor.",webpki-roots 1.0.9 <code>TrustAnchor</code>,2026-11-02,S77,"Added from the rule verification, 2026-11-02."
+R312,exposure,PEM line width,"RFC 7468 says a strict PEM encoder writes base64 lines of exactly 64 characters except the last, so the first 64 characters of a certificate's base64 match in any strictly wrapped bundle.",64 characters,2026-11-02,S78,"Added from the rule verification, 2026-11-02."
+R351,exposure,OpenSSL trust settings,"An OpenSSL TRUSTED CERTIFICATE carries an X509_CERT_AUX after the certificate, with a trust list and a reject list of extended key usage OIDs. OpenSSL reads the reject list first and rejects the certificate when it holds the purpose being checked or anyExtendedKeyUsage. Rejected uses for other purposes do not reject it, and a self-signed root with no trust list is then trusted through compat.","anyExtendedKeyUsage <code>2.5.29.37.0</code>, serverAuth <code>1.3.6.1.5.5.7.3.1</code>, codeSigning <code>1.3.6.1.5.5.7.3.3</code>",2026-11-02,"S79
+S80","Added from the WRONG-rule fixes, 2026-11-02."
+R048,os,Mozilla guidance to distributions,"Mozilla asked distributions to distrust the eight compromised intermediates where their trust store supports it. Where it does not, Mozilla asked them to consider removing the roots that signed them: AAA Certificate Services, emSign Root TLS CA - G3 and emSign ECC Root CA - G3.",,2026-10-31,S12,
+R049,os,Linux ca-certificates packages,Most Linux distributions fixed this by removing emSign ECC Root CA - G3 from their ca-certificates package. Red Hat says it did so because not every client that uses the system CA store can distrust only specific intermediates.,,2026-10-31,"S81
+S82
+S83",
+R050,os,Debian 13 ca-certificates,"Debian 13 (trixie) is fixed in ca-certificates 20250419+deb13u1 (DSA-6572-1, 20 October 2026). The unfixed 20250419 holds both the G3 and the AAA root. The fixed build holds neither.",Vulnerable: <code>20250419</code><br>Fixed: <code>20250419+deb13u1</code>,2026-10-31,"S84
+S83
+S85","Verified by inspecting the packages in a container, 2026-10-31."
+R051,os,Debian 12 ca-certificates,Debian 12 (bookworm) is fixed in ca-certificates 20250419~deb12u2 (DLA-4845-1). The unfixed 20230311+deb12u1 holds both roots. The fixed build holds neither.,Vulnerable: <code>20230311+deb12u1</code><br>Fixed: <code>20250419~deb12u2</code>,2026-10-31,"S86
+S87
+S85","Verified by inspecting the packages in a container, 2026-10-31."
+R052,os,Debian forky and sid ca-certificates,"Debian testing (forky) and unstable (sid) are fixed in ca-certificates 20260816+nmu1. Its changelog blocklists emSign ECC Root CA - G3 and Comodo AAA Services root, and its bundle holds neither.",Vulnerable: <code>20260816</code> and earlier<br>Fixed: <code>20260816+nmu1</code>,2026-10-31,"S88
+S87
+S85","Verified by inspecting the packages in a container, 2026-10-31."
+R053,os,Debian Comodo AAA Services root,"Debian's fix removes both emSign ECC Root CA - G3 and Comodo AAA Services root. Debian's Comodo AAA file has the fingerprint of Sectigo's AAA Certificate Services (D7A7A0FB…9EF4), so unfixed Debian packages trust both the eMudhra chain and the Sectigo cross-signs.",,2026-10-31,"S83
+S85","Verified by inspecting the packages in a container, 2026-10-31."
+R054,os,"Debian fixed bundles, other emSign roots","Debian's fixed 20250419+deb13u1 and 20250419~deb12u2 still contain emSign Root CA - G1, emSign Root CA - C1 and emSign ECC Root CA - C3. A check on a Debian bundle must match the full G3 root name.",,2026-10-31,S85,"Verified by inspecting the packages in a container, 2026-10-31."
+R055,os,Debian 11 ca-certificates,"Debian's security tracker lists no fixed ca-certificates for Debian 11 (bullseye). The bullseye release package 20210119 trusts both the G3 and the AAA root. The last bullseye-security build, 20250419~deb12u1~deb11u1, could not be downloaded on 31 October 2026.",Vulnerable: <code>20210119</code><br>Fixed: none listed,2026-10-31,"S87
+S85","Verified by inspecting the packages in a container, 2026-10-31."
+R056,os,"Ubuntu 22.04, 24.04, 26.04, 26.10 ca-certificates","USN-8944-1 fixes Ubuntu 22.04, 24.04, 26.04 and 26.10 in ca-certificates 20260816ubuntu0.22.04.1, 20260816ubuntu0.24.04.1, 20260816ubuntu0.26.04.1 and 20260816ubuntu0.26.10.1. Each release-pocket package (20211016, 20240203, 20260223, 20260816) holds the G3 root. None of the fixed builds holds G3 or AAA.","Fixed: <code>20260816ubuntu0.22.04.1</code>, <code>20260816ubuntu0.24.04.1</code>, <code>20260816ubuntu0.26.04.1</code>, <code>20260816ubuntu0.26.10.1</code>",2026-10-31,"S89
+S90","Verified by inspecting the packages in a container, 2026-10-31."
+R057,os,Ubuntu AAA root,"USN-8944-1 names only emSign ECC Root CA - G3 as removed. AAA is also gone from the fixed 22.04 and 24.04 builds, which move to Mozilla bundle 2.90. The unfixed 20211016 and 20240203 builds hold AAA, and the 26.04 and 26.10 release builds do not.",,2026-10-31,"S89
+S90","Verified by inspecting the packages in a container, 2026-10-31."
+R058,os,Ubuntu ESM 14.04 to 20.04 ca-certificates,"USN-8944-2 gives Ubuntu 14.04, 16.04, 18.04 and 20.04 ESM builds that remove both emSign ECC Root CA - G3 and Comodo AAA Services root. These builds need Ubuntu Pro and were not inspected.",20.04: <code>20240203~20.04.1ubuntu0.1~esm2</code><br>18.04: <code>202402031ubuntu0.18.04.1+esm3</code><br>16.04: <code>202402031~16.04.1~esm3</code><br>14.04: <code>20230311~14.04.1~esm3</code>,2026-10-31,S91,
+R059,os,Alpine ca-certificates,"Alpine's fix is ca-certificates 20261020-r0, served on the 3.20 to 3.24 and edge branches. The 20260413-r0 and 20260611-r0 images hold the G3 root. No Alpine bundle checked, old or new, held the AAA root.","Vulnerable: <code>20260413-r0</code>, <code>20260611-r0</code><br>Fixed: <code>20261020-r0</code>",2026-10-31,"S92
+S93","Verified by inspecting the images in a container, 2026-10-31."
+R060,os,Wolfi ca-certificates 20260909-r3,"Wolfi first shipped the fix in ca-certificates 20260909-r3, merged on 20 October 2026. It removes emSign ECC Root CA - G3, emSign Root CA - C1 and emSign ECC Root CA - C3.",Vulnerable: <code>20260909-r2</code> and earlier<br>Fixed: <code>20260909-r3</code>,2026-10-31,S94,
+R061,os,Wolfi 20261020-r0 and Chainguard static,"Wolfi's current package is ca-certificates 20261020-r0, and the wolfi-base image ships it without the G3 or AAA root. The Chainguard static image built on 28 October 2026 holds neither root.",Fixed: <code>20261020-r0</code>,2026-10-31,"S95
+S96","Verified by inspecting the images in a container, 2026-10-31."
+R062,os,"Fedora 43, 44, 45 ca-certificates","Fedora 43, 44 and 45 are fully fixed in ca-certificates 2026.2.92_v9.0.319-2, pushed to stable on 22 and 23 October 2026. Its TLS, email and code-signing bundles hold neither the G3 nor the AAA root. The Fedora 43 release build, 2025.2.80_v9.0.304-1.1.fc43, holds G3.",Vulnerable: <code>2025.2.80_v9.0.304-1.1.fc43</code><br>Fixed: <code>2026.2.92_v9.0.319-2</code>,2026-10-31,"S97
+S98","Verified by inspecting the images in a container, 2026-10-31."
+R063,os,Fedora 2026.2.92_v9.0.319-1 code signing,"Fedora's first update, 2026.2.92_v9.0.319-1, took G3 out of TLS trust but still trusted emSign Root CS CA - G3 for code signing. That root directly issued the two compromised code-signing intermediates. The -2 build removes it.",Code signing still trusted: <code>2026.2.92_v9.0.319-1</code><br>Fixed: <code>2026.2.92_v9.0.319-2</code>,2026-10-31,"S82
+S97
+S99","Verified by inspecting the packages in a container, 2026-10-31."
+R064,os,Red Hat CVE-2026-114406,Red Hat tracks the RHEL trust store change as CVE-2026-114406 and rates it Critical.,,2026-10-31,S81,
+R065,os,RHEL 10 ca-certificates,"RHEL 10 is fixed in ca-certificates 2026.2.92_v9.0.319-100.3.el10_2 (RHSA-2026:88455), and RHEL 10.0 EUS in 2026.2.92_v9.0.319-100.3.el10_0 (RHSA-2026:88560). The ubi10 image ships the fix with no G3 or AAA in any bundle.","Fixed: <code>2026.2.92_v9.0.319-100.3.el10_2</code>, <code>2026.2.92_v9.0.319-100.3.el10_0</code> (EUS)",2026-10-31,"S100
+S101
+S102","Verified by inspecting the images in a container, 2026-10-31."
+R066,os,RHEL 9 ca-certificates,"RHEL 9 is fixed in 2026.2.92_v9.0.319-90.3.el9_8 (RHSA-2026:88459), and RHEL 9.6 EUS in 2026.2.92_v9.0.319-90.3.el9_6 (RHSA-2026:88563). The ubi9 image ships the fix with no G3 or AAA in any bundle.","Fixed: <code>2026.2.92_v9.0.319-90.3.el9_8</code>, <code>2026.2.92_v9.0.319-90.3.el9_6</code> (EUS)",2026-10-31,"S103
+S104
+S102","Verified by inspecting the images in a container, 2026-10-31."
+R067,os,RHEL 8 ca-certificates,"RHEL 8 is fixed in 2026.2.92_v9.0.319-81.3.el8_10 (RHSA-2026:88550, 23 October 2026). The ubi8 image ships it with no G3 or AAA.",Fixed: <code>2026.2.92_v9.0.319-81.3.el8_10</code>,2026-10-31,"S105
+S102","Verified by inspecting the images in a container, 2026-10-31."
+R068,os,RHEL 7 and 6 ELS ca-certificates,RHEL 7 ELS is fixed in 2026.2.92_v9.0.319-70.3.el7_9 (RHSA-2026:88779) and RHEL 6 ELS in 2026.2.92_v9.0.319-60.3.el6_10 (RHSA-2026:90985). These builds were not inspected.,"Fixed: <code>2026.2.92_v9.0.319-70.3.el7_9</code>, <code>2026.2.92_v9.0.319-60.3.el6_10</code>",2026-10-31,"S106
+S107",
+R069,os,RHEL fix sequence,"Red Hat shipped the fix in steps: the NSS 3.131.1 rebase, then .1 removing AAA Certificate Services and taking the G3 root out of the code-signing set, then .2 removing emSign Root CS CA - G3, then .3 fixing a patch header. Only the .3 builds are advisory versions.","Intermediate: <code>-90.0</code>, <code>-90.1</code>, <code>-90.2</code> (RHEL 9 numbering)<br>Advisory: <code>-90.3</code>",2026-10-31,"S103
+S102","Verified by inspecting the packages in a container, 2026-10-31."
+R070,os,RHEL-family AAA root by bundle,"Unfixed RHEL-family packages from 2025 and 2026 hold the G3 root in the TLS bundle and the AAA root only in the email and code-signing bundles. Older builds, such as Rocky 8's 2023.2.60_v7.0.306-80.0.el8_8, hold AAA in the TLS bundle too.",,2026-10-31,"S108
+S109","Verified by inspecting the packages in a container, 2026-10-31."
+R071,os,CentOS Stream 9 ca-certificates,"CentOS Stream 9 is fixed in 2026.2.92_v9.0.319-91.3.el9, with no G3 or AAA in the TLS bundle. The earlier 2026.2.90_v9.0.316-90.0.el9 holds G3.",Vulnerable: <code>2026.2.90_v9.0.316-90.0.el9</code><br>Fixed: <code>2026.2.92_v9.0.319-91.3.el9</code>,2026-10-31,S108,"Verified by inspecting the packages in a container, 2026-10-31."
+R072,os,CentOS Stream 10 ca-certificates,"CentOS Stream 10's current build, 2026.2.92_v9.0.319-100.1.el10, has no G3 or AAA in its TLS bundle. It still trusts emSign Root CS CA - G3 for code signing, and its changelog has no later .2 or .3 entry.",TLS fixed: <code>2026.2.92_v9.0.319-100.1.el10</code><br>Code signing: no fix yet,2026-10-31,S108,"Verified by inspecting the packages in a container, 2026-10-31."
+R073,os,AlmaLinux ca-certificates,"AlmaLinux 8, 9 and 10 use Red Hat's fixed versions (ALSA-2026:88550, 88459 and 88455). The current images ship them with no G3 or AAA. The downgraded 2025.2.80 builds hold G3.","Fixed: <code>2026.2.92_v9.0.319-81.3.el8_10</code>, <code>-90.3.el9_8</code>, <code>-100.3.el10_2</code>",2026-10-31,"S110
+S111
+S112
+S113","Verified by inspecting the images in a container, 2026-10-31."
+R074,os,Rocky Linux ca-certificates,"Rocky Linux 8, 9 and 10 use the same fixed versions (RLSA-2026:88550, 88459 and 88455, published 23 and 24 October 2026). After an upgrade the bundles hold no G3 or AAA.","Fixed: <code>2026.2.92_v9.0.319-81.3.el8_10</code>, <code>-90.3.el9_8</code>, <code>-100.3.el10_2</code>",2026-10-31,"S114
+S109","Verified by inspecting the images in a container, 2026-10-31."
+R075,os,"rockylinux:8, :9 and :10 images","The current rockylinux:8, rockylinux:9 and rockylinux:10 images ship unfixed ca-certificates (2023.2.60_v7.0.306-80.0.el8_8, 2025.2.80_v9.0.305-91.el9 and 2025.2.80_v9.0.305-102.el10) with the G3 root. The :8 image also holds AAA in its TLS bundle. They need the package upgraded or the image rebuilt.","Image builds: <code>2023.2.60_v7.0.306-80.0.el8_8</code>, <code>2025.2.80_v9.0.305-91.el9</code>, <code>2025.2.80_v9.0.305-102.el10</code>",2026-10-31,S109,"Verified by inspecting the rockylinux:8, :9 and :10 images, 2026-10-31."
+R076,os,Oracle Linux ca-certificates,"Oracle Linux first fixed this on 20 October 2026 with its own builds on the 2025.2.80 base (ELSA-2026-500449, 500450 and 500451). Its repositories now also carry the Red Hat-numbered 2026.2.92 builds, which the current oraclelinux 8, 9 and 10 images ship. Neither set holds the G3 or AAA root.","Oracle builds: <code>2025.2.80_v9.0.304-80.2.0.1.el8_10</code>, <code>2025.2.80_v9.0.305-91.0.1.el9</code>, <code>2025.2.80_v9.0.305-102.0.1.el10_2</code><br>Red Hat-numbered: <code>2026.2.92_v9.0.319-81.3.el8_10</code>, <code>-90.3.el9_8</code>, <code>-100.3.el10_2</code>",2026-10-31,"S115
+S116
+S117
+S118
+S119","Verified by inspecting the images in a container, 2026-10-31. <a href=""https://linux.oracle.com/cve/CVE-2026-111943.html"">Oracle's CVE page</a> lists only the ELSA-2026-500449, 500450 and 500451 errata for Oracle Linux 8, 9 and 10, which carry the 2025.2.80 .0.1 builds. The <a href=""https://hub.docker.com/_/oraclelinux"">oraclelinux 8, 9 and 10 images</a> ship the Red Hat-numbered 2026.2.92 builds. Both sets are clean."
+R077,os,Amazon Linux 2 ca-certificates,"Amazon Linux 2 is fixed in ca-certificates-2025.2.76-1.amzn2.0.3 (ALAS2-2026-4037, 24 October 2026). The amazonlinux:2 image's 0.2 build holds G3. The 0.3 and 0.4 builds hold neither G3 nor AAA.",Vulnerable: <code>2025.2.76-1.amzn2.0.2</code><br>Fixed: <code>2025.2.76-1.amzn2.0.3</code>,2026-10-31,"S120
+S121","Verified by inspecting the images in a container, 2026-10-31."
+R078,os,Amazon Linux 2023 ca-certificates,Amazon Linux 2023 is fixed in ca-certificates-2025.2.76-1.0.amzn2023.0.4 (ALAS2023-2026-3306). The update needs a newer release version: dnf update ca-certificates --releasever 2023.12.20261026.,Vulnerable: <code>2025.2.76-1.0.amzn2023.0.3</code><br>Fixed: <code>2025.2.76-1.0.amzn2023.0.4</code>,2026-10-31,S122,
+R079,os,amazonlinux:2023 image update,"A plain dnf update ca-certificates on the current amazonlinux:2023 image leaves the unfixed 0.3 build in place. With --releasever=latest it installs the fixed 0.5 build, which holds neither G3 nor AAA.",Plain update: <code>2025.2.76-1.0.amzn2023.0.3</code><br>With <code>--releasever=latest</code>: <code>2025.2.76-1.0.amzn2023.0.5</code>,2026-10-31,"S123
+S121","Verified by inspecting the images in a container, 2026-10-31."
+R080,os,Amazon Linux AAA removal,"Amazon's first fix removed emSign ECC Root CA - G3, emSign Root CA - C1 and emSign ECC Root CA - C3. A 26 October build (Amazon Linux 2 0.4, Amazon Linux 2023 0.5) also removed AAA Certificate Services, which Amazon says it has not trusted for TLS since mid-2025.",,2026-10-31,"S123
+S121","Verified by inspecting the packages in a container, 2026-10-31. <strong>Disputed.</strong> The 0.3 package changelog in the <a href=""https://hub.docker.com/_/amazonlinux"">Amazon Linux images</a> names the removed root ""emSign Root CA - G3"". <a href=""https://aws.amazon.com/security/security-bulletins/2026-150-aws/"">AWS's bulletin</a> names emSign ECC Root CA - G3, and the 0.3 bundle no longer holds that root."
+R081,os,Amazon Linux 2027 preview,Amazon's advisory page lists ca-certificates for the Amazon Linux 2027 preview as Pending Fix.,Fixed: none yet,2026-10-31,S124,
+R082,os,Bottlerocket 1.67.0 and earlier,AWS says Bottlerocket nodes on v1.67.0 and earlier trust the compromised chain until they are updated.,Vulnerable: <code>1.67.0</code> and earlier,2026-10-31,S123,
+R083,os,Bottlerocket 1.68.0,"Bottlerocket v1.68.0, published 27 October 2026, carries the fix. It moves to bottlerocket-sdk 0.81.1, whose ca-certificates is curl's 2026-10-20 bundle. v1.67.0 used SDK 0.80.0, and Bottlerocket issue #4976 lists it as affected.",Fixed: <code>1.68.0</code> (SDK <code>0.81.1</code>),2026-10-31,"S125
+S126
+S126 | title: Issue #4976 comments (GitHub API) | date: 2026-10-29
+S127
+S128",
+R084,os,curl CA bundles behind Bottlerocket,"curl's 2026-08-13 and 2026-09-25 bundles hold emSign ECC Root CA - G3 and not the AAA root. The 2026-10-20 bundle, with 118 certificates, holds neither.",,2026-10-31,"S129 | date: undated
+S130 | date: undated","Verified by inspecting the bundles in a container, 2026-10-31."
+R085,os,Bottlerocket settings.pki override,"Until a node runs 1.68.0, AWS's interim fix sets settings.pki entries with trusted = false for emSign ECC Root CA - G3, emSign ECC Root CA - C3 and emSign Root CA - C1 through apiclient apply. The override does not list AAA.",,2026-10-31,"S123
+S131",
+R086,os,Arch ca-certificates-mozilla,"Arch Linux removed emSign ECC Root CA - G3 in ca-certificates-mozilla 3.131.1-1. 3.130-1 and 3.131-1 hold it. The current package, 3.132-1 (built 21 October 2026), has neither G3 nor AAA in its TLS bundle.",Vulnerable: <code>3.131-1</code> and earlier<br>Fixed: <code>3.131.1-1</code>,2026-10-31,"S132
+S133","Verified by inspecting the packages in a container, 2026-10-31."
+R087,os,"Arch AAA root, email only","Arch's trust source keeps Comodo AAA Services root for email protection only, so it is not in Arch's TLS bundle.",,2026-10-31,S133,"Verified by inspecting the packages in a container, 2026-10-31."
+R088,os,SLES 15 ca-certificates-mozilla,"SUSE Linux Enterprise 15 is fixed in ca-certificates-mozilla 2.92-150200.50.2 (SUSE-SU-2026:4847-1, 21 October 2026), which removes emSign ECC Root CA - G3, C3 and C1. The earlier 2.84-150200.44.1 holds G3.",Vulnerable: <code>2.84-150200.44.1</code><br>Fixed: <code>2.92-150200.50.2</code>,2026-10-31,"S134
+S135","Verified by inspecting the images in a container, 2026-10-31."
+R089,os,Leap 16.0 and SLES 16 ca-certificates-mozilla,"openSUSE Leap 16.0 and SLES 16 ship the fix as ca-certificates-mozilla 2.92-160000.1.1, with no G3 or AAA in the bundle.",Fixed: <code>2.92-160000.1.1</code>,2026-10-31,"S135
+S13 | publisher: we-have-a-problem.com","Verified by inspecting the images in a container, 2026-10-31."
+R090,os,openSUSE Tumbleweed ca-certificates-mozilla,"On x86_64, openSUSE Tumbleweed ships the fix as ca-certificates-mozilla 2.92-2.1. On aarch64 the image and repository still offered only the unfixed 2.90-1.1, which holds G3, on 31 October 2026.",x86_64 fixed: <code>2.92-2.1</code><br>aarch64: no fix yet (<code>2.90-1.1</code>),2026-10-31,"S135
+S13 | publisher: we-have-a-problem.com","Verified by inspecting the images in a container, 2026-10-31. <strong>Disputed.</strong> The <a href=""https://emudhra.we-have-a-problem.com/"">community tracker</a> gives 2.92-1.1 as the Tumbleweed fix. The <a href=""https://registry.suse.com/"">Tumbleweed images</a> show 2.92-2.1 on x86_64 and only 2.90-1.1 on aarch64. 2.92-1.1 was not seen on either architecture."
+R091,os,openSUSE Leap 15.6 ca-certificates-mozilla,"openSUSE Leap 15.6 repositories offered no fixed ca-certificates-mozilla on 31 October 2026. The newest build offered, 2.84-150200.44.1, still trusts G3.",Vulnerable: <code>2.84-150200.44.1</code><br>Fixed: none offered,2026-10-31,S135,"Verified by inspecting the images in a container, 2026-10-31."
+R092,os,SUSE AAA root,"No SUSE or openSUSE bundle checked (2.84, 2.90 and 2.92 builds) held the AAA root.",,2026-10-31,S135,"Verified by inspecting the images in a container, 2026-10-31."
+R093,os,Homebrew ca-certificates 2026-09-25_1,"Homebrew's ca-certificates 2026-09-25_1, committed on 20 October 2026, drops AAA Certificate Services, emSign Root TLS CA - G3 and emSign ECC Root CA - G3 by public key hash. 2026-09-25 and earlier are vulnerable.",Vulnerable: <code>2026-09-25</code> and earlier<br>Fixed: <code>2026-09-25_1</code>,2026-10-31,"S136
+S123
+S137",
+R094,os,Homebrew ca-certificates 2026-10-20,"Homebrew's current ca-certificates, 2026-10-20, keeps the same public-key exclusions and tests that no excluded key is present.",Fixed: <code>2026-10-20</code> (current stable),2026-10-31,"S138
+S139
+S13 | publisher: we-have-a-problem.com","<strong>Disputed.</strong> The <a href=""https://emudhra.we-have-a-problem.com/"">community tracker</a> gives 2026-09-25_1 as the fixed version. <a href=""https://formulae.brew.sh/api/formula/ca-certificates.json"">Homebrew's formula API</a> shows 2026-10-20 as current stable. Both keep the exclusions, so both are fixed."
+R095,os,Homebrew upstream curl bundle,Homebrew's fix filters by public key. The curl bundle that 2026-09-25_1 builds from still contains the G3 root.,,2026-10-31,"S136
+S140 | date: undated","Verified by inspecting the bundle, 2026-10-31."
+R096,os,Homebrew bundle on macOS,"On macOS, Homebrew builds its bundle from the macOS system keychains and then adds the Mozilla file, so an unfixed install also carries the AAA root from macOS. A 2026-08-13 install's etc/ca-certificates/cert.pem held both G3 and AAA.",,2026-10-31,S139,"Verified by inspecting the Homebrew ca-certificates 2026-08-13 bundle on macOS, 2026-10-31."
+R097,os,Apple automatic block,"Since 19 October 2026 Apple blocks the 12 TLS certificates (six eMudhra-issued, six Sectigo cross-signs) on its devices through automatic configuration updates that need no software update. Since 23 October it also blocks emSign ECC Root CA - G3. Apple says its frameworks do not trust the two code-signing intermediates.",,2026-10-31,S6,
+R098,os,macOS command-line tools and /etc/ssl/cert.pem,"curl, git, python3, ruby, perl and openssl shipped with macOS or the Xcode Command Line Tools trust /etc/ssl/cert.pem and skip Apple's block and revocation checks for chains to its roots. Apple says a future macOS update will fix the file and has not named a version.",Fixed: none yet,2026-10-31,S6,
+R099,os,macOS 26.6.2 /etc/ssl/cert.pem,macOS 26.6.2 (25G83) ships /etc/ssl/cert.pem with both emSign ECC Root CA - G3 and AAA Certificate Services (checked 2026-10-31).,Vulnerable: 26.6.2 (25G83)<br>Fixed: none yet,2026-10-31,"Verified by inspecting /etc/ssl/cert.pem on macOS 26.6.2 (25G83), 2026-10-31.",
+R100,os,macOS 26.6.2 /usr/bin/curl,"On macOS 26.6.2, /usr/bin/curl completes HTTPS requests to the community tracker's test hosts that serve eMudhra-issued and Sectigo cross-signed chains (checked 2026-10-31).",,2026-10-31,S13 | publisher: we-have-a-problem.com,"Verified by a live HTTPS request, 2026-10-31."
+R101,os,macOS SystemRootCertificates keychain,"On macOS 26.6.2, emSign ECC Root CA - G3 and AAA Certificate Services remain in SystemRootCertificates.keychain. Apple delivers its block as separate configuration data, so the keychain entry alone does not show whether Safari or apps are exposed.",,2026-10-31,S6,"Verified by inspecting SystemRootCertificates.keychain on macOS 26.6.2 (25G83), 2026-10-31."
+R102,os,macOS 27.2 and 26.7.2,"Apple's security notes for macOS Golden Gate 27.2 and Tahoe 26.7.2, both released on 26 October 2026, do not mention eMudhra, emSign or /etc/ssl/cert.pem. The community tracker reports that 27.2 left the file unfixed and undid hand edits. Apple has not confirmed this.",,2026-10-31,"S141
+S142
+S143
+S144",27.2 and 26.7.2 were not inspected.
+R103,os,macOS updates replace /etc/ssl/cert.pem,"Apple warns that installing a macOS update may restore its own /etc/ssl/cert.pem, so check the file again after every update until Apple ships a fix.",,2026-10-31,S6,
+R104,os,Apple interim steps for /etc/ssl/cert.pem,"Apple's interim steps remove emSign ECC Root CA - G3 from /etc/ssl/cert.pem, and optionally AAA Certificate Services. Removing G3 alone leaves the six Sectigo cross-signs trusted through AAA.",,2026-10-31,S6,
+R105,os,iOS and iPadOS,iOS and iPadOS receive Apple's block automatically. The iOS 27.2 security notes do not mention eMudhra.,,2026-10-31,"S6
+S145",
+R106,os,Windows Disallowed CTL,"On 20 October 2026 Microsoft updated the Windows Disallowed CTL to block the eight compromised keys by public key, which also covers the Sectigo cross-signs that share those keys. Microsoft gives 01dd5f6ca45c9d86 as the sequence number of that CTL.",Disallowed CTL SequenceNumber <code>01dd5f6ca45c9d86</code>,2026-10-31,"S3 | title: Microsoft Trusted Root Program Announcements
+S5",
+R107,os,Windows trusted root removal,"A 26 October 2026 out-of-band update (KB5134133 for Windows 11, KB5134137 for Windows Server 2025) removed seven certificates from the Windows trust list: emSign ECC Root CA - G3, emSign Root Client Auth CA - G3, emSign Root CS CA - G3, emSign Root SMIME CA - G3, emSign Root TLS CA - G3, emSign Root TSA CA - G3 and AAA Certificate Services.","Fixed: KB5134133 (Windows 11), KB5134137 (Windows Server 2025)",2026-10-31,"S3 | title: Microsoft Trusted Root Program Announcements
+S5","Verified by inspecting the AAA Certificate Services root in SystemRootCertificates.keychain on macOS 26.6.2, 2026-10-31. <strong>Disputed.</strong> <a href=""https://github.com/TrustedRootProgram/Program-Requirements/blob/main/Announcements.md"">Microsoft's announcement</a> calls the seventh certificate an AAA Certificate Services ""cross-sign"". Its SHA-256 thumbprint, D7A7A0FB…9EF4, is that of the AAA Certificate Services root itself, the same as the AAA root in the macOS 26.6.2 system root keychain."
+R108,os,Windows CTL Updater,"Windows downloads the trusted and disallowed CTLs daily through the CTL Updater. Devices with automatic updates off, or without internet access, need the updated CTLs delivered another way.",,2026-10-31,"S146
+S5
+S147",
+R109,os,Windows apps with their own bundles,Microsoft says software that doesn't reliably check revocation or its disallowed list can still accept the compromised chains if it keeps or restores trust in the removed roots. The community tracker says apps with their own CA bundle need their own update.,,2026-10-31,"S5
+S13 | publisher: we-have-a-problem.com",
+R110,os,Android Play services block,Android devices received a block through Google Play services around 22:00 UTC on Monday 19 October 2026. Restarting the device triggers the update.,,2026-10-31,S10,
+R111,os,Android manual disable,"For Android devices without that update, the community tracker suggests disabling emSign ECC Root CA - G3 and AAA Certificate Services under Settings, Trusted credentials, System.",,2026-10-31,S13 | publisher: we-have-a-problem.com,
+R313,os,Linux system bundle paths,"openSUSE writes its bundle to /var/lib/ca-certificates/ca-bundle.pem and links /etc/ssl/ca-bundle.pem to it. Go's list of Linux bundle paths names /etc/ssl/certs/ca-certificates.crt, /etc/pki/tls/certs/ca-bundle.crt, /etc/ssl/ca-bundle.pem, /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem and /etc/ssl/cert.pem. Fedora's update-ca-trust also writes objsign-ca-bundle.pem for code signing.",6 paths,2026-11-02,"S148
+S149
+S150
+S151","Added from the rule verification, 2026-11-02."
+R314,os,Debian 11 ca-certificates build,"Debian 11 (bullseye) now ships 20250419~deb12u1~deb11u1, a backport of the bookworm 20250419~deb12u1 refresh from August 2026, which predates the fix. Debian issued no bullseye fix.",<code>20250419~deb12u1~deb11u1</code>,2026-11-02,"S152
+S153","Added from the rule verification, 2026-11-02."
+R315,os,Ubuntu release pockets,"Ubuntu's release pockets carry the 20260601 builds, which predate the fix. No Debian or Ubuntu build dated after 20260816 had been published by 2 November 2026.",<code>20260601~*</code>,2026-11-02,S154,"Added from the rule verification, 2026-11-02."
+R316,os,CentOS Stream 9 2026.2.92_v9.0.319-91.3.el9,CentOS Stream 9's mirror serves ca-certificates 2026.2.92_v9.0.319-91.3.el9. Its changelog removes emSign Root CS CA - G3 from code signing in 91.2 and fixes that patch's header in 91.3.,<code>2026.2.92_v9.0.319-91.3.el9</code>,2026-11-02,"S155
+S156
+S157","Added from the rule verification, 2026-11-02."
+R317,os,RHEL fixed builds per stream,"Red Hat's data for CVE-2026-114406 gives the fixed ca-certificates build for each RHEL stream, including 10.0 EUS (100.3.el10_0), 9.6 EUS (90.3.el9_6), 9.4 and 9.2 Update Services for SAP Solutions (90.3.el9_4, 90.3.el9_2), 8.8 TUS and E4S (80.3.el8_8), 8.6 AUS and EUS Long-Life (80.3.el8_6), 8.4 AUS (80.3.el8_4), 10 (100.3.el10_2) and 6 ELS (60.3.el6_10).",<code>2026.2.92_v9.0.319</code> builds,2026-11-02,"S158
+S159
+S160
+S161
+S162
+S163
+S164
+S165
+S166","Added from the rule verification, 2026-11-02."
+R318,os,SUSE fixed version 2.92,"Every SUSE and openSUSE fix ships ca-certificates-mozilla version 2.92 with a release number that differs by product, so the version alone decides. openSUSE Leap 15.6 is listed as affected with no fix.",<code>2.92</code>,2026-11-02,"S167
+S168
+S169","Added from the rule verification, 2026-11-02."
+R319,os,Homebrew bundle paths,"Homebrew's ca-certificates formula writes its bundle to etc/ca-certificates/cert.pem in its post-install step, and openssl@3 links etc/openssl@3/cert.pem to that file.","<code>etc/ca-certificates/cert.pem</code>, <code>etc/openssl@3/cert.pem</code>",2026-11-02,"S170
+S171","Added from the rule verification, 2026-11-02."
+R320,os,Pre-fix Homebrew formula and the keychain,"The 2026-09-25 ca-certificates formula on macOS adds certificates from the SystemRootCertificates keychain to its bundle, keeping only those that <code>security verify-cert</code> accepts.",formula at <code>e022b43</code>,2026-11-02,S172,"Added from the rule verification, 2026-11-02."
+R321,os,Mozilla::CA bundle path,"Mozilla::CA's SSL_ca_file returns the path of the bundle the module ships. Debian patches it to return /etc/ssl/certs/ca-certificates.crt, so Debian's package hands out the system bundle. Mozilla::CA 20261020 denylists emSign ECC Root CA - G3.",<code>SSL_ca_file</code>,2026-11-02,"S173
+S174
+S175
+S176","Added from the rule verification, 2026-11-02."
+R355,os,Oracle Linux 7 ca-certificates fix,"Oracle's ELSA-2026-500496 of 23 October 2026 fixes ca-certificates on Oracle Linux 7 with its own build 2025.2.80_v9.0.304-71.0.2.el7_9, which carries Oracle's .0.2 release marker and sorts below Red Hat's RHEL 7 ELS build.",<code>2025.2.80_v9.0.304-71.0.2.el7_9</code>,2026-11-02,S177,"Added from the WRONG-rule fixes, 2026-11-02."
+R356,os,CentOS Stream 10 full fix,"CentOS Stream 10's ca-certificates removes AAA Certificate Services and emSign ECC Root CA - G3 in 100.1, which leaves emSign Root CS CA - G3 trusted for code signing. 100.2 removes that root and 100.3 fixes the patch header 100.2 shipped with. Koji built 100.3.el10.","TLS-only <code>2026.2.92_v9.0.319-100.1.el10</code>, full fix <code>2026.2.92_v9.0.319-100.3.el10</code>",2026-11-02,"S178
+S179","Added from the WRONG-rule fixes, 2026-11-02."
+R112,java,CVE-2026-114820,"CVE-2026-114820 is an Oracle CVE record, assigned by Oracle as the CNA and published on 2026-10-24. It names only Oracle Java SE, Oracle GraalVM for JDK and Oracle GraalVM Enterprise Edition.",,2026-10-31,S21 | title: CVE-2026-114820 record | publisher: MITRE,
+R113,java,CVE-2026-91403,CVE-2026-91403 is also an Oracle CVE record. It was published on 2026-10-21 and names only Oracle products.,,2026-10-31,S24 | title: CVE-2026-91403 record | publisher: MITRE,
+R114,java,OpenJDK advisory of 2026-10-24,"OpenJDK's advisory of 2026-10-24 is its own document for CVE-2026-114820, covering OpenJDK 8, 11, 17, 21, 25 and 27. It lists 27.0.1.0.2, 25.0.5.0.2, 21.0.13.0.2, 17.0.21.0.2, 11.0.32.1, 8u504 and earlier as affected. It does not describe the fix and points to a separate guidance page at openjdk.org/emudhra.","Affected: <code>27.0.1.0.2</code>, <code>25.0.5.0.2</code>, <code>21.0.13.0.2</code>, <code>17.0.21.0.2</code>, <code>11.0.32.1</code>, <code>8u504</code> and earlier",2026-10-31,"S180
+S23",
+R115,java,OpenJDK advisory of 2026-10-21,"OpenJDK's earlier advisory of 2026-10-21 covers CVE-2026-91403. It lists 27.0.1, 25.0.5, 21.0.13, 17.0.21, 11.0.32.1, 8u504 and earlier as affected.","Affected: <code>27.0.1</code>, <code>25.0.5</code>, <code>21.0.13</code>, <code>17.0.21</code>, <code>11.0.32.1</code>, <code>8u504</code> and earlier",2026-10-31,S181,
+R116,java,OpenJDK fix 1 (JDK-8395142),"OpenJDK's first fix (JDK-8395142) added 16 certificates to the JDK's blocked list by SHA-256 fingerprint, the eight compromised intermediates and the eight Sectigo cross-signs issued by AAA Certificate Services. It kept the roots, and Red Hat says it proved easy to bypass. Sonatype reports that re-encoded copies of the blocked certificates passed the list in its tests.",,2026-10-31,"S182
+S183
+S184","Verified by inspecting the source file, 2026-10-31. The re-encoding bypass is a third-party finding."
+R117,java,OpenJDK fix 2 (JDK-8395690),"OpenJDK's second fix (JDK-8395690, under CVE-2026-114820) deletes four roots from cacerts: emsigneccrootcag3, comodoaaaca, emsignrootcag1 and emsignrootcag2. Only emSign ECC Root CA - G3 and AAA Certificate Services relate to the compromised intermediates. With AAA gone, the Sectigo cross-signs no longer chain to a trusted root in the bundled store.","Removed: <code>emsigneccrootcag3 [jdk]</code>, <code>comodoaaaca [jdk]</code>, <code>emsignrootcag1 [jdk]</code>, <code>emsignrootcag2 [jdk]</code>",2026-10-31,"S185
+S186
+S67 | title: Java SE Development Kit 27, 27.0.1.0.3 Release Notes",
+R118,java,Fixed release note marker,OpenJDK says a fixed runtime's release note should state that it fixes JDK-8395690 and CVE-2026-114820.,,2026-10-31,S23,
+R119,java,G3 alias names by vendor,"Vendors store the same emSign ECC Root CA - G3 certificate under four alias styles. OpenJDK, Oracle, Corretto, Zulu, SapMachine and Liberica use emsigneccrootcag3 [jdk], Corretto adds a second copy as emsigneccrootca-g3, Temurin 17 and later use a cn_..._c_in [jdk] form, and Temurin 8 and 11 and Microsoft use a cn=...,c=in form. OpenJDK's alias-based delete commands miss the last three.","<code>emsigneccrootcag3 [jdk]</code><br><code>emsigneccrootca-g3</code><br><code>cn_emsign_ecc_root_ca__g3,o_emudhra_technologies_limited,ou_emsign_pki,c_in [jdk]</code><br><code>cn=emsign_ecc_root_ca_-_g3,o=emudhra_technologies_limited,ou=emsign_pki,c=in</code>",2026-10-31,"S187
+S188
+S189
+S189 | title: eclipse-temurin:11.0.32.1_1-jre image
+S190
+S23
+S191
+S192
+S193
+S194","Verified by inspecting the cacerts files, 2026-10-31."
+R120,java,keytool fingerprint check,"keytool -list -cacerts lists the JDK's bundled store and prints each entry's SHA-256 fingerprint by default, so a grep for the G3 and AAA fingerprints finds them under any alias. The store's initial password is changeit.",,2026-10-31,S195,
+R121,java,keytool subject check,"keytool -list -v prints each certificate's owner and issuer, so a grep on the Owner line matches the root by subject name.",,2026-10-31,S195,
+R122,java,Bundled keystore path,"A JDK's bundled store is lib/security/cacerts under the JDK home on JDK 11 and later, and jre/lib/security/cacerts on JDK 8.",,2026-10-31,S23,
+R123,java,Deleting the roots by hand,"For a runtime that can't be updated, OpenJDK says to back up cacerts, delete the four [jdk] aliases with keytool -delete and restart running Java processes. It says to ignore errors that a certificate does not exist, because not every runtime has all four.",,2026-10-31,S23,
+R124,java,Revocation checking,"As a last resort for TLS clients, OpenJDK suggests turning on revocation checking with -Dcom.sun.net.ssl.checkRevocation=true and -Dcom.sun.security.enableCRLDP=true. For signed JARs on JDK 17 and later it suggests jarsigner -verify -revcheck -strict.",,2026-10-31,S23,
+R125,java,OpenJDK CheckCerts.java,"OpenJDK's CheckCerts.java prints BAD ROOT for any trusted root whose subject names G3, AAA, G1 or G2, and exits with status 1. Its own comments class G1 and G2 as unrelated to the compromised intermediates.",,2026-10-31,"S186
+S23",
+R126,java,Several JDKs on one machine,"Each Java installation has its own cacerts, so a machine with several JDKs needs each one checked and fixed. A running Java process keeps the store it loaded until it restarts.",,2026-10-31,S23,
+R127,java,Upstream OpenJDK 27 (jdk.java.net),"OpenJDK 27.0.1 and 27.0.1.0.2 from jdk.java.net ship all four roots, AAA Certificate Services included. OpenJDK 27.0.1.0.3, the current build there, ships none of them.",Vulnerable: <code>27.0.1.0.2</code> and earlier<br>Fixed: <code>27.0.1.0.3</code>,2026-10-31,"S196
+S187
+S197
+S198","Verified by inspecting the cacerts file in each tarball, 2026-10-31."
+R128,java,Oracle Java SE affected list,"Oracle's alert says the fix is Java updates that remove the impacted eMudhra roots. It lists Oracle Java SE 8u511-b32, 8u511-perf-b32, 11.0.33.0.2, 17.0.21.0.2, 21.0.13.0.2, 25.0.5.0.2 and 27.0.1.0.2 as affected by CVE-2026-114820.",,2026-10-31,"S22
+S21 | title: CVE-2026-114820 record | publisher: MITRE",
+R129,java,Oracle JDK 8,"Oracle JDK 8u511 b33, released 2026-10-24, removes the four roots from cacerts. Oracle's alert of the same day lists 8u511-b32 as affected.",Vulnerable: <code>8u511 b32</code> and earlier<br>Fixed: <code>8u511 b33</code>,2026-10-31,"S199
+S22
+S25","<strong>Disputed.</strong> Oracle's <a href=""https://www.oracle.com/security-alerts/alert-cve-2026-91403.html"">alert for CVE-2026-91403</a> (2026-10-21) lists 8u511 as affected, with no build number. Its <a href=""https://www.oracle.com/security-alerts/alert-cve-2026-114820.html"">alert for CVE-2026-114820</a> (2026-10-24) lists 8u511-b32, and the <a href=""https://www.oracle.com/java/technologies/javase/8u511-b33-relnotes.html"">8u511 b33 release notes</a> show b33 removing the roots. Check the build number as well as the update number."
+R130,java,Oracle JDK 21 and 27,"Oracle JDK 21.0.13.0.3 and 27.0.1.0.3, released 2026-10-24, remove the four roots from cacerts, comodoaaaca [jdk] included.","Fixed: <code>21.0.13.0.3</code>, <code>27.0.1.0.3</code>",2026-10-31,"S194
+S67 | title: Java SE Development Kit 27, 27.0.1.0.3 Release Notes",
+R131,java,Oracle JDK 25,Oracle JDK 25.0.5.0.2 ships all four roots in cacerts. Oracle JDK 25.0.5.0.3 ships none of them.,Vulnerable: <code>25.0.5.0.2</code><br>Fixed: <code>25.0.5.0.3</code>,2026-10-31,"S200
+S201","Verified by inspecting the cacerts file in each tarball, 2026-10-31."
+R132,java,Oracle GraalVM,Oracle lists Oracle GraalVM for JDK 17.0.21.0.2 and 21.0.13.0.2 and Oracle GraalVM Enterprise Edition 21.3.20.0.2 as affected by CVE-2026-114820.,,2026-10-31,S22,No fixed GraalVM build was found. GraalVM Community Edition was not checked.
+R133,java,Temurin trust store source,"Temurin builds its cacerts from Mozilla's CA list instead of upstream OpenJDK's list. The fixed builds use NSS 3.131.1 data, which drops emSign ECC Root CA - G3, emSign Root CA - C1 and emSign ECC Root CA - C3. Adoptium also names AAA Certificate Services as removed, but no pre-fix Temurin build checked contained it.",,2026-10-31,"S202
+S203
+S189 | title: eclipse-temurin 8, 11, 17, 21 and 25 pre-fix images","Verified by inspecting the cacerts file in each image, 2026-10-31."
+R134,java,Temurin fixed builds,"Adoptium lists Temurin 27.0.1.0.2+1, 25.0.5+8, 21.0.13+9 and 17.0.21+9 as the fixed builds.","Fixed: <code>27.0.1.0.2+1</code>, <code>25.0.5+8</code>, <code>21.0.13+9</code>, <code>17.0.21+9</code>",2026-10-31,S202,
+R135,java,Eclipse Temurin 17,Temurin 17.0.20.1+1 contains emSign ECC Root CA - G3. Temurin 17.0.21+9 does not.,Vulnerable: <code>17.0.20.1+1</code> and earlier<br>Fixed: <code>17.0.21+9</code>,2026-10-31,"S189 | title: eclipse-temurin:17.0.20.1_1-jre image
+S204","Verified by inspecting the cacerts file in the image and the tarball, 2026-10-31."
+R136,java,Eclipse Temurin 21,Temurin 21.0.12.1+1 contains emSign ECC Root CA - G3. Temurin 21.0.13+9 does not.,Vulnerable: <code>21.0.12.1+1</code> and earlier<br>Fixed: <code>21.0.13+9</code>,2026-10-31,"S189
+S189 | title: eclipse-temurin:21.0.13_9-jre image","Verified by inspecting the cacerts file in each image, 2026-10-31."
+R137,java,Eclipse Temurin 25,"Temurin 25.0.4.1+1 contains emSign ECC Root CA - G3. Temurin 25.0.5+8 does not, and Adoptium lists it as fixed.",Vulnerable: <code>25.0.4.1+1</code> and earlier<br>Fixed: <code>25.0.5+8</code>,2026-10-31,"S189 | title: eclipse-temurin:25.0.4.1_1-jre image
+S189 | title: eclipse-temurin:25.0.5_8-jre image
+S202
+S205","Verified by inspecting the cacerts file in each image, 2026-10-31. <strong>Disputed.</strong> A <a href=""https://lilting.ch/en/articles/openjdk-cve-2026-91403-emudhra-cacerts"">third-party test write-up</a> (update of 2026-10-23) read Temurin 25.0.5+8 as a pre-fix build, because upstream's first fix landed in a later jdk25u tag. <a href=""https://adoptium.net/news/2026/10/temurin-october-2026-emudhra"">Adoptium</a> lists 25.0.5+8 as fixed through Mozilla's NSS 3.131.1 data, and the <a href=""https://hub.docker.com/_/eclipse-temurin"">25.0.5+8 image</a> has no G3 root. The two describe different mechanisms. Whether 25.0.5+8 also carries upstream's blocked-certificate list was not checked."
+R138,java,Eclipse Temurin 27 and the 27-jre tag,"Temurin 27.0.1.0.2+1 has no emSign ECC Root CA - G3. The eclipse-temurin:27-jre image tag still pointed at 27+35, with G3, on 2026-10-31. Adoptium publishes container images only after every binary of a version is out.",Vulnerable: <code>27+35</code> (<code>27-jre</code> tag on 2026-10-31)<br>Fixed: <code>27.0.1.0.2+1</code>,2026-10-31,"S206
+S189 | title: eclipse-temurin:27-jre image
+S202","Verified by inspecting the cacerts file in the image and the tarball, 2026-10-31."
+R139,java,Eclipse Temurin 8 and 11,"Adoptium had no fixed Temurin 8 or 11 build and was waiting for upstream tags. On 2026-10-31 the latest builds were 8u504-b01 and 11.0.32.1+1, and both still contain emSign ECC Root CA - G3.","Vulnerable: <code>8u504-b01</code>, <code>11.0.32.1+1</code> and earlier<br>Fixed: none yet",2026-10-31,"S202
+S207
+S189 | title: eclipse-temurin:11.0.32.1_1-jre image
+S189 | title: eclipse-temurin:8u504-b01-jre image","Verified by inspecting the cacerts file in each image, 2026-10-31."
+R140,java,Temurin and AAA Certificate Services,"No pre-fix Temurin build checked (8, 11, 17, 21 and 25) contains AAA Certificate Services, so those builds trusted the G3 root path and never the cross-sign path.",,2026-10-31,"S189
+S189 | title: eclipse-temurin:25.0.4.1_1-jre image
+S189 | title: eclipse-temurin:17.0.20.1_1-jre image
+S189 | title: eclipse-temurin:11.0.32.1_1-jre image
+S189 | title: eclipse-temurin:8u504-b01-jre image
+S202","Verified by inspecting the cacerts file in each image, 2026-10-31."
+R141,java,Roots left in fixed Temurin,"Fixed Temurin builds keep emSign Root CA - G1 because Mozilla still trusts it, and OpenJDK's CheckCerts flags it as a BAD ROOT anyway. No Temurin build checked carries G2, and Adoptium says its trust store does not include it. The fixed builds also drop emSign Root CA - C1 and emSign ECC Root CA - C3.",,2026-10-31,"S202
+S189 | title: eclipse-temurin:21.0.13_9-jre image
+S189 | title: eclipse-temurin:25.0.5_8-jre image","Verified by inspecting the cacerts file in each image, 2026-10-31."
+R142,java,Amazon Corretto changelogs,"Corretto 8.512.09.1, 11.0.33.0.10, 17.0.21.0.11, 21.0.13.0.11, 25.0.5.0.10 and 27.0.1.0.11, released 2026-10-24, list CVE-2026-114820 as addressed. The 2026-10-20 builds list CVE-2026-91403 among their October CPU fixes, but not CVE-2026-114820. The changelogs don't mention eMudhra or cacerts.",,2026-10-31,"S208
+S209
+S210
+S211
+S212
+S213",
+R143,java,Amazon Corretto 21,"Corretto 21.0.13.0.10 contains emSign ECC Root CA - G3, G1, G2 and AAA Certificate Services. Corretto 21.0.13.0.11 contains none of them.",Vulnerable: <code>21.0.13.0.10</code> and earlier<br>Fixed: <code>21.0.13.0.11</code>,2026-10-31,"S188
+S214","Verified by inspecting the cacerts file in each tarball, 2026-10-31."
+R144,java,Amazon Corretto 8,"Corretto 8.512.08.1 contains emSign ECC Root CA - G3, G1, G2 and AAA Certificate Services in a JKS store. Corretto 8.512.09.1 contains none of them.",Vulnerable: <code>8.512.08.1</code> and earlier<br>Fixed: <code>8.512.09.1</code>,2026-10-31,"S215
+S216","Verified by inspecting the cacerts file in each tarball, 2026-10-31."
+R145,java,Corretto's second G3 copy,"Corretto's cacerts holds G3 and G1 twice, under the OpenJDK alias emsigneccrootcag3 [jdk] and under an Amazon Linux alias emsigneccrootca-g3. Deleting only OpenJDK's alias leaves the second copy trusted.",,2026-10-31,"S188
+S215","Verified by inspecting the cacerts file in each tarball, 2026-10-31."
+R146,java,Roots left in fixed Corretto,Fixed Corretto builds still contain emSign Root CA - C1 and emSign ECC Root CA - C3 from amazon-cacerts. A reply on Corretto's issue tracker says neither chains to the compromised intermediates.,,2026-10-31,"S217
+S214
+S216","Verified by inspecting the cacerts file in each tarball, 2026-10-31. The reply author's role is not shown."
+R147,java,RHEL OpenJDK RPMs,"OpenJDK RPMs in RHEL have no CA bundle of their own and use the system ca-certificates store, so updating ca-certificates fixes them. Red Hat issues no RHEL update for CVE-2026-91403.",,2026-10-31,"S218
+S183",
+R148,java,UBI 9 OpenJDK 21 image,"In the UBI 9 OpenJDK 21 image, the JDK's cacerts is a symlink to /etc/pki/java/cacerts, which points to /etc/pki/ca-trust/extracted/java/cacerts. The image built on 2026-10-22 has neither emSign ECC Root CA - G3 nor AAA Certificate Services in that store.",,2026-10-31,S219,"Verified by inspecting the cacerts file in each image, 2026-10-31."
+R149,java,Red Hat build of OpenJDK,"The Red Hat build of OpenJDK for Linux and Windows ships its own CA store and needs updating apart from ca-certificates. RHSA-2026:89916 (2026-10-27), for 17.0.21 on Windows, describes the CVE-2026-91403 intermediate distrust in its fix list. It also lists CVE-2026-114820 among its CVEs, with no fix description for it.",,2026-10-31,"S218
+S220",
+R150,java,Distro and Homebrew OpenJDK packages,"OpenJDK says its packages in Arch Linux, Fedora, Gentoo, Oracle Linux and RHEL use the OS certificates, so updating those is likely enough. FreeBSD and Homebrew OpenJDK packages don't, and need their own updates.",,2026-10-31,S23,
+R151,java,Azul Zulu subscriber builds,"Azul's out-of-cycle update of 2026-10-24 removes CA certificates from Zulu's cacerts. Every build in its fix list is a Subscriber Availability (SA) build, and Azul says a later update will likely bring the same change to Out-of-Cycle PSU builds of version 25 and earlier.","Fixed (SA): <code>27.30.110</code>, <code>25.37.116</code>, <code>21.53.114</code>, <code>17.69.114</code>, <code>11.91.114</code>, <code>8.97.0.112</code><br>July-based: <code>25.35.304</code>, <code>21.51.304</code>, <code>17.67.304</code>, <code>11.89.304</code>, <code>8.95.0.304</code>",2026-10-31,S221,Zulu 21.53.114 reports JDK 21.0.12.1.103+1. Compare the Zulu build number with Azul's fixed list.
+R152,java,Azul Zulu free builds,"The free Zulu 21 image azul/zulu-openjdk:21.0.13-21.54-jre, pushed 2026-10-29, still ships all four roots, emSign ECC Root CA - G3 and AAA Certificate Services included. The earlier 21.0.12.1-21.52 image ships them too.",Vulnerable: <code>21.0.13-21.54</code> and earlier<br>Fixed: none found,2026-10-31,"S191
+S191 | title: azul/zulu-openjdk:21.0.13-21.54-jre image | date: 2026-10-29
+S222
+S221","Verified by inspecting the cacerts file in each image, 2026-10-31. <strong>Disputed.</strong> <a href=""https://docs.azul.com/core/release-notes"">Azul's notes of 2026-10-24</a> say the update removes CA certificates from Zulu's <code>cacerts</code>. The free <a href=""https://hub.docker.com/r/azul/zulu-openjdk"">21.0.13-21.54 image</a>, pushed 2026-10-29, still holds all four roots. Every build in Azul's fix list is a subscriber build, which would explain the gap. That explanation is an inference."
+R153,java,Microsoft Build of OpenJDK,"Microsoft's release notes up to 21.0.13.0.2 and 25.0.5.0.2 don't mention eMudhra, JDK-8395690 or either CVE. The 21-ubuntu and 25-ubuntu images, created 2026-10-30, still contain emSign ECC Root CA - G3 and AAA Certificate Services.","Vulnerable: <code>21.0.13.0.2</code>, <code>25.0.5.0.2</code><br>Fixed: none yet",2026-10-31,"S223
+S190
+S190 | title: mcr.microsoft.com/openjdk/jdk:25-ubuntu image","Verified by inspecting the cacerts file in each image, 2026-10-31. Microsoft's <a href=""https://learn.microsoft.com/en-us/java/openjdk/release-notes"">release notes</a> say nothing about eMudhra or either CVE. The current <a href=""https://mcr.microsoft.com/en-us/artifact/mar/openjdk/jdk"">21-ubuntu and 25-ubuntu images</a> both still carry G3 and AAA."
+R154,java,SapMachine 21,SapMachine 21.0.13.0.2 ships all four roots. SapMachine 21.0.13.0.3 ships none of them. No SAP statement on the issue was found.,Vulnerable: <code>21.0.13.0.2</code> and earlier<br>Fixed: <code>21.0.13.0.3</code>,2026-10-31,"S192
+S192 | title: sapmachine:21.0.13.0.3-jre image","Verified by inspecting the cacerts file in each image, 2026-10-31. SapMachine 17, 25 and 27 were not inspected."
+R155,java,BellSoft Liberica 21,"Liberica 21.0.12.1+1 ships all four roots, plus Mozilla's emSign C1 and C3 entries. Liberica 21.0.13.0.3+5 ships no emSign or AAA root. No BellSoft statement was found.",Vulnerable: <code>21.0.12.1+1</code> and earlier<br>Fixed: <code>21.0.13.0.3+5</code>,2026-10-31,"S193
+S193 | title: bellsoft/liberica-openjdk-debian:21.0.13.0.3-5 image","Verified by inspecting the cacerts file in each image, 2026-10-31. Liberica 17, 25 and 27 were not inspected."
+R156,java,IBM Semeru,"IBM lists Semeru 8.0.302.0 to 8.0.504.5, 11.0.12.0 to 11.0.32.15, 17.0.0.0 to 17.0.20.15, 21.0.0.0 to 21.0.12.15 and 25.0.0.0 to 25.0.4.15 as affected. It names 17.0.21.0, 21.0.13.0 and 25.0.5.0 as fixes and no fixed release for 8 or 11. IBM says the one root in unfixed Semeru that chains to the compromised intermediates is emSign ECC Root CA - G3.","Fixed: <code>17.0.21.0</code>, <code>21.0.13.0</code>, <code>25.0.5.0</code><br>8 and 11: no fix named",2026-10-31,S70,Semeru artifacts were not inspected.
+R157,java,Debian and Ubuntu Java keystore,"On Debian, Ubuntu and derivatives, updating ca-certificates and ca-certificates-java does not refresh /etc/ssl/certs/java/cacerts, because of a long-standing ca-certificates-java bug.",,2026-10-31,"S23
+S224
+S225",
+R158,java,Rebuilding the Debian Java keystore,OpenJDK's Debian workaround is to delete /etc/ssl/certs/java/cacerts as root and rebuild it with update-ca-certificates --fresh.,,2026-10-31,"S23
+S225",
+R159,java,Application truststores,IBM's keytool commands remove the root only from the runtime's default cacerts. IBM says applications with their own JKS or PKCS12 truststore must have the roots removed from that file.,,2026-10-31,S70,
+R322,java,cacerts location,"A JDK keeps its cacerts in lib/security under the Java home from JDK 9 on. In JDK 8 it is in the JRE's lib/security, which is jre/lib/security inside a JDK.","<code>lib/security/cacerts</code>, <code>jre/lib/security/cacerts</code>",2026-11-02,"S195 | title: keytool (JDK 21)
+S226","Added from the rule verification, 2026-11-02."
+R323,java,Encrypted PKCS #12 contents,"A password-encrypted PKCS #12 entry is a PKCS #7 EncryptedData with OID 1.2.840.113549.1.7.6. The JDK's own cacerts has been a password-less PKCS #12 since JDK-8275252, so its certificates stay readable.",<code>1.2.840.113549.1.7.6</code>,2026-11-02,"S227
+S228
+S229
+S230","Added from the rule verification, 2026-11-02."
+R357,java,Java keystore formats by their first bytes,"OpenJDK recognises JKS by the magic number FEEDFEED and JCEKS by CECECECE. Its PKCS12 probe accepts a PFX that opens with a SEQUENCE of any length form, BER indefinite (30 80), short or one to four length bytes, then version 3 (02 01 03) and an authSafe ContentInfo of type data (OID 1.2.840.113549.1.7.1). RFC 7292 allows BER for the PFX.","JKS <code>FEEDFEED</code>, JCEKS <code>CECECECE</code>, PKCS12 <code>30 80</code> or <code>30 xx</code> to <code>30 84</code>, <code>02 01 03</code>, data OID",2026-11-02,"S231
+S232
+S233
+S234","Added from the WRONG-rule fixes, 2026-11-02."
+R160,python,certifi,"Every certifi release from 2019.3.9 through 2026.7.22 bundles emSign ECC Root CA - G3. Each bundle names the root in a Label comment, so it can be found by name as well as by fingerprint.",Vulnerable: <code>2019.3.9</code> to <code>2026.7.22</code>,2026-10-31,"S235
+S236
+S237","Verified by inspecting the package, 2026-10-31."
+R161,python,certifi 2026.10.18,"certifi 2026.10.18, published 2026-10-18, removed all four emSign roots: the compromised G3 and the unaffected G1, C1 and C3. Users reported that it broke connections to sites that chain to the other emSign roots.",First patched per the GHSA: <code>2026.10.18</code>,2026-10-31,"S236
+S238
+S239
+S237","Verified by inspecting the package, 2026-10-31. The breakage reports are user comments on the certifi issue."
+R162,python,certifi 2026.10.19,"GHSA-6q48-6c7w-9gw2 lists certifi from 2019.03.09 up to 2026.10.18 as vulnerable, with 2026.10.18 as the first patched release. certifi 2026.10.19 restores emSign Root CA - G1, C1 and C3 and still leaves out G3, and the PSF recommends it or later over 2026.10.18. It reached PyPI on 2026-10-20 despite its version number.",Target: <code>2026.10.19</code> or later,2026-10-31,"S235
+S236
+S240
+S241
+S237","Verified by inspecting the package, 2026-10-31. <a href=""https://github.com/advisories/GHSA-6q48-6c7w-9gw2"">GHSA-6q48-6c7w-9gw2</a> lists 2026.10.18 as the first patched release and itself advises 2026.10.19 or later. The <a href=""https://discuss.python.org/t/information-for-python-users-regarding-emudhra-emsign-ca-certificate-security-incident/109576"">PSF advisory</a> recommends 2026.10.19 because 2026.10.18 also removed unaffected emSign roots. Neither release holds the G3 root."
+R163,python,certifi 2026.10.23,certifi 2026.10.23 keeps emSign Root CA - G1 as its only emSign root.,<code>2026.10.23</code>: G1 only,2026-10-31,"S242
+S237","Verified by inspecting the package, 2026-10-31."
+R164,python,"certifi, AAA Certificate Services root","Every certifi release up to and including 2025.1.31 also holds Sectigo's AAA Certificate Services root, which issued cross-signed copies of all eight compromised intermediates. That includes 2018.11.29, which has no G3 root and falls outside the GHSA range. Releases from 2025.4.26 on do not hold it.",AAA root: <code>2025.1.31</code> and earlier,2026-10-31,"S236
+S241
+S237","Verified by inspecting the package, 2026-10-31. <strong>Disputed.</strong> <a href=""https://github.com/advisories/GHSA-6q48-6c7w-9gw2"">GHSA-6q48-6c7w-9gw2</a> starts the vulnerable range at 2019.03.09 and covers only the G3 root. Inspection of the <a href=""https://files.pythonhosted.org/packages/32/d1/a3652fe2c19134d0d15922177821d863cbd7e842d53a21bbe7e8e3a1b5ac/certifi-2026.10.23-py3-none-any.whl"">certifi wheels</a> finds the AAA root in every release up to 2025.1.31, including 2018.11.29, and the <a href=""https://discuss.python.org/t/information-for-python-users-regarding-emudhra-emsign-ca-certificate-security-incident/109576"">PSF thread</a> says old certifi bundles hold it. That an old client builds a chain through the cross-sign is reasoning and was not tested live."
+R165,python,certifi,python -m certifi prints the path of the bundle certifi uses. An installed certifi records its version in a certifi-VERSION.dist-info directory next to the certifi package in site-packages.,,2026-10-31,"S243
+S237","Verified by inspecting the package, 2026-10-31."
+R166,python,"requirements.txt, poetry.lock, uv.lock, Pipfile.lock","A certifi pin appears as a requirement line such as certifi==2026.7.22 in requirements.txt, as a [[package]] entry with name = ""certifi"" followed by its version in poetry.lock and uv.lock, and under a ""certifi"" key with a ""version"": ""==VERSION"" field in Pipfile.lock.",,2026-10-31,"S244
+S245
+S246
+S247
+S248",
+R167,python,pip,"pip carries its own copy of certifi at pip/_vendor/certifi/cacert.pem, separate from any installed certifi package. python -m pip debug prints that bundle's path and the vendored certifi version. pip 26.2.2 also names its certifi version in pip/_vendor/bom.cdx.json.",,2026-10-31,"S241
+S249
+S250","Verified by inspecting the package, 2026-10-31. The pip debug output format is provisional and may change."
+R168,python,pip,"pip 26.2.2, released 2026-10-20, is the first pip whose vendored certifi (2026.10.19) leaves out emSign ECC Root CA - G3. pip 26.2.1 vendors certifi 2026.6.17, which holds G3. pip 24.0 and 25.0.1 vendor certifi 2023.7.22 and 2024.8.30, which hold both G3 and the AAA root.",Vulnerable: <code>26.2.1</code> and earlier<br>Fixed: <code>26.2.2</code>,2026-10-31,"S251
+S252
+S249","Verified by inspecting the package, 2026-10-31."
+R169,python,pip,"From pip 24.2, on Python 3.10 and later, pip trusts the system store and its vendored certifi together. Older pip uses only its vendored certifi. Either way, a fixed OS store does not stop pip before 26.2.2 trusting G3. REQUESTS_CA_BUNDLE and --cert add CAs to pip's set and leave the vendored roots in place.",,2026-10-31,"S241
+S251",The point about REQUESTS_CA_BUNDLE and --cert comes from a reply on the PSF forum thread (secondary). pip's own documentation on it was not read.
+R170,python,Debian python3-pip,Debian patches its pip package so the vendored certifi returns /etc/ssl/certs/ca-certificates.crt. Debian's pip therefore follows the system ca-certificates package.,,2026-10-31,S253,
+R171,python,Virtual environments,"Every virtual environment has its own pip, so each existing venv needs pip upgraded on its own. A venv has a pyvenv.cfg file at its root.",,2026-10-31,"S241
+S254
+S255",
+R172,python,uv,"uv verifies TLS by default against roots compiled into its binary. Up to 0.10.x it uses the webpki-roots crate, which stores each root as a subject name and public key, and from 0.11.0 the webpki-root-certs crate of full certificates. Releases before 0.13.4 include emSign ECC Root CA - G3. uv 0.13.4, released 2026-10-20, moves to webpki-root-certs 1.0.10, and its binary no longer holds the root.",Vulnerable: <code>0.13.3</code> and earlier<br>Fixed: <code>0.13.4</code>,2026-11-04,"S256
+S254
+S257
+S258
+S259
+S546
+S547
+S548
+S549
+S550
+S551","Verified by inspecting the binary, 2026-10-31. The binary grep was confirmed on Linux x86_64 builds only. The crate each release locks was read from its pinned Cargo.lock, 2026-11-04."
+R173,python,uv,"uv 0.13.5, released 2026-10-21, also rejects certificate chains that contain the compromised keys, through rustls-webpki 0.103.16.",<code>0.13.5</code>,2026-10-31,S254,
+R174,python,uv-managed Python,"uv 0.13.5 moves its managed CPython 3.11 and newer builds to versions that bundle pip 26.2.2. The new builds arrive only after uv python upgrade, and venvs pinned to an older patch version keep the old interpreter.",,2026-10-31,S254,
+R175,python,uv,"uv uses the operating system's verifier instead of its bundled roots when given --system-certs, UV_SYSTEM_CERTS=true or system-certs = true in uv.toml. Setting SSL_CERT_FILE or SSL_CERT_DIR replaces uv's default certificate source entirely, so uv then trusts only those certificates.",,2026-10-31,"S241
+S257",
+R176,python,"CPython 3.13, 3.14, 3.15","Python 3.15.1, 3.14.9 and 3.13.17 bundle pip 26.2.2 with certifi 2026.10.19.","<code>3.15.1</code>, <code>3.14.9</code>, <code>3.13.17</code>",2026-10-31,"S254
+S260",
+R177,python,CPython ssl module,"Python 3.15.2, 3.14.10, 3.13.18, 3.12.16 and 3.11.18 make the ssl module reject chains that use the compromised intermediate keys (CVE-2026-115557). The check matches the public key, so it also rejects the Sectigo cross-signs, and it does not run when verification is off (CERT_NONE). 3.15.2 and 3.14.10 have binary installers, and 3.13.18, 3.12.16 and 3.11.18 are source-only releases.","<code>3.15.2</code>, <code>3.14.10</code>, <code>3.13.18</code>, <code>3.12.16</code>, <code>3.11.18</code>",2026-10-31,"S261
+S75",
+R178,python,"CPython 3.11, 3.12",The current Python 3.11 and 3.12 releases bundle pip 24.0 and 25.0.1. A reply on the PSF thread says security releases will not upgrade that pip. Both pip versions hold G3 and the AAA root.,,2026-10-31,"S241
+S249","Verified by inspecting the package, 2026-10-31. The statement that 3.11 and 3.12 security releases will not upgrade pip is a reply on the PSF forum thread (secondary)."
+R179,python,CPython 3.10 and older,Python 3.10 and older are end of life and get no fix. uv's changelog says the pip bundled with CPython 3.9 and 3.10 still trusts emSign ECC Root CA - G3.,No fix,2026-10-31,"S241
+S254",
+R180,python,python.org macOS installer,"The python.org macOS installer includes the certifi bundle, which needs its own pip install --upgrade certifi run with that interpreter.",,2026-10-31,"S236
+S241",
+R181,python,requests,"Requests takes its trusted CAs from the installed certifi package unless REQUESTS_CA_BUNDLE or CURL_CA_BUNDLE points elsewhere, so updating certifi fixes it.",,2026-10-31,S262,
+R182,python,HTTPX,"HTTPX verifies against the certifi bundle by default, so updating certifi fixes it.",,2026-10-31,S263,
+R183,python,truststore,"truststore verifies against the operating system's certificate store instead of certifi, so it follows the OS store.",,2026-10-31,S264,
+R184,python,conda,"conda 26.9.4 requires certifi 2026.10.19 or later and ca-certificates 2026.10.20 or later on Anaconda main, or 2026.10.19 or later on conda-forge. The ca-certificates bundle is ssl/cacert.pem under the base directory on macOS and Linux, and Library/ssl/cacert.pem on Windows.","conda <code>26.9.4</code>, <code>ca-certificates</code> <code>2026.10.20</code> (main) or <code>2026.10.19</code> (conda-forge), <code>certifi</code> <code>2026.10.19</code>",2026-10-31,S265,
+R185,python,conda environments,"Each conda environment has its own certifi and ca-certificates, and updating base does not update the other environments.",,2026-10-31,S265,
+R186,python,"mamba, libmamba","conda-forge rebuilt mamba and libmamba with the CA minimum without changing the version number, so the build string has to be checked as well as the version.",,2026-10-31,S265,
+R187,python,"Anaconda main, retired platforms","Anaconda's main channel has not rebuilt its CA packages for osx-64, linux-ppc64le and linux-s390x, which it no longer supports.",No fix yet,2026-10-31,S265,
+R188,python,Pixi,Standalone Pixi binaries bundle their own roots. Pixi 0.82.1 fixes them with webpki-root-certs 1.0.10 and rustls-webpki 0.103.16.,Fixed: <code>0.82.1</code>,2026-10-31,"S241
+S265",
+R189,python,"sigstore, virtualenv",The PSF advisory also lists sigstore 4.5.1 and virtualenv 21.14.12 as minimum versions.,"sigstore <code>4.5.1</code>, virtualenv <code>21.14.12</code>",2026-10-31,S241,"Their release notes were not read, so the reason for each minimum is unconfirmed."
+R324,python,"CPython 3.13.18, 3.14.10 and 3.15.2","CPython 3.13.18, 3.14.10 and 3.15.2, released 25 October 2026, make the ssl module reject chains that use the compromised intermediate keys, and their ensurepip installs pip 26.2.2.","<code>3.13.18</code>, <code>3.14.10</code>, <code>3.15.2</code>",2026-11-02,"S266
+S267
+S268
+S269
+S270
+S271
+S272","Added from the rule verification, 2026-11-02."
+R325,python,CPython branch status,"CPython 3.10 reached end of life on 1 October 2026 and 3.9 on 31 October 2025, so neither gets the ssl key block.",3.10 and older end-of-life,2026-11-02,S273,"Added from the rule verification, 2026-11-02."
+R326,python,certifi vendored by pip,"pip 26.2.2 (20 October 2026) vendors certifi 2026.10.19. pip 26.2.1 vendors certifi 2026.6.17, which still holds emSign ECC Root CA - G3.",pip <code>26.2.2</code>,2026-11-02,"S274
+S275
+S276","Added from the rule verification, 2026-11-02."
+R327,python,certifi bundles linked or removed by packagers,Homebrew's certifi replaces cacert.pem with a link to the ca-certificates bundle. Alpine's py3-certifi deletes cacert.pem.,,2026-11-02,"S277
+S278","Added from the rule verification, 2026-11-02."
+R328,python,INSTALLER values from distribution tools,"Debian's dh-python writes debian to a package's INSTALLER file, and Fedora's pyproject macros rewrite it from pip to rpm. The packaging spec says INSTALLER is informational.","<code>debian</code>, <code>rpm</code>",2026-11-02,"S279
+S280
+S281","Added from the rule verification, 2026-11-02."
+R329,python,importlib.metadata,"importlib.metadata was added in Python 3.8, so an older python3 cannot report the certifi and pip it has installed this way.",3.8,2026-11-02,S282,"Added from the rule verification, 2026-11-02."
+R330,python,uv's Rust crates,"uv 0.13.4 locks webpki-root-certs 1.0.10 and rustls-webpki 0.103.14. uv 0.13.5 moves to rustls-webpki 0.103.16, which rejects chains that contain the compromised keys.","uv <code>0.13.4</code>, <code>0.13.5</code>",2026-11-02,"S283
+S284
+S285","Added from the rule verification, 2026-11-02."
+R354,python,Debian's patched certifi where(),"Debian patches certifi's core.py, and the copy pip vendors, so that where() returns DEBIAN_CA_CERTS_PATH, the system bundle /etc/ssl/certs/ca-certificates.crt. Debian bullseye and bookworm and Ubuntu jammy and noble python3-certifi still ship the upstream cacert.pem, and Debian python3-pip keeps pip/_vendor/certifi/cacert.pem, but neither is used. Debian trixie and later drop certifi's cacert.pem.","<code>DEBIAN_CA_CERTS_PATH = '/etc/ssl/certs/ca-certificates.crt'</code>, <code>return DEBIAN_CA_CERTS_PATH</code>",2026-11-02,"S286
+S287
+S288
+S289
+S290","Added from the WRONG-rule fixes, 2026-11-02."
+R358,python,Pip bundled with CPython 3.11.18 and 3.12.16,"CPython 3.11.18 and 3.12.16 block the compromised keys in ssl, but their ensurepip still installs pip 24.0 and pip 25.0.1. Those pip releases vendor certifi 2023.7.22 and 2024.8.30, which hold emSign ECC Root CA - G3.","pip <code>24.0</code> (3.11.18), pip <code>25.0.1</code> (3.12.16)",2026-11-02,"S291
+S292
+S293
+S294","Added from the WRONG-rule fixes, 2026-11-02."
+R350,python,CPython 3.16 pre-releases,"The ssl key block reached CPython main on 24 October 2026, after 3.16.0a1 was released on 13 October, so 3.16.0a1 lacks it. The first 3.16 build with the block is 3.16.0a2, scheduled for 10 November 2026.",<code>3.16.0a2</code>,2026-11-02,"S295
+S296
+S297","Added from the WRONG-rule fixes, 2026-11-02."
+R190,js,Node.js,"Node.js compiles in a snapshot of the Mozilla CA store, fixed at release time and exposed as tls.rootCertificates. Only a Node.js upgrade changes it.",,2026-10-31,"S69
+S298",
+R191,js,Node.js,"Node.js PR #66877 moved the bundled store to NSS 3.131.1, which removes emSign ECC Root CA - G3, emSign Root CA - C1 and emSign ECC Root CA - C3.",,2026-10-31,S299,
+R192,js,Node.js 22,"Node.js 22.23.4, released 2026-10-21 per its changelog, is the first 22.x release without emSign ECC Root CA - G3. The 22.23.3 binary still holds the root as PEM text.",Vulnerable: <code>22.23.3</code> and earlier<br>Fixed: <code>22.23.4</code>,2026-10-31,"S300
+S301
+S302
+S303","Verified by inspecting the binary, 2026-10-31. <strong>Disputed.</strong> The <a href=""https://github.com/nodejs/node/blob/main/doc/changelogs/CHANGELOG_V22.md"">Node.js 22 changelog</a> dates 22.23.4 to 2026-10-21. The <a href=""https://nodejs.org/dist/index.json"">distribution index</a> lists it as 2026-10-20. The binary grep was confirmed on Linux x64 builds only."
+R193,js,Node.js 24,Node.js 24.22.1 is the first 24.x release without emSign ECC Root CA - G3. The 24.22.0 binary still holds it.,Vulnerable: <code>24.22.0</code> and earlier<br>Fixed: <code>24.22.1</code>,2026-10-31,"S303
+S304
+S302","Verified by inspecting the binary, 2026-10-31. <strong>Disputed.</strong> The <a href=""https://github.com/nodejs/node/blob/main/doc/changelogs/CHANGELOG_V24.md"">Node.js 24 changelog</a> dates 24.22.1 to 2026-10-21. The <a href=""https://nodejs.org/dist/index.json"">Node.js distribution index</a> lists it as 2026-10-20."
+R194,js,Node.js 26,"Node.js 26.12.1, released 2026-10-21, is the first 26.x release without emSign ECC Root CA - G3. The 26.12.0 binary still holds it.",Vulnerable: <code>26.12.0</code> and earlier<br>Fixed: <code>26.12.1</code>,2026-10-31,"S305
+S302","Verified by inspecting the binary, 2026-10-31."
+R195,js,Node.js 20,"Node.js 20 reached end of life on 2026-04-30 and has no fix. Its last release, 20.20.2, still bundles emSign ECC Root CA - G3, and its last root store update was NSS 3.119.",Vulnerable: all 20.x<br>Fixed: none,2026-10-31,"S303
+S306
+S307
+S302","Verified by inspecting the binary, 2026-10-31."
+R196,js,Node.js,"Node.js 22.23.4, 24.22.1 and 26.12.1 also reject certificate chains that contain blocked public keys.",,2026-10-31,"S300
+S304
+S305",The changelogs do not say which keys are on the list.
+R197,js,Node.js,"The Node.js October 2026 security release lists the eMudhra CA update as a dependency change for 26.x, 24.x and 22.x, with no CVE.",,2026-10-31,S308,
+R198,js,Node.js,"NODE_EXTRA_CA_CERTS only adds certificates to the bundled roots, so it cannot remove emSign ECC Root CA - G3. --use-system-ca and NODE_USE_SYSTEM_CA=1 add the system store alongside the bundled roots, and Node.js does not apply the system's distrust settings.",,2026-10-31,S69,
+R199,js,Node.js,"--use-openssl-ca makes Node.js use OpenSSL's default CA store instead of its bundled one. On most Linux distributions the distribution maintains that store, and its location depends on how OpenSSL was configured.",,2026-10-31,S69,Not tested against a fixed distribution store.
+R200,js,npm packages,The GitHub Advisory Database has no reviewed npm advisory for a package that vendors a CA bundle with the G3 root. Electron's is the only npm advisory about this incident from 2026-10-17 to 2026-10-31.,None named,2026-10-31,S309,218 advisories were reviewed. Absence of an advisory does not prove that no package vendors the root.
+R201,js,Bun,"Bun embeds a root store, root_certs.der, generated from NSS certificate data. Bun 1.4.4, released 2026-10-22, is the first release without emSign ECC Root CA - G3, and its only emSign root is emSign Root CA - G1. Bun 1.4.3 still holds G3.",Vulnerable: <code>1.4.3</code> and earlier<br>Fixed: <code>1.4.4</code>,2026-10-31,"S310
+S311
+S312
+S313
+S314","Verified by inspecting the binary, 2026-10-31. The binary grep was confirmed on Linux x64 builds only. Whether 1.4.4 also carries the blocked public key check from PR #46300 is not confirmed."
+R202,js,Deno,"Deno uses its bundled Mozilla roots by default. DENO_TLS_CA_STORE selects system, mozilla or both, in the order given.",,2026-10-31,S315,
+R203,js,Deno,"Deno 2.9.8, released 2026-10-21, is the first Deno release without emSign ECC Root CA - G3. It moves to webpki-roots and webpki-root-certs 1.0.10 and to rustls-webpki 0.103.16, which rejects paths containing the eight compromised keys, cross-signs included. Deno 2.9.7 still holds G3.",Vulnerable: <code>2.9.7</code> and earlier<br>Fixed: <code>2.9.8</code>,2026-10-31,"S316
+S317
+S318
+S319
+S320
+S321","Verified by inspecting the binary, 2026-10-31. <strong>Disputed.</strong> Deno <a href=""https://github.com/denoland/deno/issues/37056"">issue #37056</a> reported that 2.9.8 was tagged with no release. The <a href=""https://github.com/denoland/deno/releases/tag/v2.9.8"">v2.9.8 release</a> was published about an hour after the issue was filed, and the issue was closed as premature. A YARA hit for the compromised intermediates inside Deno 2.9.8 or later likely comes from its distrust list. Judge Deno by version and the root grep."
+R204,js,Deno 2.9.7,The Deno 2.9.7 binary also holds Sectigo's AAA Certificate Services root. Its Cargo.lock pins webpki-root-certs 0.26.6 and webpki-roots 0.26.1. Deno 2.9.8 does not hold the root.,AAA root: <code>2.9.7</code>,2026-10-31,"S319
+S321","Verified by inspecting the binary, 2026-10-31. Which Deno code path loads the AAA root was not traced."
+R331,js,Node.js bundled roots per release,"Node.js compiles its root list from src/node_root_certs.h. emSign ECC Root CA - G3 is in it at 22.23.3, 24.22.0 and 26.12.0, at 24.19.0, and at the last tag of every end-of-life line from 12 to 25, and gone at 22.23.4, 24.22.1, 26.12.1 and on main at ae22341. Electron's fixed releases bundle Node 24.19.0 or 24.22.0, which still list it.","Removed in <code>22.23.4</code>, <code>24.22.1</code>, <code>26.12.1</code>",2026-11-02,"S322
+S323
+S324
+S325
+S326
+S327
+S328
+S329
+S330
+S331
+S332
+S333
+S334
+S335
+S336
+S337
+S338
+S339
+S340
+S341","Added from the rule verification, 2026-11-02."
+R332,js,Node.js release lines,"Node.js 18, 19, 20, 21, 23 and 25 are end-of-life and got no release after the fix. 27.x entered alpha on 28 October 2026, cut from main after the root update merged.","20 ended 2026-04-30, 25 ended 2026-06-01",2026-11-02,"S342
+S343","Added from the rule verification, 2026-11-02."
+R333,js,Node.js release URL in the binary,"An official Node.js release build embeds its download URL, https://nodejs.org/download/release/vX.Y.Z/node-vX.Y.Z, which names the version twice. Custom and non-release builds leave it out.",<code>nodejs.org/download/release/vX.Y.Z/node-vX.Y.Z</code>,2026-11-02,"S344
+S345
+S346","Added from the rule verification, 2026-11-02."
+R334,js,ISRG Root X1 first line,The base64 of ISRG Root X1 starts with MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAw. The check looks for this line in a Node binary. That a binary without it is a patched build rests on <a href='#r352'>R352</a>.,<code>MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAw</code>,2026-11-02,S347,"Added from the rule verification, 2026-11-02."
+R335,js,Zed's Node.js,Zed downloads its own Node.js into a node directory under its data directory and runs bin/node from there.,,2026-11-02,S348,"Added from the rule verification, 2026-11-02."
+R336,js,Bun bundled roots per release,"Bun's bundled root list holds emSign ECC Root CA - G3 at bun-v1.4.3 and not at bun-v1.4.4, released 22 October 2026. 1.4.4 also carries the blocked-key check from pull request 46300.",<code>1.4.4</code>,2026-11-02,"S349
+S350
+S351
+S352","Added from the rule verification, 2026-11-02."
+R337,js,Deno 2.9.8 crates and key blocklist,Deno 2.9.8 moves from webpki-roots 0.26.1 and rustls-webpki 0.103.13 to webpki-roots and webpki-root-certs 1.0.10 and rustls-webpki 0.103.16. rustls-webpki 0.103.16 ships the eight compromised public keys as a blocklist.,<code>2.9.8</code>,2026-11-02,"S353
+S354
+S355
+S356","Added from the rule verification, 2026-11-02."
+R352,js,Node.js root list is always compiled in,"Node.js includes node_root_certs.h in crypto_context.cc unconditionally. The --openssl-use-def-ca-store configure option, which Alpine and Fedora use, only changes the default store at run time, so every upstream build carries the bundled list and a binary without it is a patched build.",,2026-11-02,"S357
+S358","Added from the WRONG-rule fixes, 2026-11-02."
+R353,js,Node version manager layouts,"nvm installs Node at $NVM_DIR/versions/node/vX.Y.Z, and below 0.12.0 directly at $NVM_DIR/vX.Y.Z. fnm installs at BASE/node-versions/vX.Y.Z/installation, where BASE is ~/.local/share/fnm, or ~/.fnm when that exists. mise installs under ~/.local/share/mise/installs, and mise install --system under /usr/local/share/mise/installs, which MISE_SYSTEM_INSTALLS_DIR moves.","<code>.nvm/v*</code>, <code>.fnm/node-versions/v*</code>, <code>/usr/local/share/mise/installs/node/*</code>",2026-11-02,"S359
+S360
+S361
+S362","Added from the WRONG-rule fixes, 2026-11-02."
+R205,langs,Go crypto/x509,CVE-2026-111943 (GO-2026-6809) covers only Go's standard library. Go added a denylist to crypto/x509 so that Certificate.Verify rejects the compromised intermediates.,"<code>CVE-2026-111943</code>, <code>GO-2026-6809</code>",2026-10-31,"S19 | title: Vulnerability Report: GO-2026-6809
+S363
+S18 | title: CVE-2026-111943",
+R206,langs,Go toolchain,"Go 1.26.10 and 1.27.3, released 2026-10-19, carry the denylist. Earlier releases, including 1.27.0 to 1.27.2, do not.","Vulnerable: <code>1.26.9</code> and earlier, <code>1.27.0</code> to <code>1.27.2</code><br>Fixed: <code>1.26.10</code>, <code>1.27.3</code>",2026-10-31,"S363
+S364
+S365
+S18 | title: CVE-2026-111943",
+R207,langs,Go crypto/x509,"Go's fix matches the SHA-256 hashes of the eight intermediates' public keys (SPKI). Sectigo's cross-signs reuse those keys, so the denylist also rejects chains through AAA Certificate Services. It applies when Go hands verification to the macOS or Windows platform verifier too.",,2026-10-31,S73 | title: [release-branch.go1.27] crypto/x509: distrust a handful of intermediates,"Verified by inspecting the certificates, 2026-10-31."
+R208,langs,Go crypto/x509,"Go's standard library ships no root bundle. On Linux it reads the first system bundle it finds, starting with /etc/ssl/certs/ca-certificates.crt, and SSL_CERT_FILE or SSL_CERT_DIR override that. From Go 1.27, setting either on macOS or Windows also turns off the platform verifier.",,2026-10-31,"S366
+S367",
+R209,langs,Go binaries,"govulncheck -mode binary checks a compiled Go binary against the Go vulnerability database, which flags toolchains without the CVE-2026-111943 fix.",,2026-10-31,"S368
+S363",
+R210,langs,golang.org/x/crypto/x509roots/fallback,"Importing golang.org/x/crypto/x509roots/fallback embeds a root set in the binary. The module has no tagged releases, so projects pin it by pseudo-version. Go uses those roots only when no custom roots, platform verifier or system pool is available, such as in a container with no CA bundle, or when GODEBUG=x509usefallbackroots=1 forces them.",,2026-10-31,"S369
+S367
+S370
+S371",
+R211,langs,golang.org/x/crypto/x509roots/fallback,"The fallback bundle at v0.0.0-20260916154351-b853e4b620cd holds the G3 root. The 2026-10-20 update, v0.0.0-20261020153306-9f2b28d4331a, removes it along with emSign Root CA - C1 and emSign ECC Root CA - C3.",Vulnerable: <code>v0.0.0-20260916154351-b853e4b620cd</code> and earlier<br>Fixed: <code>v0.0.0-20261020153306-9f2b28d4331a</code>,2026-10-31,"S372
+S373
+S374
+S375","Verified by inspecting the package, 2026-10-31."
+R212,langs,golang.org/x/crypto/x509roots/fallback,"The February 2025 fallback bundle, v0.0.0-20250203165127-fa5273e46196, and every earlier bundle back to the module's first commit also hold the AAA root. The May 2025 update, v0.0.0-20250512154111-9f6bf8449a9f, dropped AAA and kept G3.",,2026-10-31,"S376
+S377","Verified by inspecting the February and May 2025 module zips, and bundle.go at golang/crypto commits d0b316056be8, 152cdb1503eb and 8c4e668694cc by subject name, 2026-10-31."
+R213,langs,golang.org/x/crypto/x509roots/fallback,The Go vulnerability database has no advisory for golang.org/x/crypto/x509roots/fallback (searched 2026-10-31).,,2026-10-31,S378,
+R214,langs,Go binaries,"go version -m lists the fallback module and its pseudo-version in a binary that embeds it. A binary built with the old bundle contains the G3 root's subject, DER and SHA-256 as text. One built with the fixed bundle contains none of them.",,2026-10-31,"S379
+S372
+S373","Verified by inspecting the binary, 2026-10-31."
+R215,langs,webpki-roots,"webpki-roots compiles Mozilla's root set into the crate, so its roots change only when the crate is updated and the program is rebuilt.",,2026-10-31,S380,
+R216,langs,webpki-roots,"RUSTSEC-2026-0381 marks webpki-roots releases that include the G3 root as affected. 1.0.10, published 2026-10-19, is the first fixed release, and 0.26.11 is listed as unaffected.","Vulnerable: below <code>1.0.10</code>, except <code>0.26.11</code><br>Fixed: <code>1.0.10</code>",2026-10-31,"S381
+S382
+S383",
+R217,langs,webpki-roots,"webpki-roots 1.0.9 holds the G3 root and 1.0.10 does not. 1.0.10 still holds emSign Root CA - C1 and emSign ECC Root CA - C3, which 1.0.11 (2026-10-23) removes in a separate change tracked in Mozilla Bug 2083709.",,2026-10-31,"S384
+S385
+S386
+S387
+S383","Verified by inspecting the package, 2026-10-31."
+R218,langs,webpki-roots,"webpki-roots 0.26.11 has no root list of its own. It re-exports its webpki-roots 1.x dependency, so it is safe only when Cargo.lock resolves that dependency to 1.0.10 or later. 0.26.10 and earlier carry their own list with the G3 root, and the 0.26 line has no other fix.",,2026-10-31,"S381
+S388
+S389
+S390
+S382","Verified by inspecting the package, 2026-10-31."
+R219,langs,webpki-roots,"webpki-roots 0.26.9 and earlier, including 0.25.4, also hold the AAA root. 0.26.10 dropped it.",,2026-10-31,"S391
+S392
+S389
+S393","Verified by inspecting the package, 2026-10-31."
+R220,langs,webpki-root-certs,"RUSTSEC-2026-0383 fixes webpki-root-certs in 1.0.10, and its 0.26.11 is a wrapper that needs a 1.x dependency of 1.0.10 or later. 1.0.9 holds the G3 root as a full certificate and 1.0.10 does not.","Vulnerable: below <code>1.0.10</code>, except <code>0.26.11</code><br>Fixed: <code>1.0.10</code>",2026-10-31,"S394
+S395
+S396
+S397
+S398","Verified by inspecting the package, 2026-10-31."
+R221,langs,webpki-root-certs,webpki-root-certs 0.26.9 and earlier also hold the AAA root. 0.26.10 does not.,,2026-10-31,"S399
+S400
+S401","Verified by inspecting the package, 2026-10-31."
+R222,langs,Rust binaries,"From 0.11.0, uv checks TLS by default against a vendored copy of webpki-root-certs. Earlier releases use webpki-roots. Its 0.13.3 binary contains the G3 root's subject name as text, and 0.13.4, built with webpki-root-certs 1.0.10, does not.",,2026-11-04,"S256
+S254
+S259 | title: uv 0.13.4 wheel | date: 2026-10-20
+S258
+S546
+S547
+S548
+S549","Verified by inspecting the binary, 2026-10-31. The crate each release locks was read from its pinned Cargo.lock, 2026-11-04."
+R223,langs,rustls-webpki,"rustls-webpki 0.103.16 (published 2026-10-20) and 0.104.0-alpha.8 reject any certificate path that contains one of the eight compromised public keys, whatever trust anchors are configured. The key list matches each eMudhra intermediate and its Sectigo cross-sign, so it blocks the AAA path too. 0.103.15 has no such list.","Vulnerable: <code>0.103.15</code> and earlier, <code>0.104.0-alpha.1</code> to <code>alpha.7</code><br>Fixed: <code>0.103.16</code>, <code>0.104.0-alpha.8</code>",2026-10-31,"S402
+S403
+S404
+S405
+S74 | date: 2026-10-20
+S406","Verified by inspecting the package, 2026-10-31."
+R224,langs,"webpki-roots, webpki-root-certs, rustls-webpki","The three RustSec advisories list CVE-2026-111943 as an alias, and that CVE record names only Go's crypto/x509. Use the RUSTSEC IDs for the Rust crates.",,2026-10-31,"S382
+S403
+S395
+S18 | title: CVE-2026-111943","<strong>Disputed.</strong> RustSec lists <code>CVE-2026-111943</code> as an alias in <a href=""https://raw.githubusercontent.com/rustsec/advisory-db/main/crates/webpki-roots/RUSTSEC-2026-0381.md"">RUSTSEC-2026-0381</a>, <a href=""https://raw.githubusercontent.com/rustsec/advisory-db/main/crates/rustls-webpki/RUSTSEC-2026-0382.md"">RUSTSEC-2026-0382</a> and <a href=""https://raw.githubusercontent.com/rustsec/advisory-db/main/crates/webpki-root-certs/RUSTSEC-2026-0383.md"">RUSTSEC-2026-0383</a>. The <a href=""https://cveawg.mitre.org/api/cve/CVE-2026-111943"">CVE-2026-111943 record</a> has Go as its CNA and names only <code>crypto/x509</code>, with no Rust package. Not resolved."
+R225,langs,"rustls-native-certs, rustls-platform-verifier","rustls-native-certs has no bundle. It loads SSL_CERT_FILE if set, otherwise the Windows system store, the macOS keychain or the Linux OpenSSL locations, and with webpki it treats every root found as trusted, ignoring OS distrust decisions. On Linux, rustls-platform-verifier checks against the system CA bundle with webpki and no OS revocation data.",,2026-10-31,"S407
+S408",
+R226,langs,Cargo,cargo tree -i followed by a crate name shows which packages pull that crate in.,,2026-10-31,S409,
+R227,langs,composer/ca-bundle,composer/ca-bundle returns the system CA bundle path when it finds one and falls back to its own bundled Mozilla file otherwise.,,2026-10-31,S410,
+R228,langs,composer/ca-bundle,"composer/ca-bundle 1.6.0 and 1.4.16, both released 2026-10-20, move res/cacert.pem to Mozilla's 2026-10-20 data and distrust the compromised intermediates. 1.5.14 and 1.4.15 still bundle the G3 root.","Vulnerable: <code>1.5.14</code>, <code>1.4.15</code> and earlier<br>Fixed: <code>1.6.0</code>, <code>1.4.16</code>",2026-10-31,"S411
+S412
+S413
+S414
+S415
+S416
+S417","Verified by inspecting the package, 2026-10-31."
+R229,langs,composer/ca-bundle,"composer/ca-bundle 1.6.0 and 1.4.16 add CaBundle::findDistrustedCertificate, which matches a chain against the SHA-256 hashes of the eight compromised public keys. The list names the AAA cross-signs.",,2026-10-31,"S411
+S415
+S417","Verified by inspecting the source file, 2026-10-31."
+R230,langs,composer/ca-bundle,"composer/ca-bundle 1.5.6 and 1.4.7 and earlier also bundle the AAA root. 1.5.7 and 1.4.8, released 2025-05-26, dropped it.",,2026-10-31,"S418
+S419
+S420
+S421
+S413","Verified by inspecting the package, 2026-10-31."
+R231,langs,Composer,"Composer 2.11.0 and the 2.2.31 LTS, released 2026-10-29, reject TLS connections that present the compromised intermediates even when the system store trusts their roots. 2.2.31 requires composer/ca-bundle 1.4.16 or later. There is no fixed 2.10.x, and the last 2.10 release is 2.10.3 from 2026-08-27.","Vulnerable: <code>2.10.3</code> and earlier, <code>2.2.30</code> and earlier<br>Fixed: <code>2.11.0</code>, <code>2.2.31</code>",2026-10-31,"S422
+S423
+S424",
+R232,langs,PHP,PHP's openssl.cafile and openssl.capath default to empty and PHP's manual names no bundled CA file. PHP uses the system store or a file you configure.,,2026-10-31,"S425
+S426",
+R233,langs,"RubyGems, Bundler","RubyGems bundles one certificate, GlobalSign Root CA - R3, with no emSign or AAA root. RubyGems and Bundler trust OpenSSL's default CA locations plus that file, so their exposure comes from the system store.",,2026-10-31,"S427
+S428
+S429
+S430","Verified by inspecting the bundled certificate, 2026-10-31."
+R234,langs,excon,"With no CA settings, excon trusts OpenSSL's default locations plus its bundled data/cacert.pem. excon 1.8.0, released 2026-10-21, removes the G3, C1 and C3 roots from that bundle, and 1.7.3 still holds G3.",Vulnerable: <code>1.7.3</code> and earlier<br>Fixed: <code>1.8.0</code>,2026-10-31,"S431
+S432
+S433
+S434","Verified by inspecting the package, 2026-10-31."
+R235,langs,excon,"excon 1.2.5 and earlier also bundle the AAA root. 1.2.6, released 2025-05-27, dropped it.",,2026-10-31,"S435
+S436
+S433","Verified by inspecting the package, 2026-10-31."
+R236,langs,httpclient,"httpclient 2.9.0, the latest release (2025-02-22), loads its own bundled cacert.pem by default. That bundle is Mozilla data from 2015 and holds the AAA root but not the G3 root. No later release exists as of 2026-10-31.",Vulnerable: <code>2.9.0</code> (AAA path)<br>Fixed: none yet,2026-10-31,"S437
+S438","Verified by inspecting the package, 2026-10-31."
+R237,langs,AAA Certificate Services,"Sectigo cross-signed all eight compromised intermediates under AAA Certificate Services. Removing only the G3 root leaves those cross-signs, which chain to the AAA root, unblocked.",,2026-10-31,"S13 | date: 2026-10-20
+S1
+S2 | title: impacted-intermediates.json
+S3",The tracker says six cross-signed intermediates. It counts the six TLS CAs. Sectigo also cross-signed the two code-signing CAs.
+R238,langs,Root fingerprints,emSign ECC Root CA - G3 has SHA-256 fingerprint 86A1ECBA089C4A8D3BBE2734C612BA341D813E043CF9E8A862CD5C57A36BBE6B. AAA Certificate Services has D7A7A0FB5D7E2731D771E9484EBCDEF71D5F0C3E0A2948782BC83EE0EA699EF4.,G3: <code>86A1ECBA089C4A8D3BBE2734C612BA341D813E043CF9E8A862CD5C57A36BBE6B</code><br>AAA: <code>D7A7A0FB5D7E2731D771E9484EBCDEF71D5F0C3E0A2948782BC83EE0EA699EF4</code>,2026-10-31,S7 | title: roots.json,
+R239,langs,Mozilla::CA,"CVE-2026-113812 covers Perl's Mozilla::CA before 20261020, which bundles the G3 root in lib/Mozilla/CA/cacert.pem. 20261020, released 2026-10-20, denylists the G3 root by SHA-256.",Vulnerable: before <code>20261020</code><br>Fixed: <code>20261020</code>,2026-10-31,"S26 | title: CVE-2026-113812
+S439
+S440",
+R240,langs,Mozilla::CA,"Mozilla::CA 20260813 bundles the G3 root. 20261020 does not, and keeps emSign Root CA - C1 and emSign ECC Root CA - C3.",,2026-10-31,"S441
+S442","Verified by inspecting the package, 2026-10-31."
+R241,langs,Mozilla::CA,"The Mozilla::CA 20261020 bundle header dates its Mozilla data to 2026-09-25, while its Changes file says the data was updated to 2026-10-20. The G3 root is gone either way, because the denylist removes it.",,2026-10-31,"S442
+S439","Verified by inspecting the package, 2026-10-31. <strong>Disputed.</strong> The <code>cacert.pem</code> header in the <a href=""https://cpan.metacpan.org/authors/id/L/LW/LWP/Mozilla-CA-20261020.tar.gz"">Mozilla-CA 20261020 tarball</a> says the Mozilla data is from 2026-09-25. The <a href=""https://metacpan.org/release/LWP/Mozilla-CA-20261020"">MetaCPAN Changes for 20261020</a> say the bundle was updated to 2026-10-20. Not resolved."
+R242,langs,Mozilla::CA,"Mozilla::CA 20250202 and earlier also bundle the AAA root, and 20250602 does not. The 20261020 build denylist names AAA Certificate Services and emSign Root TLS CA - G3, so neither can enter later bundles.",,2026-10-31,"S443
+S444
+S442","Verified by inspecting the package, 2026-10-31."
+R243,langs,"Mozilla::CA, IO::Socket::SSL","Perl clients built on IO::Socket::SSL, such as LWP and HTTP::Tiny, use OpenSSL's default CA store first and load Mozilla::CA only when no usable system store is found.",,2026-10-31,"S445
+S26 | title: CVE-2026-113812",
+R244,langs,castore,"castore exists only to ship priv/cacerts.pem, and each store update is a new patch release. 1.0.22, released 2026-10-20, removes the G3 root, and 1.0.21 still holds it.",Vulnerable: <code>1.0.21</code> and earlier<br>Fixed: <code>1.0.22</code>,2026-10-31,"S446
+S447
+S448
+S449
+S450","Verified by inspecting the package, 2026-10-31."
+R245,langs,castore,castore 1.0.13 and earlier also bundle the AAA root. 1.0.14 does not.,,2026-10-31,"S451
+S452
+S453","Verified by inspecting the package, 2026-10-31."
+R246,langs,Hex certifi,"Hex certifi 2.18.0, released 2026-10-23, bundles 118 roots matching curl's 2026-10-20 bundle, without the C1, C3 and G3 roots, and 2.17.0 holds G3. The certificates are compiled into the Erlang module, so an upgrade needs a clean rebuild of the dependency.",Vulnerable: <code>2.17.0</code> and earlier<br>Fixed: <code>2.18.0</code>,2026-10-31,"S454
+S455
+S456
+S457
+S458","Verified by inspecting the package, 2026-10-31."
+R247,langs,Hex certifi,"Hex certifi 2.14.0 and earlier also bundle the AAA root. 2.15.0, released 2025-05-25, does not.",,2026-10-31,"S459
+S460
+S461","Verified by inspecting the package, 2026-10-31."
+R248,langs,Elixir Mix,"mix deps.tree prints the dependency tree, which shows what pulls in castore or certifi.",,2026-10-31,S462,
+R249,langs,Erlang/OTP,"Erlang/OTP's public_key:cacerts_get/0 loads the operating system's CA certificates, so code that uses it follows the OS store.",,2026-10-31,S463,
+R250,langs,.NET,".NET has no CA bundle of its own. It uses the Windows certificate store on Windows and the system trust settings on macOS. On Linux it finds roots through OpenSSL (SSL_CERT_FILE, SSL_CERT_DIR, distribution defaults) and falls back to /etc/ssl/certs.",,2026-10-31,S464,
+R251,langs,.NET,"On Linux, .NET does not use the Disallowed store when building chains, so a block there has no effect. .NET reads its Linux roots from the OpenSSL locations, so removing the root from that bundle takes effect.",,2026-10-31,S464,
+R252,langs,curl cacert.pem,"curl publishes Mozilla's root store as dated cacert.pem revisions. cacert-2026-09-25 (121 certificates) holds the G3 root. cacert-2026-10-20 (118) does not, and also drops C1 and C3.",Vulnerable: <code>cacert-2026-09-25</code> and earlier<br>Fixed: <code>cacert-2026-10-20</code>,2026-10-31,"S130
+S140 | title: cacert-2026-09-25.pem
+S129 | title: cacert-2026-10-20.pem","Verified by inspecting the bundle, 2026-10-31."
+R253,langs,curl cacert.pem,curl bundles from 2025-08-12 onward hold no AAA root. Earlier revisions were not checked.,,2026-10-31,"S465
+S466
+S467
+S140 | title: cacert-2026-09-25.pem
+S129 | title: cacert-2026-10-20.pem","Verified by inspecting the bundle, 2026-10-31."
+R254,langs,curl,"Some programs expect the bundle as ca-bundle.crt, and the curl tool on Windows looks for curl-ca-bundle.crt in the application directory, the working directory, the Windows directories and PATH. curl built with Schannel uses the Windows native store. Otherwise CURL_CA_BUNDLE, SSL_CERT_FILE and SSL_CERT_DIR point the curl tool at a CA file.",,2026-10-31,"S130
+S468",
+R255,langs,"Dart SDK, Flutter SDK","GHSA-frr6-h895-5pxp (2026-10-23) says dart:io apps on Android and Windows check chains with Dart's built-in BoringSSL and ignore OS blocklists, and Linux apps are exposed where the system ca-certificates bundle is not updated. Web, iOS and macOS apps are not affected. Dart 3.13.7 (beta 3.14.0-315.3.beta) and Flutter 3.47.8 (3.50.0-0.2.pre) fix it.","Vulnerable: Dart before <code>3.13.7</code>, Flutter before <code>3.47.8</code><br>Fixed: Dart <code>3.13.7</code>, Flutter <code>3.47.8</code>",2026-10-31,"S68
+S469",
+R256,langs,"Dart SDK, Flutter SDK","The fix updates BoringSSL to distrust the compromised intermediates during chain verification, and on Android 14 and later also loads roots from the updatable Conscrypt module. Android, Windows and Linux apps must be rebuilt with a patched SDK and redeployed.",,2026-10-31,S469,
+R338,langs,golang.org/x/crypto fallback history,"Commit 9f2b28d4331a of 20 October 2026 removes emSign ECC Root CA - G3 from the x509roots/fallback bundle. The commit before it that touched the module is b853e4b of 16 September 2026, and an August 2026 commit says Go 1.25 is no longer supported.",<code>9f2b28d4331a</code>,2026-11-02,"S470
+S471
+S472","Added from the rule verification, 2026-11-02."
+R339,langs,go.mod toolchain line,"The toolchain line in go.mod is a suggested toolchain, and with GOTOOLCHAIN=local the go command always runs its bundled toolchain.",,2026-11-02,S473,"Added from the rule verification, 2026-11-02."
+R340,langs,Go build info layout,Since Go 1.18 the linker sets flag bit 0x2 in the build info header and stores strings inline. Earlier toolchains store pointers instead.,<code>flagsVersionInl = 0x2</code>,2026-11-02,"S474
+S475","Added from the rule verification, 2026-11-02."
+R341,langs,Rust source paths and the Cargo home,"rustc embeds source paths in panic messages, and Cargo unpacks downloaded crates under registry/src and checks out git dependencies under git/checkouts. The Cargo book says that layout is not stabilized.",,2026-11-02,"S476
+S477","Added from the rule verification, 2026-11-02."
+R342,langs,crates.io release lists,"crates.io lists 0.26.11 as the last 0.26 release of webpki-roots, 0.26.4 as the first release of webpki-root-certs, 0.102.8 (September 2024) as the last 0.102 release of rustls-webpki, and 0.103.16 and 0.104.0-alpha.8 on 20 October 2026.",,2026-11-02,"S478
+S479
+S480","Added from the rule verification, 2026-11-02."
+R343,langs,webpki-roots before 0.26,"webpki-roots 0.25.4 holds emSign ECC Root CA - G3, and the root first appears in 0.17.0. Releases up to 0.16.0 hold AAA Certificate Services and no G3 root.",G3 from <code>0.17.0</code>,2026-11-02,"S481
+S482
+S393 | title: webpki-roots 0.25.4","Added from the rule verification, 2026-11-02."
+R344,langs,webpki-root-certs and rustls-webpki crate contents,webpki-root-certs 0.26.4 holds emSign ECC Root CA - G3. Its 0.26.11 holds no roots and re-exports those of its webpki-root-certs 1.x dependency. rustls-webpki 0.104.0-alpha.8 ships the eight blocked keys and alpha.7 does not.,,2026-11-02,"S483
+S484
+S485
+S486","Added from the rule verification, 2026-11-02."
+R345,langs,"composer/ca-bundle 1.4.16, 1.5.14 and 1.6.0",composer/ca-bundle 1.4.16 and 1.6.0 (20 October 2026) distrust the compromised intermediates and ship Mozilla's bundle of that day. 1.5.14 (August 2026) is the last 1.5 release and its bundle still holds emSign ECC Root CA - G3.,"Fixed <code>1.4.16</code>, <code>1.6.0</code>",2026-11-02,"S487
+S488","Added from the rule verification, 2026-11-02."
+R257,apps,Chrome CRLSet,"Chrome blocked the public keys of the compromised intermediates through a CRLSet on 17 October 2026, with no browser update or restart. Because the block is by key, it also covers the Sectigo cross-signs under AAA Certificate Services, which reuse those keys.",CRLSet of 2026-10-17,2026-10-31,S10,
+R258,apps,Chrome Root Store,"Chrome Root Store v43 drops emSign ECC Root CA - G3, and v42 still has it. Google said v43 would reach every device that relies on the Chrome Root Store on 27 October 2026. AAA Certificate Services is not in v41, v42 or v43.",Vulnerable: <code>v42</code> and earlier<br>Fixed: <code>v43</code>,2026-10-31,"S10
+S8 | title: root_store.textproto at 5a6a4e7 (Chrome Root Store v42) | date: 2026-10-09
+S72 | title: root_store.textproto at 8793082 (Chrome Root Store v43) | date: 2026-10-20
+S489","Verified by inspecting the source file, 2026-10-31."
+R259,apps,Microsoft Edge and WebView2,"Microsoft blocks the affected TLS certificates in Edge and WebView2 with its own CRLSet, delivered through component updates. On 27 October 2026 it removed seven certificates from the Edge trust list, six eMudhra G3 roots and AAA Certificate Services.",Edge trust list of 2026-10-27,2026-10-31,"S5
+S3
+S7 | title: roots.json","<strong>Disputed.</strong> Microsoft's <a href=""https://www.microsoft.com/en-us/msrc/blog/2026/10/microsoft-response-to-compromised-emudhra-certificate-authority-keys"">MSRC post</a> calls the seventh certificate an AAA Certificate Services cross-sign. The thumbprint in the <a href=""https://github.com/TrustedRootProgram/Program-Requirements/blob/main/Announcements.md"">Trusted Root Program announcement</a>, <code>D7A7A0FB…9EF4</code>, is the AAA root itself per the <a href=""https://emudhra.we-have-a-problem.com/roots.json"">community tracker root list</a>."
+R260,apps,Firefox OneCRL,"Firefox blocked the compromised intermediates through OneCRL on 17 October 2026. The update reached every user with standard settings by 22:59 UTC that day, with no browser update.",OneCRL push of 2026-10-17,2026-10-31,S4,
+R261,apps,Firefox built-in OneCRL list,"Firefox 158.0.1, ESR 153.5.1 and ESR 115.43.1 ship the OneCRL entries inside the browser for users whose Remote Settings is disabled or unreachable (CVE-2026-113470). Those entries name the six TLS intermediates by issuer and serial and do not cover the Sectigo cross-signs. Firefox 159.0, ESR 153.6.0 and ESR 115.44.0 add six entries matched by subject and public-key hash.","Built in from <code>158.0.1</code>, ESR <code>153.5.1</code>, ESR <code>115.43.1</code>",2026-10-31,"S490
+S491
+S492
+S63 | title: CVE-2026-113470 record
+S493
+S64 | title: Bug 2086788: Firefox 115 ESR may still trust the compromised eMudhra certificates","Verified by inspecting the source file, 2026-10-31. Disputed for ESR 115.43.1. A reporter in Bug 2086788 comment 2 says its init() does not load the bundled list, so the entries need a Remote Settings sync. Not tested."
+R262,apps,Firefox built-in roots,"Firefox 159.0, ESR 153.6.0 and ESR 115.44.0 still trust emSign ECC Root CA - G3 for TLS, through bundled NSS 3.131, 3.125 and 3.90.6. Firefox relies on OneCRL and keeps the root. AAA Certificate Services is present in NSS and Firefox but trusted only for email.","G3 root still trusted in <code>159.0</code>, ESR <code>153.6.0</code>, ESR <code>115.44.0</code>",2026-10-31,"S493
+S494
+S71 | title: NSS certdata.txt at release tags","Verified by inspecting the source file, 2026-10-31."
+R263,apps,Current Firefox releases,"On 31 October 2026 the newest releases were Firefox 159.0, ESR 153.6.0 and ESR 115.44.0.","<code>159.0</code>, ESR <code>153.6.0</code>, ESR <code>115.44.0</code>",2026-10-31,S65 | title: Mozilla product details: Firefox versions,
+R264,apps,Firefox ESR 115,"Firefox ESR 115 loads OneCRL only after 20 seconds without user input, so a new profile can trust the compromised chains until then. After OneCRL loaded in 115.44.0, the tracker's test page showed none of 14 chains trusted, AAA cross-sign hosts included. Mozilla QA verified a fix in a 115.45.0 pre-release on 30 October, and the newest released ESR 115 on 31 October was 115.44.0.",Startup gap in <code>115.43.1</code> and <code>115.44.0</code><br>Fix in unreleased <code>115.45.0</code>,2026-10-31,"S63 | title: CVE-2026-113470 record
+S64 | title: Bug 2086788: Firefox 115 ESR may still trust the compromised eMudhra certificates
+S65 | title: Mozilla product details: Firefox versions","<strong>Disputed.</strong> <a href=""https://cveawg.mitre.org/api/cve/CVE-2026-113470"">CVE-2026-113470</a> lists ESR 115.43.1 as fixed. <a href=""https://bugzilla.mozilla.org/show_bug.cgi?id=2086788"">Bug 2086788</a> shows 115.43.1 and 115.44.0 can still trust the chains in a new profile, with the fix only in 115.45.0."
+R265,apps,Firefox forks without OneCRL,"Firefox ESR source builds bundle older NSS and depend on OneCRL for the block. A fork that drops OneCRL, such as GNU IceCat built from ESR 153.5.1, still trusts the intermediates. The same reporter's build from ESR 153.6.0 source later passed the tracker test.",,2026-10-31,S494,
+R266,apps,Firefox for Android,Firefox for Android 158.0.2 fixes a bug where some clients did not apply the built-in OneCRL list right after startup.,Fixed: <code>158.0.2</code>,2026-10-31,S4,
+R267,apps,Thunderbird,"Thunderbird 158.0.1 and 153.5.1 carry the same built-in OneCRL update as Firefox, under CVE-2026-113470. The newest Thunderbird releases on 31 October 2026 were 159.0 and ESR 153.6.0.","Fixed: <code>158.0.1</code>, <code>153.5.1</code>",2026-10-31,"S495
+S496
+S497",
+R268,apps,NSS,"NSS 3.131.1 and 3.132 no longer contain emSign ECC Root CA - G3, and NSS 3.130 and 3.131 still do. NSS keeps AAA Certificate Services but trusts it only for email.","Vulnerable: <code>3.131</code> and earlier<br>Fixed: <code>3.131.1</code>, <code>3.132</code>",2026-10-31,"S71 | title: NSS certdata.txt at release tags
+S61 | title: Bug 2084101: Remove eMudhra emSign Root CA - G3 from NSS","Verified by inspecting the source file, 2026-10-31."
+R269,apps,Safari and Apple frameworks,"Since 19 October 2026 Apple blocks 12 certificates, the six TLS intermediates and their six Sectigo cross-signs, in Safari, Mail and other apps built on Apple's networking stack. Since 23 October it also blocks emSign ECC Root CA - G3. No software update is needed. Command-line tools that verify against /etc/ssl/cert.pem sit outside this block.","Automatic trust data, no update",2026-10-31,S6,
+R270,apps,Electron advisory,"Electron's advisory GHSA-jr5w-w6x2-84p9 (CVE-2026-115570) names 42.11.16, 43.8.1, 44.9.1 and 45.0.0-beta.6 as the releases that add the block for the compromised intermediates.","Advisory fixes: <code>42.11.16</code>, <code>43.8.1</code>, <code>44.9.1</code>, <code>45.0.0-beta.6</code>",2026-10-31,"S28
+S27 | title: CVE-2026-115570 record
+S498",
+R271,apps,Electron 44,"Electron's advisory and the v44.9.1 release notes name 44.9.1 as the 44.x fix. The official Electron Framework binaries of 42.11.16, 43.8.1, 43.8.3, 44.9.1 and 45.0.0-beta.6 all still contain emSign ECC Root CA - G3 as a PEM block in the bundled Node.js root store. The advisory blocks the intermediates and does not remove the root. Whether the block works was not tested.",Fix: <code>44.9.1</code> per the advisory<br>G3 root present in every fixed release checked,2026-10-31,"S28
+S499","Verified by inspecting the Electron Framework binaries of 42.11.16, 43.8.1, 43.8.3, 44.9.1 and 45.0.0-beta.6 from the official macOS arm64 zips, 2026-10-31. A G3 root inside a fixed Electron binary is expected, so judge an Electron build by its version."
+R272,apps,Electron apps,"Electron's fix blocks the intermediates in its Chromium network stack and in the Node.js tls, https and fetch modules. Electron says there is no app-side workaround, so each Electron app needs its own release built on a fixed Electron.",,2026-10-31,S28,
+R273,apps,Electron version on macOS,On macOS an app's Electron version is the CFBundleVersion in Contents/Frameworks/Electron Framework.framework/Versions/A/Resources/Info.plist inside the app bundle.,,2026-10-31,S500,"Verified by inspecting the package, 2026-10-31."
+R274,apps,Electron version string,"The string Electron/ followed by the version is in the Electron Framework binary on macOS and in the main electron binary on Linux, so the version can be read from a packaged app without running it. Windows was not checked.",,2026-10-31,"S500
+S501","Verified by inspecting the package, 2026-10-31."
+R275,apps,G3 root check in a binary,"The first PEM line of emSign ECC Root CA - G3 can be counted in a binary with grep, without running it. This works on Node.js binaries and on the macOS Electron Framework binary, which carries the bundled Node.js root store. On Electron the count is 1 on fixed releases too, so it shows only that the binary carries the bundled store.",,2026-10-31,"S302 | title: Node.js linux-x64 release tarballs
+S500","Verified by inspecting the Node.js binaries, and the Electron Framework binaries of 42.11.16, 43.8.1, 43.8.3, 44.9.1 and 45.0.0-beta.6, 2026-10-31."
+R276,apps,VS Code 1.143.1,"VS Code 1.143.1 changed only the remote server's Node.js, from 24.21.0 to 24.22.1, the first 24.x release without the G3 root. The 1.143.1 desktop app still targets Electron 43.7.7, below the advisory's 43.8.1.",Desktop: Electron <code>43.7.7</code><br>Remote server: Node.js <code>24.22.1</code>,2026-10-31,"S502
+S503
+S13 | publisher: we-have-a-problem.com
+S304","Verified by inspecting the source file, 2026-10-31. <strong>Disputed.</strong> The <a href=""https://emudhra.we-have-a-problem.com/"">community tracker</a> lists VS Code 1.143.1 as patched. The <a href=""https://github.com/microsoft/vscode/blob/1.144.0/.npmrc"">VS Code .npmrc</a> at 1.143.1 still targets Electron 43.7.7, and the <a href=""https://github.com/microsoft/vscode/pull/343541"">only pull request in 1.143.1</a> bumps the remote server's Node.js."
+R277,apps,VS Code 1.144.0,"VS Code 1.144.0, released 28 October 2026, targets Electron 43.8.3, at or above the advisory's 43.8.1. Microsoft builds its own Electron, and whether it backported the block into 43.7.7 was not checked.",Desktop: Electron <code>43.8.3</code>,2026-10-31,"S502
+S504","Verified by inspecting the source file, 2026-10-31."
+R278,apps,Obsidian,Obsidian 1.14.5 moves from Electron 43.7.5 to 43.8.3 and has to be reinstalled from Obsidian's website.,Fixed: <code>1.14.5</code> (Electron <code>43.8.3</code>),2026-10-31,S505,
+R279,apps,Git for Windows,Git for Windows 2.56.0(3) is a security release for the eMudhra compromise and ships curl 8.23.0. The MinGit 2.56.0(2) CA bundle contains emSign ECC Root CA - G3 and the 2.56.0(3) bundle does not. Neither contains AAA Certificate Services.,Vulnerable: <code>2.56.0(2)</code> and earlier<br>Fixed: <code>2.56.0(3)</code>,2026-10-31,"S506
+S507","Verified by inspecting the package, 2026-10-31."
+R280,apps,certbot,"Certbot 5.9.0, released 29 October 2026, pins certifi 2026.10.19, and 5.8.0 pins 2026.7.22. The new pin came from pull request 10812, merged on 21 October. The 5.9.0 release notes do not mention it.",Vulnerable: <code>5.8.0</code> and earlier images<br>Fixed: <code>5.9.0</code>,2026-10-31,"S508
+S509
+S510
+S13 | publisher: we-have-a-problem.com","<strong>Disputed.</strong> The community tracker still listed certbot as pending on 2026-10-31, pointing at <a href=""https://github.com/certbot/certbot/pull/10812"">pull request 10812</a>. Certbot <a href=""https://github.com/certbot/certbot/releases/tag/v5.9.0"">5.9.0</a>, released 2026-10-29, pins certifi 2026.10.19 in its <a href=""https://github.com/certbot/certbot/blob/v5.9.0/tools/requirements.txt"">requirements</a>."
+R281,apps,containerd,"containerd merged Go 1.27.3 into main, and Go 1.27.3 and 1.26.10 into release/2.4, on 20 October 2026. It has published no release since v2.4.2 on 13 October.",No fix yet,2026-10-31,"S511
+S512",
+R282,apps,Docker Engine,"Docker Engine 29.9.2, released 20 October 2026, moves to Go 1.26.10 for CVE-2026-111943, so it rejects chains that include the eight compromised intermediates. Its static docker, dockerd and containerd binaries are built with go1.26.10, and the 29.9.1 binaries with go1.26.9.",Vulnerable: <code>29.9.1</code> and earlier<br>Fixed: <code>29.9.2</code>,2026-10-31,"S513
+S514","Verified by inspecting the binary, 2026-10-31."
+R283,apps,Docker Desktop,"Docker Desktop 4.96.1 (21 October 2026), 4.96.2 and 4.96.3 (22 October) each remove trust for the compromised certificates, and 4.96.1 bundles Engine 29.9.2. Docker called the 4.96.1 and 4.96.2 fixes partial, with remaining components in later patches. 4.96.3 is the first 4.96 release without that note.","Partial: <code>4.96.1</code>, <code>4.96.2</code><br>Fixed: <code>4.96.3</code>",2026-10-31,"S515
+S13 | publisher: we-have-a-problem.com","<strong>Disputed.</strong> The <a href=""https://emudhra.we-have-a-problem.com/"">community tracker</a> lists Docker Desktop 4.96.2 as patched. Docker's <a href=""https://docs.docker.com/desktop/release-notes/"">release notes</a> call the 4.96.1 and 4.96.2 fixes partial, and 4.96.3 is the first release without that note."
+R284,apps,GitHub CLI,GitHub CLI 2.102.1 moves its Go toolchain from 1.27.1 to 1.27.3. The 2.102.0 binary is built with go1.27.1 and the 2.102.1 binary with go1.27.3.,Vulnerable: <code>2.102.0</code> and earlier<br>Fixed: <code>2.102.1</code>,2026-10-31,"S516
+S517","Verified by inspecting the binary, 2026-10-31."
+R285,apps,Podman,Podman has published no stable release since 6.1.4 and 5.8.9 on 12 October 2026. The 6.2.0-rc1 pre-release of 26 October does not mention eMudhra.,No fix yet,2026-10-31,S518,
+R286,apps,podman machine VM,"On macOS and Windows, Podman runs containers in a Linux VM that keeps its own ca-certificates, separate from the host. The community tracker gives Fedora ca-certificates 2026.2.92_v9.0.319 as the fixed package.",,2026-10-31,S13 | publisher: we-have-a-problem.com,"Verified by inspecting the ca-certificates package in a podman machine VM, 2026-10-31."
+R287,apps,Godot releases,"Godot merged a fix to master on 21 October 2026 that replaces its bundled CA file with Mozilla's 20 October bundle, and asked for cherry-picks to the supported branches. No stable release has it. The newest are 4.7.2-stable (18 August 2026) and 3.6.3-stable (22 August 2026).",No fix yet,2026-10-31,"S519
+S520",
+R288,apps,Godot bundled CA files,"Godot's bundled CA file holds emSign ECC Root CA - G3 in 4.7.2-stable, 3.6.3-stable and the 4.7, 4.6 and 3.x branches, and not on master. The Godot 3.6.3 and 3.x bundles also hold AAA Certificate Services. The Godot 4 bundles do not.",,2026-10-31,S521,"Verified by inspecting the source file, 2026-10-31."
+R289,apps,LibreOffice 26.8,"LibreOffice merged an NSS 3.132 upgrade into master and the 26.8 and 26.2 branches on 22 and 23 October 2026. The 26.8.2 release candidates bundle NSS 3.131.1 (RC1) and 3.132 (RC2), and 26.8.2 reached the stable download area on 28 October. Whether the final build matches RC2 was not checked.",Vulnerable: <code>26.8.1</code> and earlier<br>Fixed: <code>26.8.2</code>,2026-10-31,"S522
+S523
+S524
+S525
+S526
+S13 | publisher: we-have-a-problem.com","Verified by inspecting the source file, 2026-10-31. <strong>Disputed.</strong> The <a href=""https://emudhra.we-have-a-problem.com/"">community tracker</a> lists LibreOffice as pending. LibreOffice 26.8.2 reached the <a href=""https://download.documentfoundation.org/libreoffice/stable/"">stable download area</a> on 2026-10-28, and its release tags bundle NSS 3.131.1 or 3.132 per <a href=""https://github.com/LibreOffice/core/blob/libreoffice-26.8.2.2/download.lst"">download.lst</a>."
+R290,apps,LibreOffice 26.2,"LibreOffice 26.2.6, the current 26.2 release, bundles NSS 3.128. 26.2.7 RC2 bundles NSS 3.132, but 26.2.7 was not released on 31 October 2026, with RC3 due in week 44. The contents of NSS 3.128 were not checked.","Vulnerable: <code>26.2.6</code><br>Fixed: <code>26.2.7</code>, not released",2026-10-31,"S524
+S525
+S527","Verified by inspecting the source file, 2026-10-31."
+R291,apps,OpenHarmony,"OpenHarmony pull request 722 (del_sys_ca) in security_certificate_manager shows as merged into master and links an issue about removing insecure system CA certificates. No release carrying it was found, and which certificates it removes is unconfirmed.",No fix yet,2026-10-31,"S528
+S13 | publisher: we-have-a-problem.com",
+R292,apps,JetBrains Runtime b635.78,"JetBrains Runtime pull request 651, merged into jbr25 on 21 October 2026, adds the compromised intermediates to blocked.certs. JBR 25.0.4.1 b635.78 (22 October) blocks all 16 compromised certificates, Sectigo cross-signs included, but its cacerts still holds emSign ECC Root CA - G3 and AAA Certificate Services.","<code>b635.78</code>: 16 certificates blocked, G3 and AAA roots kept",2026-10-31,"S529
+S530
+S531","Verified by inspecting the package, 2026-10-31."
+R293,apps,JetBrains Runtime b635.79,"JBR 25.0.4.1 b635.79 (26 October 2026) keeps the 16 blocked entries, and its cacerts holds no emSign and no AAA Certificate Services certificate.",Fixed: <code>b635.79</code>,2026-10-31,"S530
+S531","Verified by inspecting the package, 2026-10-31."
+R346,apps,Electron fix on main and later releases,"Electron pull request 55126 merged to main on 20 October 2026 and adds the blocked keys to Chromium and to Node's TLS. 46.0.0-alpha.1 (23 October) contains it, and later releases keep the block through Node 24.22.1 and Chromium 158. The fix changes no root store, and the fixed 42 to 45 releases bundle Node 24.19.0 or 24.22.0.",46.0.0-alpha.1 and later,2026-11-02,"S532
+S533
+S534
+S535
+S536","Added from the rule verification, 2026-11-02."
+R347,apps,Squirrel.Mac updater cache,Squirrel.Mac runs ShipIt under the app's bundle identifier plus .ShipIt and keeps its files in the user's Caches directory under that name.,<code>&lt;bundle id&gt;.ShipIt</code> in the user Caches directory,2026-11-02,"S537
+S538","Added from the rule verification, 2026-11-02."
+R348,apps,npm version specs,"In package.json an exact version must match exactly, and node-semver defines caret, tilde, x-range, hyphen and || ranges. A range never includes a pre-release unless one of its bounds is a pre-release on the same version.",,2026-11-02,"S539
+S540","Added from the rule verification, 2026-11-02."
+R349,apps,Electron pre-release version string,"Electron builds its version string as major.minor.patch, followed by a hyphen and the pre-release when there is one, so a 45 beta carries Electron/45.0.0-beta.5 in its binary.",<code>Electron/N.N.N</code> or <code>Electron/N.N.N-SUFFIX</code>,2026-11-02,"S541
+S542","Added from the WRONG-rule fixes, 2026-11-02."
+R294,images,Containers and the host store,"A Linux container trusts the CA bundle inside its image, so patching the host does not protect it. Dart's advisory names static containers as exposed until their ca-certificates is updated.",,2026-10-31,S68,
+R295,images,Reading an image's bundle,"An image's CA bundle can be read without starting its application. Copy it out with cat as the entrypoint, or with create and cp for images that have no shell, then list the certificate subjects with openssl. Both copy methods worked on 31 October 2026, the second on a distroless image with no shell.",,2026-10-31,S6,"Verified by inspecting the alpine, debian, ubuntu, python and distroless base images, 2026-10-31."
+R296,images,debian and ubuntu base images,"The official debian:bookworm-20261027, debian:bookworm-20261005-slim and ubuntu:noble-20261024.1 images ship no ca-certificates package and no /etc/ssl/certs. The bundle comes from whatever a later build step installs.",,2026-10-31,S543,"Verified by inspecting the debian:bookworm-20261027, debian:bookworm-20261005-slim and ubuntu:noble-20261024.1 images, 2026-10-31."
+R297,images,alpine base image,"alpine:3.24.2 ships ca-certificates-bundle 20260909-r0, which contains emSign ECC Root CA - G3. alpine:3.24.3 (23 October 2026) ships 20261020-r0 without it. Neither contains AAA Certificate Services.",Vulnerable: <code>3.24.2</code><br>Fixed: <code>3.24.3</code>,2026-10-31,S543,"Verified by inspecting the alpine:3.24.2 and alpine:3.24.3 images, 2026-10-31."
+R298,images,distroless Debian 12,"Google's distroless Debian 12 images, static-debian12 and base-debian12 at latest on amd64 and arm64, still shipped the unfixed ca-certificates 20250419~deb12u1 on 31 October 2026, with both emSign ECC Root CA - G3 and AAA Certificate Services in the bundle. The image's build date is unknown because its created date reads 1970-01-01.",Unfixed: <code>20250419~deb12u1</code>,2026-10-31,"Verified by inspecting the static-debian12 and base-debian12 images, 2026-10-31.",
+R299,images,distroless Debian 13,"Google's distroless Debian 13 image, static-debian13 at latest, ships the fixed ca-certificates 20250419+deb13u1 with neither the G3 nor the AAA root. Distroless says its images are based on Debian 13.",Fixed: <code>20250419+deb13u1</code>,2026-10-31,S544,"Verified by inspecting the static-debian13 image, 2026-10-31."
+R300,images,Rocky Linux images,"The rockylinux:8, :9 and :10 images pulled on 31 October 2026 ship unfixed ca-certificates builds, 2023.2.60_v7.0.306-80.0.el8_8, 2025.2.80_v9.0.305-91.el9 and 2025.2.80_v9.0.305-102.el10, with the G3 root in the TLS bundle. A dnf upgrade installs the fixed 2026.2.92_v9.0.319 builds (RLSA-2026:88550, 88459, 88455). The 9 and 10 builds hold AAA only in the email and code-signing bundles. The rockylinux:8 build holds it in the TLS bundle too.",Images unfixed<br>Fixed package: <code>2026.2.92_v9.0.319</code>,2026-10-31,"S114
+S109 | title: Rocky Linux images and repositories","Verified by inspecting the rockylinux:8, :9 and :10 images, 2026-10-31."
+R301,images,Amazon Linux images,"The amazonlinux:2023 image has ca-certificates 2025.2.76-1.0.amzn2023.0.3 with the G3 root, and a plain dnf update leaves it there. The fix needs a newer release version, 0.4 with --releasever 2023.12.20261026 or 0.5 with --releasever=latest. Amazon Linux 2 is fixed in 2025.2.76-1.amzn2.0.3, and the amazonlinux:2 image checked had 0.2. The later builds of 26 October also drop AAA Certificate Services, which Amazon says has been untrusted for TLS since 2025.",AL2023 fixed: <code>0.4</code> or <code>0.5</code> via <code>--releasever</code><br>AL2 fixed: <code>2025.2.76-1.amzn2.0.3</code>,2026-10-31,"S120
+S122
+S123
+S121 | title: Amazon Linux images and repositories","Verified by inspecting the image, 2026-10-31."
+R302,images,python base image,"python:3.13-slim-bookworm, pulled 31 October 2026, has Debian ca-certificates 20250419~deb12u2 and pip's certifi 2026.10.19. Neither bundle contains the G3 root.","<code>20250419~deb12u2</code>, pip certifi <code>2026.10.19</code>",2026-10-31,"Verified by inspecting the python:3.13-slim-bookworm image, 2026-10-31.",
+R303,images,certbot images,"The certbot/certbot:v5.8.0 image carries certifi 2026.07.22 and Alpine ca-certificates 20260611-r0, and both bundles hold emSign ECC Root CA - G3. The v5.9.0 image carries certifi 2026.10.19 and Alpine 20261020-r0, without it. Neither image's certifi holds AAA Certificate Services. Certbot's pull request 10812 says the old pin also reached the certbot/dns-* images.",Vulnerable: <code>v5.8.0</code><br>Fixed: <code>v5.9.0</code>,2026-10-31,"S508
+S545","Verified by inspecting the image, 2026-10-31."

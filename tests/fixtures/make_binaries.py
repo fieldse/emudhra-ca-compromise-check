@@ -1,7 +1,7 @@
 """make_binaries.py: builds the fake native programs and app trees for the check's binary container cases.
 
 Run inside the container that then runs the check, with the set name as the argument. Each program
-is an ELF or Mach-O magic, padding and a payload: Go build information, cargo source paths, Node and
+is an ELF or Mach-O magic, padding and a payload: Go build information and function names, cargo source paths, Node and
 Electron release strings, or certificates and keys. Electron apps are real directory trees with
 binary or XML Info.plist files. The keys come from openssl's output in /out/keys and the
 certificates from /out/bundles and the image's trust store, never from the check's own tables.
@@ -21,6 +21,7 @@ FALLBACK = "golang.org/x/crypto/x509roots/fallback"
 OLD_FALLBACK = "v0.0.0-20260916154351-b853e4b620cd"
 NEW_FALLBACK = "v0.0.0-20261020153306-9f2b28d4331a"
 PAD = b"\x00" * 4096
+X509_VERIFY = b"crypto/x509.(*Certificate).Verify\x00"
 
 
 def read(path: str) -> bytes:
@@ -67,14 +68,20 @@ def varint(value: int) -> bytes:
             return bytes(out)
 
 
-def go_program(version: str, *deps: str, legacy: bool = False) -> bytes:
-    """Return a program holding a Go build information block for the toolchain and dependencies."""
+def go_program(
+    version: str, *deps: str, legacy: bool = False, verifies: bool = True
+) -> bytes:
+    """Return a program holding a Go build information block for the toolchain and dependencies.
+
+    verifies adds the function name Go's function table holds for crypto/x509's certificate Verify.
+    """
     header = GO_MAGIC + bytes([8, 0 if legacy else 2]) + b"\x00" * 16
     lines = "path\texample.com/hello\nmod\texample.com/hello\t(devel)\t\n"
     lines += "".join(f"dep\t{d}\th1:fixture=\n" for d in deps)
     info = START_SENTINEL + lines.encode() + END_SENTINEL
     body = varint(len(version)) + version.encode() + varint(len(info)) + info
-    return ELF + PAD + header + (b"" if legacy else body) + PAD
+    names = X509_VERIFY if verifies else b""
+    return ELF + PAD + header + (b"" if legacy else body) + PAD + names
 
 
 def go_set(base: str) -> None:
@@ -84,6 +91,7 @@ def go_set(base: str) -> None:
     )
     write(f"{base}/bin/go-new", go_program("go1.27.3", f"{FALLBACK}\t{NEW_FALLBACK}"))
     write(f"{base}/bin/go-legacy", go_program("", legacy=True))
+    write(f"{base}/bin/go-noverify", go_program("go1.27.2", verifies=False))
 
 
 def rust_set(base: str) -> None:

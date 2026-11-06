@@ -7,7 +7,15 @@ mkdir -p "$dir/calls" "$dir/stdin"
 n=$(($(cat "$dir/count" 2>/dev/null || echo 0) + 1))
 echo "$n" >"$dir/count"
 printf '%s\0' "$@" >"$dir/calls/$n"
-readlink /proc/self/fd/0 >"$dir/stdin/$n" 2>/dev/null
+# -ef is outside POSIX but supported by dash, BusyBox ash and macOS sh.
+# shellcheck disable=SC3013
+if [ -e /proc/self/fd/0 ]; then
+  readlink /proc/self/fd/0 >"$dir/stdin/$n" 2>/dev/null
+elif [ /dev/stdin -ef /dev/null ]; then
+  echo /dev/null >"$dir/stdin/$n"
+else
+  echo unknown >"$dir/stdin/$n"
+fi
 mode=$(cat "$dir/mode" 2>/dev/null)
 case "$1 $2" in
   "image exists")

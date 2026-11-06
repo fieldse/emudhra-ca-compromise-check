@@ -11,6 +11,7 @@ import json
 import time
 import unittest
 
+from emudhra_check.limits import MAX_JSON_DEPTH
 from emudhra_check.lockfiles import (
     LockPackage,
     bounded_json,
@@ -230,6 +231,14 @@ class JsonTest(unittest.TestCase):
     def test_malformed_and_deep(self) -> None:
         self.assertIsNone(bounded_json("{"))
         self.assertIsNone(bounded_json("[" * 100000 + "]" * 100000))
+
+    def test_depth_bound(self) -> None:
+        limit = MAX_JSON_DEPTH
+        self.assertIsNotNone(bounded_json("[" * limit + "]" * limit))
+        self.assertIsNone(bounded_json("[" * (limit + 1) + "]" * (limit + 1)))
+        brackets = "[" * (limit + 1)
+        self.assertEqual(bounded_json(f'["{brackets}"]'), [brackets])
+        self.assertEqual(bounded_json('["\\"[[", {"a": 1}]'), ['"[[', {"a": 1}])
 
 
 class RequirementsTest(unittest.TestCase):

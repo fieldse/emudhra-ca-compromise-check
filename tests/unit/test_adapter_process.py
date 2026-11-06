@@ -121,7 +121,9 @@ class CommandsTest(unittest.TestCase):
 
     def test_true_and_exit_code(self) -> None:
         commands = self.commands()
-        true = commands.locate(Path("/bin/true"))
+        true = commands.locate(
+            next(p for p in (Path("/bin/true"), Path("/usr/bin/true")) if p.exists())
+        )
         assert true is not None
         self.assertTrue(true.permitted)
         self.assertEqual(true.file_id, file_id(true.real))

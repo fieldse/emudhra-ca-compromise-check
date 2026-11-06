@@ -1,10 +1,10 @@
 """test_binaries.py: unit tests of emudhra_check/detections/binaries.py.
 
-Runs the binary detections over in-memory files: Go toolchain and fallback module verdicts,
-unreadable and legacy build information, the toolchain's own commands, Rust crates found by their
-source paths, trust anchors and blocklist keys, bundled Node stores, Electron apps judged by version
-in both layouts, updater caches, and the ledger that keeps a binary a runtime check reported from a
-second report.
+Runs the binary detections over in-memory files: Go toolchain and fallback module verdicts, the
+crypto/x509 Verify name that keeps a toolchain FAIL, unreadable and legacy build information, the
+toolchain's own commands and bin links to them, Rust crates found by their source paths, trust
+anchors and blocklist keys, bundled Node stores, Electron apps judged by version in both layouts,
+updater caches, and the ledger that keeps a binary a runtime check reported from a second report.
 """
 
 from __future__ import annotations
@@ -24,7 +24,9 @@ from emudhra_check.certificates import (
     Role,
 )
 from emudhra_check.detections.binaries import (
+    NO_VERIFY_NOTE,
     RUSTLS_NO_ROOT_NOTE,
+    X509_VERIFY,
     BundledNodeBinaries,
     ElectronApps,
     GoBinaries,
@@ -52,19 +54,26 @@ INTERMEDIATE_DER = next(
 
 
 def binaries_context(
-    kind: BinaryKind, binaries: dict[str, bytes], ledger: Optional[Ledger] = None
+    kind: BinaryKind,
+    binaries: dict[str, bytes],
+    ledger: Optional[Ledger] = None,
+    real: Optional[dict[str, str]] = None,
 ) -> Context:
+    """Index each binary as an executable, at the real path given for it or at its own path."""
+    real = real or {}
     files = FakeFiles(binaries)
     executables = tuple(
-        Executable(Path(p), files.id_of(Path(p)), kind) for p in binaries
+        Executable(Path(p), Path(real.get(p, p)), files.id_of(Path(p)), kind)
+        for p in binaries
     )
     ctx = make_context(files, ledger=ledger)
     return dataclasses.replace(ctx, index=Index(executables=executables))
 
 
-def go_lines(info: GoBuildInfo, data: bytes = b"") -> list[str]:
+def go_lines(info: GoBuildInfo, data: bytes = b"", verifies: bool = True) -> list[str]:
     subject = Subject("go binary", "/b/hello")
-    return [f.line() for f in go_binary_findings(subject, info, MATCHER.scan(data))]
+    found = go_binary_findings(subject, info, MATCHER.scan(data), verifies)
+    return [f.line() for f in found]
 
 
 class GoBinaryFindingsTest(unittest.TestCase):
@@ -77,6 +86,28 @@ class GoBinaryFindingsTest(unittest.TestCase):
         )
         self.assertEqual(
             go_lines(GoBuildInfo("go1.27.3", (), False)),
+            ["PASS  go binary [/b/hello] found 1.27.3, fixed 1.27.3"],
+        )
+
+    def test_affected_toolchain_without_x509_verify_warns(self) -> None:
+        self.assertEqual(
+            go_lines(GoBuildInfo("go1.27.2", (), False), verifies=False),
+            [
+                "WARN  go binary [/b/hello] found 1.27.2, fixed 1.27.3 (built with an affected toolchain, rebuild)"
+                f" ({NO_VERIFY_NOTE})"
+            ],
+        )
+        self.assertEqual(
+            go_lines(GoBuildInfo("", (), True), verifies=False),
+            [
+                "WARN  go binary [/b/hello] found a toolchain older than Go 1.18, no fix for that branch, rebuild"
+                f" ({NO_VERIFY_NOTE})"
+            ],
+        )
+
+    def test_fixed_toolchain_without_x509_verify_passes(self) -> None:
+        self.assertEqual(
+            go_lines(GoBuildInfo("go1.27.3", (), False), verifies=False),
             ["PASS  go binary [/b/hello] found 1.27.3, fixed 1.27.3"],
         )
 
@@ -117,7 +148,9 @@ class GoBinaryFindingsTest(unittest.TestCase):
         self.assertEqual(
             [
                 f.line()
-                for f in go_binary_findings(Subject("go binary", "/b/x"), None, ())
+                for f in go_binary_findings(
+                    Subject("go binary", "/b/x"), None, (), False
+                )
             ],
             [
                 "WARN  go binary [/b/x] Go build info unreadable, check it with go version -m"
@@ -155,6 +188,35 @@ class GoBinariesTest(unittest.TestCase):
             ledger,
         )
         ledger.claim(ctx.files.file_id(Path("/usr/local/bin/go")))  # type: ignore[arg-type]
+        self.assertEqual(lines(GoBinaries(), ctx), [])
+
+    def test_x509_verify_name_in_the_bytes_decides_fail_or_warn(self) -> None:
+        hostname = b"crypto/x509.(*Certificate).VerifyHostname\x00"
+        ctx = binaries_context(
+            BinaryKind.GO,
+            {
+                "/b/tls": go_blob(b"go1.27.2") + X509_VERIFY,
+                "/b/fmt": go_blob(b"go1.27.2"),
+                "/b/host": go_blob(b"go1.27.2") + hostname,
+            },
+        )
+        got = lines(GoBinaries(), ctx)
+        self.assertEqual(
+            [line.split(" (")[0] for line in got],
+            [
+                "FAIL  go binary [/b/tls] found 1.27.2, fixed 1.27.3",
+                "WARN  go binary [/b/fmt] found 1.27.2, fixed 1.27.3",
+                "WARN  go binary [/b/host] found 1.27.2, fixed 1.27.3",
+            ],
+        )
+
+    def test_bin_link_into_the_go_cellar_is_skipped(self) -> None:
+        link = "/opt/homebrew/bin/gofmt"
+        ctx = binaries_context(
+            BinaryKind.GO,
+            {link: go_blob(b"go1.27.1")},
+            real={link: "/opt/homebrew/Cellar/go/1.27.1/libexec/bin/gofmt"},
+        )
         self.assertEqual(lines(GoBinaries(), ctx), [])
 
     def test_no_go_binaries(self) -> None:

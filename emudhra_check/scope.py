@@ -306,6 +306,7 @@ class IndexedDir:
 @dataclass(frozen=True)
 class Executable:
     path: Path
+    real: Path
     file_id: FileId
     kind: BinaryKind
 

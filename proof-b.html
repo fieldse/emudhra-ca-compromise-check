@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eMudhra G3 CA compromise: Flow B, why a certificate is untrusted</title>
+<meta name="description" content="Flow B of verifying an eMudhra G3 checker finding by hand: recompute the weak key, and confirm mozilla, chrome and apple removed or blocked the root above it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+:root {
+  /* Dark theme: flat near-black ground, zinc cards with faint borders, one purple accent. */
+  --bg: #0b0b0d;
+  --paper: #111114;
+  --raised: #16161a;
+  --ink: #f2f2f3;
+  --body: #c9c9cf;
+  --muted: #a1a1aa;
+  --rule: #232328;
+  --band: #0b0b0d;
+  --band-ink: #fafafa;
+  --band-muted: #a1a1aa;
+  --link: #b388f9;
+  --code-bg: #18181c;
+  --primary: #a855f7;
+  --bad: #f87171;
+  --good: #4ade80;
+  --limit: #fb923c;
+  --stripe: #0e0e11;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  --mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--sans); }
+a { color: var(--link); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
+.read { max-width: 70ch; }
+
+/* Header band */
+.band { background: var(--band); color: var(--band-ink); padding-block: 44px 40px; }
+.band .ids { font: 600 13px/1.4 var(--mono); color: var(--band-muted); letter-spacing: 0.02em; margin: 0 0 14px; }
+.band .ids b { color: var(--band-ink); font-weight: 600; }
+.band h1 { margin: 0 0 14px; font-size: clamp(28px, 4.6vw, 42px); line-height: 1.12; font-weight: 700; letter-spacing: -0.015em; text-wrap: balance; }
+.band p { margin: 0; font-size: 18px; color: var(--band-ink); max-width: 62ch; }
+
+main { padding-block: 40px 56px; display: grid; gap: 44px; }
+section { display: grid; gap: 16px; min-width: 0; }
+h2 { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 700; letter-spacing: -0.01em; padding-bottom: 8px; border-bottom: 2px solid var(--ink); }
+h3 { margin: 0; font-size: 18px; font-weight: 700; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+code { font: 0.86em var(--mono); background: var(--code-bg); padding: 1px 4px; border-radius: 3px; overflow-wrap: anywhere; }
+
+/* Introduction: label column beside bullets */
+dl.intro { margin: 0; display: grid; grid-template-columns: 11rem 1fr; border-top: 1px solid var(--rule); }
+dl.intro dt, dl.intro dd { margin: 0; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+dl.intro dt { font-weight: 700; padding-right: 20px; }
+dl.intro ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+@media (max-width: 640px) {
+  dl.intro { grid-template-columns: 1fr; }
+  dl.intro dt { border-bottom: 0; padding-bottom: 2px; }
+  dl.intro dd { padding-top: 0; }
+}
+
+/* Check table */
+.table-scroll { overflow-x: auto; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule); }
+table { border-collapse: collapse; width: 100%; min-width: 880px; font-size: 15px; background: var(--paper); }
+th, td { text-align: left; vertical-align: top; padding: 12px 14px; border-bottom: 1px solid var(--rule); }
+thead th { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); background: var(--bg); }
+tbody tr:nth-child(even) { background: var(--stripe); }
+tbody tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 700; white-space: nowrap; }
+td.check { min-width: 300px; }
+.cmd { display: flex; align-items: flex-start; gap: 6px; background: var(--code-bg); border: 1px solid var(--rule); border-radius: 4px; padding: 8px 8px 8px 12px; margin-bottom: 6px; }
+.cmd:last-of-type { margin-bottom: 0; }
+.cmd code { flex: 1; min-width: 0; background: none; padding: 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cmd .copy { flex: none; display: grid; place-items: center; width: 26px; height: 26px; margin: -3px 0; border: 1px solid transparent; border-radius: 4px; background: none; color: var(--muted); cursor: pointer; }
+.cmd .copy:hover { color: var(--ink); border-color: var(--rule); background: var(--paper); }
+.cmd .copy.done { color: var(--good); }
+td.bad { color: var(--bad); font-variant-numeric: tabular-nums; }
+td.good { color: var(--good); font-variant-numeric: tabular-nums; }
+td.bad code, td.good code { color: var(--ink); }
+td.bad ul, td.good ul { margin: 0; padding-left: 16px; display: grid; gap: 3px; }
+
+ul.notes { margin: 0; padding-left: 18px; display: grid; gap: 8px; max-width: 80ch; }
+
+/* Code blocks */
+.code { position: relative; background: var(--code-bg); border-left: 3px solid var(--band); min-width: 0; }
+.code pre { margin: 0; padding: 14px 16px; overflow-x: auto; font: 13.5px/1.6 var(--mono); }
+.code button {
+  position: absolute; top: 8px; right: 8px; font: 600 12px var(--sans);
+  background: var(--paper); color: var(--ink); border: 1px solid var(--rule); border-radius: 3px;
+  padding: 3px 10px; cursor: pointer;
+}
+.code button:hover { border-color: var(--ink); }
+
+dl.levels { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; }
+dl.levels dt { font: 700 13px/1.6 var(--mono); }
+dl.levels dt.fail { color: var(--bad); }
+dl.levels dd { margin: 0; }
+
+ul.sources { margin: 0; padding-left: 18px; display: grid; gap: 4px; columns: 2; column-gap: 32px; }
+ul.sources li { break-inside: avoid; }
+@media (max-width: 640px) { ul.sources { columns: 1; } }
+
+ul.resources { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 0 32px; }
+ul.resources li { display: grid; gap: 2px; padding: 12px 0; border-bottom: 1px solid var(--rule); min-width: 0; }
+ul.resources a { font-weight: 600; }
+ul.resources span { color: var(--muted); font-size: 14px; }
+
+.toc ol { margin: 0; padding-left: 20px; display: grid; gap: 10px; }
+.toc li a { font-weight: 700; }
+.toc li span { display: block; color: var(--muted); font-size: 14px; }
+.toc h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); border-bottom: 0; padding-bottom: 0; margin-bottom: 8px; }
+.toc ol { display: block; columns: 2; column-gap: 40px; }
+.toc li { break-inside: avoid; padding: 3px 0; }
+.toc li span { display: none; }
+@media (max-width: 640px) { .toc ol { columns: 1; } }
+[id] { scroll-margin-top: 16px; }
+.nw { white-space: nowrap; }
+.src { font-size: 14px; }
+.src a { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.back { display: inline-block; margin-bottom: 16px; color: var(--band-muted); font-size: 14px; text-decoration: none; }
+.back:hover { color: var(--band-ink); text-decoration: underline; }
+footer .wrap { display: grid; gap: 4px; }
+footer { border-top: 1px solid var(--rule); padding-block: 20px 32px; font-size: 14px; color: var(--muted); }
+
+@media print {
+  .band { background: none; color: #000; padding-block: 0 16px; border-bottom: 2px solid #000; }
+  .band .ids, .band p, .band .ids b { color: #000; }
+  .code button { display: none; }
+  .table-scroll { overflow: visible; }
+  table { min-width: 0; font-size: 11px; }
+  a { color: #000; }
+}
+
+/* Page treatment: centered hero, mono eyebrow pills, purple highlight word, rounded bordered cards. */
+body { color: var(--body); font-size: 18px; }
+table, table.list { font-size: 16px; }
+.cmd code, .code pre { font-size: 14.5px; }
+strong, b, td:first-child, dt, h1, h2, h3 { color: var(--ink); }
+.band { background: none; padding-block: 80px 24px; text-align: center; }
+.band .wrap { display: flex; flex-direction: column; align-items: center; }
+.band .ids { display: inline-block; margin: 0; padding: 4px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper);
+  font: 500 13px/1.5 var(--mono); color: var(--primary); letter-spacing: 0.01em; }
+.band .ids { max-width: none; white-space: nowrap; }
+@media (max-width: 640px) { .band .ids { white-space: normal; } }
+.band .ids b, .band .ids a { color: var(--primary); font-weight: 500; }
+.band .tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0 0 14px; }
+.band .tags span { padding: 3px 10px; border: 1px solid var(--rule); border-radius: 999px; font: 500 12px/1.5 var(--mono); color: var(--muted); letter-spacing: 0.02em; }
+.band h1 { margin: 24px 0 18px; font-size: clamp(30px, calc((100vw - 48px) / 18), 60px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--band-ink); max-width: none; }
+.band .wrap { max-width: 1440px; }
+.band p:not(.ids):not(.tags) { color: var(--muted); font-size: 19px; line-height: 1.6; max-width: 58ch; margin: 0 auto; }
+.hl { color: var(--primary); }
+main { gap: 72px; padding-block: 48px 80px; }
+h2 { border-bottom: 0; padding-bottom: 0; font-size: clamp(26px, 3.4vw, 36px); font-weight: 800; letter-spacing: -0.025em; }
+h2[data-eyebrow]::before { content: attr(data-eyebrow); display: block; width: fit-content; margin-bottom: 16px; padding: 3px 12px;
+  border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); font: 500 13px/1.5 var(--mono); color: var(--primary); letter-spacing: 0.01em; }
+h3 { font-size: 20px; }
+.muted { color: var(--muted); }
+a { color: var(--link); text-decoration-color: rgba(179, 136, 249, .4); text-underline-offset: 3px; }
+a:hover { text-decoration-color: currentColor; }
+code { background: var(--code-bg); color: #e4e4e7; border: 1px solid var(--rule); border-radius: 5px; padding: 0 5px; }
+
+/* Introduction as one card, labels as spaced capitals */
+dl.intro { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 4px 28px; }
+dl.intro dt, dl.intro dd { border-color: var(--rule); padding-block: 20px; }
+dl.intro > :nth-last-child(-n+2) { border-bottom: 0; }
+dl.intro dt { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--primary); padding-top: 24px; }
+dl.intro li::marker { color: var(--primary); }
+
+/* Tables in rounded cards */
+.table-scroll { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); }
+table, table.matrix, table.list { background: transparent; }
+thead th, .matrix thead th, .list thead th { background: var(--raised); color: var(--muted); letter-spacing: 0.08em; }
+th, td { border-color: var(--rule); }
+tbody tr:nth-child(even) { background: var(--stripe); }
+.cmd { background: var(--code-bg); border-color: var(--rule); border-radius: 8px; }
+.cmd .copy:hover { background: var(--raised); border-color: var(--rule); }
+td.bad { color: var(--bad); }
+td.good { color: var(--good); }
+
+/* Code blocks */
+.code { background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; }
+.code pre { color: #e4e4e7; }
+.code button { background: var(--raised); color: var(--ink); border: 1px solid var(--rule); border-radius: 8px; }
+.code button:hover { border-color: var(--primary); box-shadow: 0 0 16px rgba(168, 85, 247, .3); }
+dl.levels dt { color: var(--limit); }
+dl.levels dt.fail { color: var(--bad); }
+
+ul.resources li { border-color: var(--rule); }
+ul.sources li::marker, ul.notes li::marker, ul.plain li::marker { color: var(--primary); }
+
+/* Tests page */
+.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; border: 0; padding: 0; }
+.facts div { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 26px 16px; text-align: center; justify-items: center; }
+.facts b { font-size: 42px; font-weight: 800; letter-spacing: -0.02em; color: var(--primary); }
+.facts div:nth-child(2) b { color: var(--good); }
+.facts div:nth-child(3) b { color: var(--limit); }
+.facts span { color: var(--muted); font-size: 15px; }
+@media (max-width: 640px) { .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+nav.toc { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 20px 28px; max-width: none; }
+nav.toc h2 { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--primary); margin-bottom: 10px; }
+nav.toc ol { display: block; list-style: none; padding-left: 0; columns: 2; column-gap: 48px; counter-reset: toc; }
+nav.toc li { counter-increment: toc; display: flex; gap: 14px; padding: 5px 0; break-inside: avoid; }
+nav.toc li::before { content: counter(toc, decimal-leading-zero); font: 500 13px/1.75 var(--mono); color: var(--primary); }
+nav.toc li > a { color: var(--ink); font-weight: 600; text-decoration: none; }
+nav.toc li > a:hover { color: var(--primary); }
+nav.toc li span { display: none; }
+@media (max-width: 640px) { nav.toc ol { columns: 1; } }
+.band .back { margin-bottom: 20px; font: 500 13px var(--mono); color: var(--muted); }
+.band .back:hover { color: var(--primary); }
+.matrix tbody th { background: var(--paper); color: var(--ink); }
+.matrix tbody tr:nth-child(even) th, .matrix tbody tr:nth-child(even) td { background: var(--stripe); }
+.matrix thead th.grp { color: var(--primary); }
+.list tr.grp th { background: var(--raised); color: var(--primary); }
+.list td.tid { color: var(--ink); }
+.dot.limit { background: var(--limit); }
+
+.src { margin: 0; }
+.src a { display: inline-flex; align-items: center; gap: 8px; }
+.src a { padding: 6px 14px; border: 1px solid var(--rule); border-radius: 8px; background: var(--raised); color: var(--ink); font-weight: 600; font-size: 14px; text-decoration: none; }
+.src a:hover { border-color: var(--primary); box-shadow: 0 0 16px rgba(168, 85, 247, .3); }
+/* Call to action box */
+.cta { border: 1px solid rgba(168, 85, 247, .35); border-radius: 12px; padding: 32px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, .2) 0%, rgba(168, 85, 247, .06) 60%, rgba(168, 85, 247, .02) 100%), var(--paper);
+  display: grid; gap: 14px; }
+.cta .label { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--primary); }
+.cta h3 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+.cta p { margin: 0; max-width: 62ch; color: var(--body); }
+.cta .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
+.cta .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 15px; text-decoration: none; }
+.cta .btn-primary { background: linear-gradient(135deg, #a855f7, #c96ef7); border: 1px solid #be5eed; color: #fff; box-shadow: 0 0 20px rgba(168, 85, 247, .3); }
+.cta .btn-primary:hover { box-shadow: 0 0 28px rgba(168, 85, 247, .5); }
+.cta .btn-ghost { border: 1px solid var(--rule); background: var(--raised); color: var(--ink); }
+.cta .btn-ghost:hover { border-color: var(--primary); }
+footer { border-color: var(--rule); color: var(--muted); }
+@media print { .band h1, h2, .hl { color: #000; } h2[data-eyebrow]::before { display: none; } }
+
+/* List tables (checks and references pages) */
+table.list { border-collapse: collapse; width: 100%; min-width: 860px; font-size: 14.5px; background: var(--paper); }
+.list th, .list td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--rule); }
+.list thead th { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); background: var(--bg); }
+.list tr.grp th { background: var(--stripe); font: 700 12px var(--mono); text-transform: uppercase; letter-spacing: 0.05em; padding-top: 14px; }
+.list td.tid { font: 700 14px var(--mono); white-space: nowrap; }
+.list td.tid span { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+.list td.cks { font: 12.5px var(--mono); color: var(--muted); white-space: nowrap; }
+.list td.res { font-weight: 700; white-space: nowrap; }
+.list td.res.pass { color: var(--good); }
+.list td.res.gap { color: var(--bad); }
+.list td.res.limit { color: var(--limit); }
+.list tr.grp th { background: var(--raised); color: var(--primary); }
+.list td.tid { color: var(--ink); }
+
+/* References page */
+table.list.refs-table { min-width: 1100px; font-size: 15px; }
+.refs-table td.tid a { color: var(--ink); text-decoration: none; }
+.refs-table td.tid a:hover { color: var(--primary); }
+.refs-table td.stk { font-weight: 600; color: var(--ink); min-width: 160px; }
+.refs-table td.val { min-width: 220px; }
+.refs-table td.note { color: var(--muted); font-size: 14px; min-width: 180px; }
+.refs-table ol.refs { margin: 0; padding-left: 22px; display: grid; gap: 3px; font-size: 14px; min-width: 220px; }
+.refs-table ol.refs li::marker { color: var(--primary); font: 500 12px var(--mono); }
+.refs-table tr:target td { background: rgba(168, 85, 247, .12); }
+nav.toc li small { margin-left: auto; font: 500 13px/1.75 var(--mono); color: var(--muted); white-space: nowrap; }
+
+/* eMudhra pages: inline reference links, status chips, the checks table and the fingerprint table. */
+.rl { font: 500 0.74em var(--mono); color: var(--muted); white-space: nowrap; }
+.rl a { text-decoration: none; }
+.rl a:hover { text-decoration: underline; }
+.chip { display: inline-block; margin-bottom: 6px; padding: 1px 8px; border: 1px solid; border-radius: 6px; font: 600 12px/1.6 var(--mono); white-space: nowrap; }
+.chip.unfixed { color: var(--bad); border-color: rgba(248, 113, 113, .45); background: rgba(248, 113, 113, .08); }
+.chip.partial { color: var(--limit); border-color: rgba(251, 146, 60, .45); background: rgba(251, 146, 60, .08); }
+.chip.os { color: var(--muted); border-color: var(--rule); background: var(--raised); }
+table.list.checks { min-width: 1280px; font-size: 15px; }
+.checks td { padding: 12px 12px; }
+.checks td.item { font-weight: 700; color: var(--ink); white-space: normal; min-width: 150px; }
+.checks td.where { min-width: 170px; font-size: 14px; }
+.checks td.check { min-width: 320px; }
+.checks td.check .muted { display: block; margin-top: 4px; font-size: 13.5px; }
+.checks td.bad, .checks td.good { min-width: 160px; font-size: 14.5px; }
+.checks td.aaa { min-width: 170px; font-size: 14px; color: var(--body); }
+.checks td.rf, .fps td.rf { font: 500 13px var(--mono); white-space: nowrap; }
+.checks td.rf a, .fps td.rf a { display: block; text-decoration: none; }
+.checks td.bad ul, .checks td.good ul { margin: 0; padding-left: 16px; display: grid; gap: 3px; }
+.checks tr:target td { background: rgba(168, 85, 247, .12); }
+table.list.fps { min-width: 720px; font-size: 15px; }
+.fps td:first-child { white-space: normal; }
+.fps td.fp code { font-size: 12.5px; overflow-wrap: anywhere; }
+.refs-table td.dt { font: 500 13px var(--mono); white-space: nowrap; color: var(--muted); }
+.refs-table ol.refs li .meta { display: block; color: var(--muted); font-size: 13px; }
+.refs-table td.note strong { color: var(--limit); }
+.facts div:nth-child(4) b { color: var(--bad); }
+section.area { display: grid; gap: 12px; }
+section.area h3 { margin-top: 8px; }
+p.more a { font-weight: 600; font-size: 15px; }
+#manual > .read { max-width: 70ch; }
+
+/* Reading layout: quiet reference tags, sentence-case labels, lead-then-detail lists, compact tables with a Refs column. */
+.rl a { color: var(--muted); }
+.rl a:hover { color: var(--link); }
+dl.intro dt { font-size: 18px; letter-spacing: 0; text-transform: none; padding-top: 22px; }
+dl.intro dd > ul { gap: 12px; }
+dl.intro ul ul { margin-top: 4px; gap: 3px; }
+p.key { max-width: 70ch; font-size: 19px; line-height: 1.55; color: var(--ink); }
+section > h3 { margin-top: 12px; }
+ul.points { margin: 0; padding: 0; list-style: none; display: grid; gap: 22px; max-width: 80ch; }
+ul.points > li > strong:first-child { display: block; margin-bottom: 4px; }
+ul.points ul, ul.points ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+ul.points ul ul, ul.points ul ol { margin-top: 4px; gap: 2px; }
+ul.points li li::marker { color: var(--primary); }
+ul.points .code { margin-top: 4px; }
+table.list.tbl { min-width: 640px; font-size: 15.5px; }
+.tbl th, .tbl td { padding: 11px 14px; }
+.tbl td:first-child { width: 12rem; white-space: normal; font-weight: 600; color: var(--ink); }
+.tbl td ul { margin: 0; padding-left: 16px; display: grid; gap: 4px; }
+.tbl td.rf { width: 5rem; font: 500 13px var(--mono); white-space: nowrap; }
+.tbl td.rf a { display: block; text-decoration: none; }
+.tbl.when td:first-child { width: 10rem; white-space: nowrap; font: 500 14px var(--mono); color: var(--muted); }
+section.area { border-top: 1px solid var(--rule); padding-top: 28px; gap: 16px; }
+section.area h3 { margin-top: 0; }
+dl.levels + p, dl.levels + dl.levels { margin-top: 4px; }
+@media (max-width: 640px) {
+  table.list.tbl { min-width: 0; }
+  .tbl thead { display: none; }
+  .tbl, .tbl tbody, .tbl tr, .tbl td, .tbl tr.grp th { display: block; width: auto; }
+  .tbl tr { padding: 10px 0; border-bottom: 1px solid var(--rule); }
+  .tbl tr:last-child { border-bottom: 0; }
+  .tbl td, .tbl.when td:first-child { width: auto; border: 0; padding: 3px 16px; }
+  .tbl td:empty { display: none; }
+  .tbl td.rf a { display: inline; margin-right: 10px; }
+  dl.intro dt { padding-bottom: 4px; }
+  dl.intro dd { padding-top: 4px; }
+}
+
+/* Sister-page layout: the main check table, per-area caveat cards and the section Sources line. */
+#caveats { display: grid; gap: 32px; }
+.eco { display: grid; gap: 12px; }
+.eco h4 { margin: 12px 0 0; font-size: 16px; }
+table.caveats { min-width: 0; }
+table.caveats td:first-child { white-space: normal; width: 14rem; }
+table.caveats td ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+nav.toc h2 { font-size: 18px; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--primary); margin-bottom: 10px; }
+td.rf { font: 500 13px var(--mono); white-space: nowrap; }
+td.rf a { display: block; text-decoration: none; }
+.eco > p a { font-weight: 600; font-size: 15px; }
+p.refs-line { font-size: 14px; max-width: 80ch; }
+p.refs-line a { font: 500 13px var(--mono); text-decoration: none; }
+@media (max-width: 640px) { table.caveats td:first-child { width: auto; } }
+
+/* Manual checks: one card per stack. */
+.stacks { display: grid; gap: 28px; margin-top: 8px; }
+.stacks .eco { border-top: 1px solid var(--rule); padding-top: 24px; }
+.stacks .eco > p { max-width: 75ch; }
+
+/* Further reading: grouped primary sources. */
+#sources h4 { margin: 18px 0 6px; font-size: 13px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+
+/* Checks page: one card per item, with a status chip under its name. */
+.chip.fixed { color: var(--good); border-color: rgba(74, 222, 128, .45); background: rgba(74, 222, 128, .08); }
+.eco > p.status { margin-top: -6px; }
+.eco > p.status .chip { margin-bottom: 0; }
+.stacks .eco:target { outline: 1px solid var(--primary); outline-offset: 12px; border-radius: 4px; }
+
+/* Alias anchors kept for old links take no grid cell. */
+a[id]:empty { position: absolute; }
+section > h2 { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<header class="band">
+  <div class="wrap">
+    <a class="back" href="proof.html">← Back to verifying a finding</a>
+    <p class="tags"><span>eMudhra G3</span><span>CA key compromise</span><span>October 2026</span></p>
+    <p class="ids"><a href="index.html">Guide</a> &nbsp;·&nbsp; <a href="incident.html">Incident</a> &nbsp;·&nbsp; <a href="checks.html">Affected software</a> &nbsp;·&nbsp; <a href="fixes.html">Fixes</a> &nbsp;·&nbsp; <a href="detections.html">Checker rules</a> &nbsp;·&nbsp; <a href="proof.html">Proof</a> &nbsp;·&nbsp; <a href="references.html">References</a></p>
+    <h1><span class='hl'>Flow B</span><br>Why a certificate is untrusted</h1>
+    <p>One of four flows for <a href="proof.html">verifying a finding</a> by hand, from the original sources. Recompute the weak key, and confirm Mozilla, Chrome and Apple removed or blocked the root above it.</p>
+  </div>
+</header>
+<main class="wrap">
+<nav class="toc read" aria-label="Contents"><h2>Contents</h2><ol>
+  <li><a href="#about">About this flow</a><span>What it checks and why</span></li>
+  <li><a href="#step-1-make-an-empty-work-directory">Step 1. Make an empty work directory</a></li>
+  <li><a href="#step-2-download-the-projects-list">Step 2. Download the project's list</a></li>
+  <li><a href="#step-3-download-the-two-certificates-from-crtsh">Step 3. Download the two certificates from crt.sh</a></li>
+  <li><a href="#step-4-read-both-certificates">Step 4. Read both certificates</a></li>
+  <li><a href="#step-5-compare-both-certificates-with-the-list">Step 5. Compare both certificates with the list</a></li>
+  <li><a href="#step-6-compare-the-public-keys">Step 6. Compare the public keys</a></li>
+  <li><a href="#step-7-find-both-certificates-in-mozillas-notice">Step 7. Find both certificates in Mozilla's notice</a></li>
+  <li><a href="#step-8-read-mozillas-finding-on-the-keys">Step 8. Read Mozilla's finding on the keys</a></li>
+  <li><a href="#step-9-recompute-the-weak-key">Step 9. Recompute the weak key</a></li>
+  <li><a href="#step-10-find-the-roots-removal-from-mozillas-list">Step 10. Find the root's removal from Mozilla's list</a></li>
+  <li><a href="#step-11-find-the-roots-removal-from-the-chrome-root-store">Step 11. Find the root's removal from the Chrome Root Store</a></li>
+  <li><a href="#step-12-find-apples-block">Step 12. Find Apple's block</a></li>
+  <li><a href="#result">Result</a></li>
+</ol></nav>
+<section id="about">
+<h2>About this flow</h2>
+<p class="key"><strong>Flow B checks why the rules list a certificate. It matches lines 2 and 3 of <code>rules/iocs.csv</code> to the published certificates and to the Mozilla bug that reports their weak keys. It then confirms that Mozilla and Chrome removed the root above them and Apple blocked it.</strong></p>
+<p class="read">The check reaches its verdict from rules in this repository. These steps rebuild the evidence for one finding from primary artifacts, so you can confirm it without trusting the checker. <a href="proof.html#setup">Setup</a> lists the tools this flow needs.</p>
+<p>The removed root, <code>emSign ECC Root CA - G3</code>:</p>
+<ul>
+<li><strong>Mozilla:</strong> removed it in NSS 3.131.1, a release of Mozilla's security library.</li>
+<li><strong>Chrome:</strong> removed it in Chrome Root Store version 43.</li>
+<li><strong>Apple:</strong> has blocked it since 23 October 2026.</li>
+</ul>
+<p>The weak intermediate, <code>EM DV TLS CA - G3B</code>:</p>
+<ul>
+<li>An intermediate CA is a certificate authority (CA) whose certificate is signed by a root.</li>
+<li><code>EM DV TLS CA - G3B</code> is one of the eight intermediates that Mozilla Bug 2083449 reports have P-384 private keys below 256.<ul>
+<li>P-384 is a standard elliptic curve.</li>
+</ul></li>
+<li>The flow matches its serial number and SHA-256, and those of its Sectigo cross-sign, a second certificate for the same CA that reuses its key.</li>
+</ul>
+<h3 id="the-lines-being-checked">The lines being checked</h3>
+<p>Lines 2 and 3 of <code>rules/iocs.csv</code> at release <code>v2.0.0</code>:</p>
+<div class="code"><button type="button">Copy</button><pre>EM DV TLS CA - G3B,compromised TLS intermediate,emSign Root TLS CA - G3,A4AEE678F23362B4C0E460B772F214,42C4ACCD12C4F59597925E1A08A7A90102608543809308D50EC427E118BA1493,A99B289464F3B44343270A7A1E910F02370483FE,E21E2FE71C19390E554B62C120245735248A2514
+EM DV TLS CA - G3B,compromised TLS intermediate,AAA Certificate Services,A024FDF4BA665C785CE4A020483858B7,45A883F349AEDFD5F3A649B5498FFB121712BA8B448F3F2A91DBC5A766FCDDBE,1396BE1372BC93DFA2A433CA964DBA91548A6E57,E21E2FE71C19390E554B62C120245735248A2514</pre></div>
+<ul>
+<li>Both lines are for one CA, <code>EM DV TLS CA - G3B</code>. The columns after the name and role are the issuer, serial number, SHA-256, SHA-1 and subject key identifier.</li>
+<li>Line 2 is the certificate eMudhra's root <code>emSign Root TLS CA - G3</code> issued. That root chains to <code>emSign ECC Root CA - G3</code>, the root Flow A finds.</li>
+<li>Line 3 is a cross-sign: a second certificate for the same CA, issued by Sectigo's root <code>AAA Certificate Services</code>. Software that trusts either root accepts certificates the CA signs.</li>
+</ul>
+<h3 id="what-the-steps-do">What the steps do</h3>
+<ul>
+<li><strong>Steps 1 to 3:</strong> download the project's list and the two certificates from crt.sh.</li>
+<li><strong>Steps 4 to 6:</strong> read both certificates, compare them with lines 2 and 3, and compare their public keys.</li>
+<li><strong>Steps 7 and 8:</strong> find both certificates in Mozilla's notice to trust store operators, the vendors that keep lists of trusted roots, and read Mozilla's finding on the keys.</li>
+<li><strong>Step 9:</strong> recompute the weak-key finding with <code>openssl</code>, as an optional check.</li>
+<li><strong>Steps 10 to 12:</strong> confirm that Mozilla and Chrome removed <code>emSign ECC Root CA - G3</code> and Apple blocked it.</li>
+</ul>
+<p>The steps were run on 4 November 2026 with OpenSSL 3.6 and again with LibreSSL 3.3, the version macOS ships. Both gave the same values in different formats. LibreSSL's output differs in three ways:</p>
+<ul>
+<li>It prints names as <code>/C=NL/O=eMudhra BV/...</code> where OpenSSL prints <code>C=NL, O=eMudhra BV, ...</code>.</li>
+<li>It puts a space after <code>subject=</code>.</li>
+<li>It writes <code>SHA256 Fingerprint=</code> in capitals.</li>
+</ul>
+</section>
+<section id="step-1-make-an-empty-work-directory">
+<h2>Step 1. Make an empty work directory</h2>
+<p><code>mktemp -d</code> makes a new empty directory with a random name. Every later step writes its files there.</p>
+<div class="code"><button type="button">Copy</button><pre>cd "$(mktemp -d)"
+ls -A | wc -l</pre></div>
+<div class="code"><button type="button">Copy</button><pre>       0</pre></div>
+</section>
+<section id="step-2-download-the-projects-list">
+<h2>Step 2. Download the project's list</h2>
+<p>The list is the copy published with release <code>v2.0.0</code>, as in Flow A.</p>
+<div class="code"><button type="button">Copy</button><pre>curl -fsS -o iocs.csv https://raw.githubusercontent.com/fieldse/emudhra-ca-compromise-check/v2.0.0/rules/iocs.csv
+sed -n '1,3p' iocs.csv</pre></div>
+<div class="code"><button type="button">Copy</button><pre>name,role,issuer,serial_hex,sha256,sha1,subject_key_identifier
+EM DV TLS CA - G3B,compromised TLS intermediate,emSign Root TLS CA - G3,A4AEE678F23362B4C0E460B772F214,42C4ACCD12C4F59597925E1A08A7A90102608543809308D50EC427E118BA1493,A99B289464F3B44343270A7A1E910F02370483FE,E21E2FE71C19390E554B62C120245735248A2514
+EM DV TLS CA - G3B,compromised TLS intermediate,AAA Certificate Services,A024FDF4BA665C785CE4A020483858B7,45A883F349AEDFD5F3A649B5498FFB121712BA8B448F3F2A91DBC5A766FCDDBE,1396BE1372BC93DFA2A433CA964DBA91548A6E57,E21E2FE71C19390E554B62C120245735248A2514</pre></div>
+</section>
+<section id="step-3-download-the-two-certificates-from-crtsh">
+<h2>Step 3. Download the two certificates from crt.sh</h2>
+<p>crt.sh is the certificate transparency search used in Flow A step 7. Each certificate has a page with a crt.sh ID:</p>
+<div class="table-scroll"><table><thead><tr><th>Line</th><th>crt.sh page</th></tr></thead><tbody>
+<tr><td>2</td><td><code>https://crt.sh/?id=18286207191</code></td></tr>
+<tr><td>3</td><td><code>https://crt.sh/?id=18519019583</code></td></tr>
+</tbody></table></div>
+<p>A search on the SHA-256 from each line, <code>https://crt.sh/?sha256=&lt;hash&gt;</code>, leads to the same two pages. Adding <code>?d=</code> with the ID downloads the certificate in PEM form.</p>
+<div class="code"><button type="button">Copy</button><pre>curl -fsS --retry 5 -o g3b-emudhra.pem 'https://crt.sh/?d=18286207191'
+curl -fsS --retry 5 -o g3b-sectigo.pem 'https://crt.sh/?d=18519019583'
+grep -c 'BEGIN CERTIFICATE' g3b-emudhra.pem g3b-sectigo.pem</pre></div>
+<div class="code"><button type="button">Copy</button><pre>g3b-emudhra.pem:1
+g3b-sectigo.pem:1</pre></div>
+<ul>
+<li>crt.sh is often busy and answers with a <code>502</code> or <code>404</code> error. <code>-f</code> makes <code>curl</code> stop with an error message and save nothing.</li>
+<li><code>--retry 5</code> tries again after a server error. If a command still fails, run it again.</li>
+<li>A count of 1 for each file shows it holds one certificate and no error page.</li>
+</ul>
+</section>
+<section id="step-4-read-both-certificates">
+<h2>Step 4. Read both certificates</h2>
+<div class="code"><button type="button">Copy</button><pre>openssl x509 -in g3b-emudhra.pem -noout -subject -issuer -serial -dates -fingerprint -sha256
+openssl x509 -in g3b-sectigo.pem -noout -subject -issuer -serial -dates -fingerprint -sha256</pre></div>
+<div class="code"><button type="button">Copy</button><pre>subject=C=NL, O=eMudhra BV, CN=EM DV TLS CA - G3B
+issuer=C=IN, O=eMudhra Technologies Limited, CN=emSign Root TLS CA - G3
+serial=A4AEE678F23362B4C0E460B772F214
+notBefore=Apr 30 15:54:08 2025 GMT
+notAfter=Apr 28 18:30:00 2040 GMT
+sha256 Fingerprint=42:C4:AC:CD:12:C4:F5:95:97:92:5E:1A:08:A7:A9:01:02:60:85:43:80:93:08:D5:0E:C4:27:E1:18:BA:14:93
+subject=C=NL, O=eMudhra BV, CN=EM DV TLS CA - G3B
+issuer=C=GB, ST=Greater Manchester, L=Salford, O=Comodo CA Limited, CN=AAA Certificate Services
+serial=A024FDF4BA665C785CE4A020483858B7
+notBefore=May 14 00:00:00 2025 GMT
+notAfter=Dec 31 23:59:59 2028 GMT
+sha256 Fingerprint=45:A8:83:F3:49:AE:DF:D5:F3:A6:49:B5:49:8F:FB:12:17:12:BA:8B:44:8F:3F:2A:91:DB:C5:A7:66:FC:DD:BE</pre></div>
+<ul>
+<li>Both certificates have the same subject, <code>EM DV TLS CA - G3B</code> of eMudhra BV.</li>
+<li>The first is issued by eMudhra's <code>emSign Root TLS CA - G3</code>, on 30 April 2025.</li>
+<li>The second is issued by <code>AAA Certificate Services</code>, on 14 May 2025. Sectigo runs this root, which still carries the name Comodo CA Limited.</li>
+</ul>
+</section>
+<section id="step-5-compare-both-certificates-with-the-list">
+<h2>Step 5. Compare both certificates with the list</h2>
+<p>The function below reads a certificate's serial number and SHA-256 fingerprint, puts the fingerprint in the list's form as Flow A step 5 does, and compares both with columns 4 and 5 of one line. It prints <code>match</code> only when all digits of both are equal.</p>
+<div class="code"><button type="button">Copy</button><pre>check() {
+  serial=$(openssl x509 -in "$2" -noout -serial | cut -d= -f2)
+  sha=$(openssl x509 -in "$2" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr 'a-f' 'A-F')
+  [ "$serial,$sha" = "$(sed -n "$1p" iocs.csv | cut -d, -f4,5)" ] &amp;&amp; echo "line $1: match" || echo "line $1: differ"
+}
+check 2 g3b-emudhra.pem
+check 3 g3b-sectigo.pem</pre></div>
+<div class="code"><button type="button">Copy</button><pre>line 2: match
+line 3: match</pre></div>
+</section>
+<section id="step-6-compare-the-public-keys">
+<h2>Step 6. Compare the public keys</h2>
+<p>A certificate binds a name to a public key. The field that holds the key and its algorithm is the subject public key info, or SPKI.</p>
+<p>The SHA-256 of the SPKI identifies the key, as the fingerprint identifies the certificate. Mozilla's notice in step 7 lists keys by this hash.</p>
+<div class="code"><button type="button">Copy</button><pre>spki() { openssl x509 -in "$1" -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256 | sed 's/.*= //'; }
+spki g3b-emudhra.pem
+spki g3b-sectigo.pem
+openssl x509 -in g3b-emudhra.pem -noout -text | grep -E 'Public-Key|NIST CURVE'</pre></div>
+<div class="code"><button type="button">Copy</button><pre>ebed6475c2c2d80fcb199f3fe8dd6e6b3ce60b77eb15d4e42c3dec0c6f5b5105
+ebed6475c2c2d80fcb199f3fe8dd6e6b3ce60b77eb15d4e42c3dec0c6f5b5105
+                Public-Key: (384 bit)
+                NIST CURVE: P-384</pre></div>
+<ul>
+<li>The two hashes are equal, so the two certificates carry the same public key.</li>
+<li>One private key belongs to that public key. Whoever holds it can sign certificates that chain through either certificate, to either root.</li>
+<li>The key is on the P-384 curve.</li>
+</ul>
+</section>
+<section id="step-7-find-both-certificates-in-mozillas-notice">
+<h2>Step 7. Find both certificates in Mozilla's notice</h2>
+<p>Mozilla Bug 2083449 is Mozilla's incident report for the eMudhra key compromise. In <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=2083449#c15">comment 15</a> Mozilla attached, as plain text, the notice it sent to trust store operators. The attachment is <code>https://bugzilla.mozilla.org/attachment.cgi?id=9664786</code>.</p>
+<div class="code"><button type="button">Copy</button><pre>curl -fsSL -o disclosure.txt 'https://bugzilla.mozilla.org/attachment.cgi?id=9664786'
+tr -d '\r' &lt; disclosure.txt | grep -v '^$' &gt; notice.txt
+grep -B3 "serial $(sed -n 2p iocs.csv | cut -d, -f4 | tr 'A-F' 'a-f')" notice.txt
+grep 'SPKIs identical' notice.txt
+grep -B2 "serial $(sed -n 3p iocs.csv | cut -d, -f4 | tr 'A-F' 'a-f')" notice.txt
+grep -A3 'three different chains' notice.txt | sed 1d</pre></div>
+<div class="code"><button type="button">Copy</button><pre>EM DV TLS CA - G3B (eMudhra BV), CCADB A012302
+SHA-256 42C4ACCD12C4F59597925E1A08A7A90102608543809308D50EC427E118BA1493
+SHA256 SPKI ebed6475c2c2d80fcb199f3fe8dd6e6b3ce60b77eb15d4e42c3dec0c6f5b5105
+serial a4aee678f23362b4c0e460b772f214, issuer emSign Root TLS CA - G3
+These keys have also been cross-signed by Sectigo (SPKIs identical to the originals): 
+EM DV TLS CA - G3B, CCADB A012347
+SHA-256 45A883F349AEDFD5F3A649B5498FFB121712BA8B448F3F2A91DBC5A766FCDDBE
+serial a024fdf4ba665c785ce4a020483858b7
+    AAA Certificate Services (SPKI SHA-256: bd153ed7b0434f6886b17bce8bbe84ed340c7132d702a8f4fa318f756ecbd6f3)
+    emSign Root TLS CA - G3 (SPKI SHA-256: c619e4780ed8e0abeda24ad732567de4383a7ea941338f6d1a7d1b49ac792fe9)
+    emSign ECC Root CA - G3 (SPKI SHA-256: 8d417db2dd8bf5e3084d1e3f196d583849d81bdd4c00c70b9d39369e96b8c782)</pre></div>
+<p>The commands take the serial numbers from lines 2 and 3 of the list, in lower case, and print the notice's entries for them.</p>
+<ul>
+<li>The file has Windows line endings and blank lines between entries. <code>tr -d '\r'</code> and <code>grep -v '^$'</code> remove them.</li>
+<li>The first entry has line 2's serial number, line 2's SHA-256 and the SPKI hash from step 6.</li>
+<li>The second entry has line 3's serial number and SHA-256. It sits under the notice's heading for the Sectigo cross-signs, which says their SPKIs are identical to the originals.</li>
+<li>The last lines list the TLS chains that may be in use. <code>emSign ECC Root CA - G3</code> is one of the roots they name. The two code-signing intermediates chain to <code>emSign Root CS CA - G3</code>, which that list leaves out.</li>
+</ul>
+</section>
+<section id="step-8-read-mozillas-finding-on-the-keys">
+<h2>Step 8. Read Mozilla's finding on the keys</h2>
+<p>Mozilla describes the flaw in <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=2083449#c5">comment 5</a> of the bug. Bugzilla's REST API returns a single comment as JSON, and <code>18423372</code> is that comment's internal ID.</p>
+<div class="code"><button type="button">Copy</button><pre>curl -fsS -o c5.json 'https://bugzilla.mozilla.org/rest/bug/comment/18423372'
+grep -o -e '"bug_id":[0-9]*' -e '"count":[0-9]*' c5.json
+grep -o -e 'The impacted keys are all the P384 keys[^.]*\.' -e 'The 8 impacted keys all used integers less than 256\.' c5.json | head -2</pre></div>
+<div class="code"><button type="button">Copy</button><pre>"bug_id":2083449
+"count":5
+The impacted keys are all the P384 keys for the B and C series.
+The 8 impacted keys all used integers less than 256.</pre></div>
+<ul>
+<li><code>bug_id</code> and <code>count</code> show this is comment 5 of Bug 2083449.</li>
+<li>The JSON holds the comment's text twice, so <code>head -2</code> keeps one copy of each sentence.</li>
+<li>A P-384 private key is a random whole number between 1 and a number about 384 bits long. A key below 256 fits in one byte, so anyone can find it by trying all 255 values.</li>
+</ul>
+</section>
+<section id="step-9-recompute-the-weak-key">
+<h2>Step 9. Recompute the weak key</h2>
+<p>This optional step tries every private key from 1 to 255 and checks whether one of them belongs to the public key from step 6.</p>
+<div class="code"><button type="button">Copy</button><pre>curl -fsS --retry 5 -o root-g3.pem 'https://crt.sh/?d=713604941'
+grep -c 'BEGIN CERTIFICATE' root-g3.pem
+openssl x509 -in root-g3.pem -noout -subject -fingerprint -sha256
+openssl x509 -in root-g3.pem -noout -text | grep -E 'Public-Key|NIST CURVE'
+search() {
+  want=$(spki "$1")
+  d=1
+  while [ "$d" -le 255 ]; do
+    printf 'asn1=SEQUENCE:k\n[k]\nv=INTEGER:1\nd=FORMAT:HEX,OCTETSTRING:%094d%02x\nc=EXPLICIT:0,OID:secp384r1\n' 0 "$d" &gt; k.cnf
+    openssl asn1parse -genconf k.cnf -noout -out k.der
+    got=$(openssl ec -inform DER -in k.der -pubout -outform DER 2&gt;/dev/null | openssl dgst -sha256 | sed 's/.*= //')
+    [ "$got" = "$want" ] &amp;&amp; echo "$1: private key is below 256"
+    d=$((d+1))
+  done
+  rm -f k.cnf k.der
+  echo "$1: searched 1 to 255"
+}
+search g3b-emudhra.pem
+search root-g3.pem</pre></div>
+<div class="code"><button type="button">Copy</button><pre>1
+subject=C=IN, OU=emSign PKI, O=eMudhra Technologies Limited, CN=emSign ECC Root CA - G3
+sha256 Fingerprint=86:A1:EC:BA:08:9C:4A:8D:3B:BE:27:34:C6:12:BA:34:1D:81:3E:04:3C:F9:E8:A8:62:CD:5C:57:A3:6B:BE:6B
+                Public-Key: (384 bit)
+                NIST CURVE: P-384
+g3b-emudhra.pem: private key is below 256
+g3b-emudhra.pem: searched 1 to 255
+root-g3.pem: searched 1 to 255</pre></div>
+<ul>
+<li>For each number <code>d</code>, <code>printf</code> writes a description of a P-384 private key whose value is <code>d</code>, padded with zeros to 48 bytes. <code>openssl asn1parse -genconf</code> turns the description into a key file.</li>
+<li><code>openssl ec -pubout</code> works out the public key that belongs to that private key. The loop hashes it as step 6 does and compares the result with the certificate's.</li>
+<li>The <code>spki</code> function comes from step 6.</li>
+<li><code>root-g3.pem</code> is <code>emSign ECC Root CA - G3</code>, downloaded by the crt.sh ID from Flow A step 7. Its fingerprint is the one in Flow A.</li>
+<li>The root also has a P-384 key and is the control. The search finds no key below 256 for it.</li>
+<li>The loop prints the name of the file that matched and leaves out the value of <code>d</code>.</li>
+<li>It deletes its key files when it ends, and takes a few seconds.</li>
+</ul>
+</section>
+<section id="step-10-find-the-roots-removal-from-mozillas-list">
+<h2>Step 10. Find the root's removal from Mozilla's list</h2>
+<p>NSS is Mozilla's security library, and its source file <code>certdata.txt</code> is Mozilla's root list that Flow A step 8 reads. The commands download the file at two release tags, NSS 3.131 and NSS 3.131.1.</p>
+<div class="code"><button type="button">Copy</button><pre>curl -fsS -o certdata-3.131.txt https://raw.githubusercontent.com/nss-dev/nss/NSS_3_131_RTM/lib/ckfw/builtins/certdata.txt
+curl -fsS -o certdata-3.131.1.txt https://raw.githubusercontent.com/nss-dev/nss/NSS_3_131_1_RTM/lib/ckfw/builtins/certdata.txt
+grep -c '86:A1:EC:BA:08:9C:4A:8D:3B:BE:27:34:C6:12:BA:34:1D:81:3E:04:3C:F9:E8:A8:62:CD:5C:57:A3:6B:BE:6B' certdata-3.131.txt certdata-3.131.1.txt
+grep '^# Certificate "emSign' certdata-3.131.txt certdata-3.131.1.txt</pre></div>
+<div class="code"><button type="button">Copy</button><pre>certdata-3.131.txt:2
+certdata-3.131.1.txt:0
+certdata-3.131.txt:# Certificate "emSign Root CA - G1"
+certdata-3.131.txt:# Certificate "emSign ECC Root CA - G3"
+certdata-3.131.txt:# Certificate "emSign Root CA - C1"
+certdata-3.131.txt:# Certificate "emSign ECC Root CA - C3"
+certdata-3.131.1.txt:# Certificate "emSign Root CA - G1"</pre></div>
+<ul>
+<li>The fingerprint is the root's SHA-256 from Flow A. NSS 3.131 has it twice, in the certificate record and the trust record. NSS 3.131.1 does not have it.</li>
+<li>NSS 3.131.1 also drops <code>emSign Root CA - C1</code> and <code>emSign ECC Root CA - C3</code>, and keeps <code>emSign Root CA - G1</code>.</li>
+</ul>
+<p>The decision is in <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=2083449#c18">comment 18</a> of the bug:</p>
+<div class="code"><button type="button">Copy</button><pre>curl -fsS -o c18.json 'https://bugzilla.mozilla.org/rest/bug/comment/18429106'
+grep -o -e '"bug_id":[0-9]*' -e '"count":[0-9]*' c18.json
+grep -o 'we have decided[^.]*\.' c18.json | head -1</pre></div>
+<div class="code"><button type="button">Copy</button><pre>"bug_id":2083449
+"count":18
+we have decided that the circumstances warrant the emergency removal of trust in emSign ECC Root CA - G3.</pre></div>
+<p>The <a href="https://firefox-source-docs.mozilla.org/security/nss/releases/nss_3_131_1.html">NSS 3.131.1 release notes</a> give the release date as 20 October 2026 and list the change as "Bug 2084101 - Remove eMudhra emSign Root CA - G3 from NSS." The note leaves "ECC" out of the root's name. The <code>certdata.txt</code> comparison above shows which root went.</p>
+</section>
+<section id="step-11-find-the-roots-removal-from-the-chrome-root-store">
+<h2>Step 11. Find the root's removal from the Chrome Root Store</h2>
+<p>Chrome's root list is the file <code>root_store.textproto</code> in the Chromium source. It names each root by the SHA-256 of the certificate, in lower case, on a <code>sha256_hex</code> line. Its <code>version_major</code> line is the Chrome Root Store version.</p>
+<p>Chromium commit <code>8793082f793c2533dccf28e83e33f0e700c52d28</code>, the automatic update for 20 October 2026, changed the file to version 43. Its parent commit, <code>47a3823334a4d0632a4eabb003a0677553b447e6</code>, holds version 42. The Chromium source server returns a file in base64 when the URL ends in <code>?format=TEXT</code>, and <code>openssl base64 -d -A</code> decodes it.</p>
+<div class="code"><button type="button">Copy</button><pre>crs='net/data/ssl/chrome_root_store/root_store.textproto?format=TEXT'
+curl -fsS --retry 5 "https://chromium.googlesource.com/chromium/src/+/47a3823334a4d0632a4eabb003a0677553b447e6/$crs" | openssl base64 -d -A &gt; crs-v42.txt
+curl -fsS --retry 5 "https://chromium.googlesource.com/chromium/src/+/8793082f793c2533dccf28e83e33f0e700c52d28/$crs" | openssl base64 -d -A &gt; crs-v43.txt
+grep -e 'version_major' -e '86a1ecba' crs-v42.txt crs-v43.txt</pre></div>
+<div class="code"><button type="button">Copy</button><pre>crs-v42.txt:version_major: 42
+crs-v42.txt:  sha256_hex: "86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b"
+crs-v43.txt:version_major: 43</pre></div>
+<p>Version 42 lists the root's SHA-256. Version 43 does not. The same files open in a browser without <code>?format=TEXT</code>:</p>
+<div class="code"><button type="button">Copy</button><pre>https://chromium.googlesource.com/chromium/src/+/47a3823334a4d0632a4eabb003a0677553b447e6/net/data/ssl/chrome_root_store/root_store.textproto
+https://chromium.googlesource.com/chromium/src/+/8793082f793c2533dccf28e83e33f0e700c52d28/net/data/ssl/chrome_root_store/root_store.textproto</pre></div>
+</section>
+<section id="step-12-find-apples-block">
+<h2>Step 12. Find Apple's block</h2>
+<p>Apple describes its block in the support article "About the compromised eMudhra intermediate CAs", <code>https://support.apple.com/en-us/149555</code>. Apple updates the article in place, so the commands also print its published date.</p>
+<div class="code"><button type="button">Copy</button><pre>curl -fsSL -o apple.html 'https://support.apple.com/en-us/149555'
+grep -o "datePublished'&gt;[^&lt;]*" apple.html
+grep -o '[^&gt;.]*began blocking[^.&lt;]*\.' apple.html
+grep -o '[^&gt;.]*which chains to[^.&lt;]*' apple.html
+grep -o '[^&gt;.]*check Apple[^.&lt;]*\.' apple.html
+awk '{gsub(/&lt;\/tr&gt;/, "\n"); print}' apple.html | sed 's/&lt;[^&gt;]*&gt;/ /g' | tr -s ' ' | grep -e "$(sed -n 2p iocs.csv | cut -d, -f5)" -e "$(sed -n 3p iocs.csv | cut -d, -f5)"</pre></div>
+<div class="code"><button type="button">Copy</button><pre>datePublished'&gt;October 29, 2026
+On 19 October 2026, Apple began blocking these 12 certificates on Apple devices.
+ On 23 October 2026, Apple also began blocking the emSign ECC Root CA - G3.
+A certificate issued by emSign Root TLS CA - G3, which chains to emSign ECC Root CA - G3
+A certificate cross-signed by Sectigo, which chains to AAA Certificate Services
+ For certificates that chain to a root CA certificate in this file, these tools don't check Apple's block or whether the certificate has been revoked.
+ EM DV TLS CA - G3B emSign Root TLS CA - G3 42C4ACCD12C4F59597925E1A08A7A90102608543809308D50EC427E118BA1493 
+ EM DV TLS CA - G3B AAA Certificate Services 45A883F349AEDFD5F3A649B5498FFB121712BA8B448F3F2A91DBC5A766FCDDBE </pre></div>
+<ul>
+<li>Apple blocked the 12 certificates of the six TLS intermediates from 19 October 2026, and the root from 23 October 2026.</li>
+<li>The two "chains to" lines describe the two certificates each intermediate has. The first is the chain from line 2 up to <code>emSign ECC Root CA - G3</code>.</li>
+<li>"This file" in the next line is <code>/etc/ssl/cert.pem</code>, the bundle Flow A reads. Command-line tools that use it do not check Apple's block.</li>
+<li>The last command splits the article's table of blocked certificates into rows and keeps the rows with the SHA-256 values from lines 2 and 3. Both certificates are in the table.</li>
+</ul>
+</section>
+<section id="result">
+<h2>Result</h2>
+<ul>
+<li><strong>Certificates:</strong> lines 2 and 3 of <code>rules/iocs.csv</code> are the two published certificates for <code>EM DV TLS CA - G3B</code>, crt.sh IDs 18286207191 and 18519019583.<ul>
+<li>Their serial numbers and SHA-256 values match.</li>
+</ul></li>
+<li><strong>Key:</strong> both certificates carry the public key with SPKI hash <code>ebed6475c2c2d80fcb199f3fe8dd6e6b3ce60b77eb15d4e42c3dec0c6f5b5105</code>.</li>
+<li><strong>Weak key:</strong> Mozilla's notice in Bug 2083449 lists both certificates and that key.<ul>
+<li>Comment 5 reports that the eight intermediates have P-384 private keys below 256.</li>
+<li>Step 9 tries every private key from 1 to 255 and finds one whose public key matches the certificate's.</li>
+<li>The Sectigo cross-sign of <code>EM DV TLS CA - G3B</code> carries the same public key, so the result covers it too.</li>
+<li>The same search on <code>emSign ECC Root CA - G3</code>, the control, finds no match.</li>
+<li>Step 9 prints only which file matched. This page does not publish the private key.</li>
+</ul></li>
+<li><strong>Other intermediates:</strong> the other seven were not recomputed. Their weak keys rest on the Mozilla bug report and the published certificates.</li>
+<li><strong>The check:</strong> it matches certificates by content and public key. It does not recompute any private key.</li>
+<li><strong>Root:</strong> <code>emSign ECC Root CA - G3</code> is missing from NSS 3.131.1 and from Chrome Root Store version 43.<ul>
+<li>Apple has blocked it since 23 October 2026.</li>
+</ul></li>
+</ul>
+<p>Each claim in Flow B rests on one of these original sources:</p>
+<div class="table-scroll"><table><thead><tr><th>Claim</th><th>Step</th><th>Source and what to look for</th></tr></thead><tbody>
+<tr><td>The project's list names both <code>EM DV TLS CA - G3B</code> certificates</td><td>Step 2</td><td><a href="https://raw.githubusercontent.com/fieldse/emudhra-ca-compromise-check/v2.0.0/rules/iocs.csv"><code>rules/iocs.csv</code> at release <code>v2.0.0</code></a>. Lines 2 and 3, <code>serial_hex</code> column: <code>A4AEE678F23362B4C0E460B772F214</code> and <code>A024FDF4BA665C785CE4A020483858B7</code></td></tr>
+<tr><td>Line 2 of the list is eMudhra's certificate for <code>EM DV TLS CA - G3B</code></td><td>Steps 3 to 5</td><td><a href="https://crt.sh/?sha256=42C4ACCD12C4F59597925E1A08A7A90102608543809308D50EC427E118BA1493">crt.sh search for line 2's SHA-256</a>. crt.sh ID <code>18286207191</code>, issuer <code>emSign Root TLS CA - G3</code></td></tr>
+<tr><td>Line 3 of the list is Sectigo's cross-sign of the same CA</td><td>Steps 3 to 5</td><td><a href="https://crt.sh/?sha256=45A883F349AEDFD5F3A649B5498FFB121712BA8B448F3F2A91DBC5A766FCDDBE">crt.sh search for line 3's SHA-256</a>. crt.sh ID <code>18519019583</code>, issuer <code>AAA Certificate Services</code>. <a href="https://web.archive.org/web/20251218045629/https://crt.sh/?sha256=45A883F349AEDFD5F3A649B5498FFB121712BA8B448F3F2A91DBC5A766FCDDBE">Archived copy</a></td></tr>
+<tr><td>Mozilla's notice lists both certificates and the key they share</td><td>Steps 6 and 7</td><td><a href="https://bugzilla.mozilla.org/attachment.cgi?id=9664786">Mozilla's notice, attached in comment 15 of Bug 2083449</a>. <code>SHA256 SPKI ebed6475c2c2d80fcb199f3fe8dd6e6b3ce60b77eb15d4e42c3dec0c6f5b5105</code>, <code>serial a4aee678f23362b4c0e460b772f214</code>, <code>serial a024fdf4ba665c785ce4a020483858b7</code> and "SPKIs identical to the originals"</td></tr>
+<tr><td>The eight keys are below 256</td><td>Step 8</td><td><a href="https://bugzilla.mozilla.org/show_bug.cgi?id=2083449#c5">Bug 2083449, comment 5</a>. "The 8 impacted keys all used integers less than 256." <a href="https://web.archive.org/web/20261103143306/https://bugzilla.mozilla.org/show_bug.cgi?id=2083449#c5">Archived copy</a></td></tr>
+<tr><td>Mozilla decided on the emergency removal of the G3 root</td><td>Step 10</td><td><a href="https://bugzilla.mozilla.org/show_bug.cgi?id=2083449#c18">Bug 2083449, comment 18</a>. "we have decided that the circumstances warrant the emergency removal of trust in emSign ECC Root CA - G3." <a href="https://web.archive.org/web/20261103143306/https://bugzilla.mozilla.org/show_bug.cgi?id=2083449#c18">Archived copy</a></td></tr>
+<tr><td>NSS 3.131 holds the G3 root</td><td>Step 10</td><td><a href="https://raw.githubusercontent.com/nss-dev/nss/NSS_3_131_RTM/lib/ckfw/builtins/certdata.txt"><code>certdata.txt</code> at tag <code>NSS_3_131_RTM</code></a>. <code># Certificate "emSign ECC Root CA - G3"</code>, and the root's SHA-256 fingerprint twice</td></tr>
+<tr><td>NSS 3.131.1 drops the G3 root</td><td>Step 10</td><td><a href="https://raw.githubusercontent.com/nss-dev/nss/NSS_3_131_1_RTM/lib/ckfw/builtins/certdata.txt"><code>certdata.txt</code> at tag <code>NSS_3_131_1_RTM</code></a>. No <code>emSign ECC Root CA - G3</code>. <code># Certificate "emSign Root CA - G1"</code> is still there</td></tr>
+<tr><td>NSS 3.131.1 came out on 20 October 2026 with the removal</td><td>Step 10</td><td><a href="https://firefox-source-docs.mozilla.org/security/nss/releases/nss_3_131_1.html">NSS 3.131.1 release notes</a>. "Network Security Services (NSS) 3.131.1 was released on 20 October 2026." and "Bug 2084101 - Remove eMudhra emSign Root CA - G3 from NSS."</td></tr>
+<tr><td>Chrome Root Store version 42 lists the G3 root</td><td>Step 11</td><td><a href="https://chromium.googlesource.com/chromium/src/+/47a3823334a4d0632a4eabb003a0677553b447e6/net/data/ssl/chrome_root_store/root_store.textproto"><code>root_store.textproto</code> at commit <code>47a3823</code></a>. <code>version_major: 42</code> and <code>sha256_hex: "86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b"</code></td></tr>
+<tr><td>Chrome Root Store version 43 drops the G3 root</td><td>Step 11</td><td><a href="https://chromium.googlesource.com/chromium/src/+/8793082f793c2533dccf28e83e33f0e700c52d28/net/data/ssl/chrome_root_store/root_store.textproto"><code>root_store.textproto</code> at commit <code>8793082</code></a>. <code>version_major: 43</code>, and no <code>86a1ecba</code></td></tr>
+<tr><td>Apple blocks the <code>EM DV TLS CA - G3B</code> certificates and the G3 root</td><td>Step 12</td><td><a href="https://support.apple.com/en-us/149555">Apple support article 149555</a>. "On 19 October 2026, Apple began blocking these 12 certificates on Apple devices.", "On 23 October 2026, Apple also began blocking the emSign ECC Root CA - G3." and table rows with the SHA-256 values from lines 2 and 3 of the list</td></tr>
+<tr><td>Tools that read <code>/etc/ssl/cert.pem</code> on macOS do not check Apple's block</td><td>Step 12</td><td><a href="https://support.apple.com/en-us/149555">Apple support article 149555</a>. "these tools don't check Apple's block or whether the certificate has been revoked"</td></tr>
+</tbody></table></div>
+</section>
+</main>
+<footer>
+  <div class="wrap"><p>eMudhra G3 intermediate CA key compromise, October 2026. An independent guide, not affiliated with eMudhra or Sectigo.</p><p>Last updated 2026-11-05. <a href="https://github.com/fieldse/emudhra-ca-compromise-check">Source on GitHub</a>.</p></div>
+</footer>
+
+<script>
+document.querySelectorAll(".cmd .copy").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var code = btn.parentElement.querySelector("code");
+    function flash() { btn.classList.add("done"); btn.title = "Copied"; setTimeout(function () { btn.classList.remove("done"); btn.title = "Copy"; }, 1500); }
+    function selectIt() {
+      var r = document.createRange(); r.selectNodeContents(code);
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    }
+    try { navigator.clipboard.writeText(code.textContent).then(flash, selectIt); } catch (e) { selectIt(); }
+  });
+});
+document.querySelectorAll(".code button").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var pre = btn.parentElement.querySelector("pre");
+    function done(label) { btn.textContent = label; setTimeout(function () { btn.textContent = "Copy"; }, 1500); }
+    function selectIt() {
+      var r = document.createRange(); r.selectNodeContents(pre);
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      done("Selected");
+    }
+    try {
+      navigator.clipboard.writeText(pre.innerText).then(function () { done("Copied"); }, selectIt);
+    } catch (e) { selectIt(); }
+  });
+});
+</script>
+</body>
+</html>

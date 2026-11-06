@@ -348,7 +348,7 @@ class Walk:
             if isinstance(data, mmap.mmap):
                 data.close()
         if kind is not BinaryKind.OTHER:
-            self.executables.append(Executable(path, file_id, kind))
+            self.executables.append(Executable(path, real, file_id, kind))
 
 
 class LocalFiles:

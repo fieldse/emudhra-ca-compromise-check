@@ -1,9 +1,10 @@
 """binaries.py: detections of native programs judged by their bytes, never run.
 
 GoBinaries reads the build information of every Go program the walk classified, judges its
-toolchain and the x509roots fallback module it embeds, and scans it for the compromised roots.
-RustBinaries judges the webpki crates whose source paths a Rust program carries and scans it the
-same way. An old rustls-webpki crate is FAIL only when the same program holds an affected root.
+toolchain and the x509roots fallback module it embeds, and scans it for the compromised roots. A
+toolchain FAIL is WARN when the program does not hold crypto/x509's Verify. RustBinaries judges the
+webpki crates whose source paths a Rust program carries and scans it the same way. An old
+rustls-webpki crate is FAIL only when the same program holds an affected root.
 BundledNodeBinaries judges the Node binaries apps ship by the release they name.
 ElectronApps judges macOS and Linux Electron apps by version, with what the framework binary holds
 as notes, and UpdaterCaches the apps left in ShipIt update caches. Each claims its binaries in the
@@ -69,6 +70,10 @@ GO_BINARY_RULE = dataclasses.replace(
 )
 GO_FALLBACK_MODULE = "golang.org/x/crypto/x509roots/fallback"
 TOOLCHAIN_DIR = "/Cellar/go/"
+X509_VERIFY = b"crypto/x509.(*Certificate).Verify\x00"
+NO_VERIFY_NOTE = (
+    "crypto/x509 Verify not found, the program may never verify certificates"
+)
 RUST_NOTE = "rebuild against the fixed crates"
 RUSTLS_NO_ROOT_NOTE = (
     "lacks the key blocklist, matters only when the binary uses the system trust store"
@@ -95,22 +100,36 @@ def fallback_finding(where: str, version: str) -> Optional[Finding]:
     return Finding(Level.FAIL, subject, detail)
 
 
+def toolchain_finding(finding: Finding, verifies: bool) -> Finding:
+    """Return a toolchain FAIL as WARN when the binary does not hold crypto/x509's Verify."""
+    if finding.level is not Level.FAIL or verifies:
+        return finding
+    detail = with_note(finding.detail, NO_VERIFY_NOTE)
+    return Finding(Level.WARN, finding.subject, detail)
+
+
 def go_binary_findings(
     subject: Subject,
     info: Optional[GoBuildInfo],
     matches: tuple[CertificateMatch, ...],
+    verifies: bool,
 ) -> list[Finding]:
-    """Judge a Go binary by its toolchain and fallback module, then list its certificate matches."""
+    """Judge a Go binary by its toolchain and fallback module, then list its certificate matches.
+
+    verifies says whether the binary holds the function name of crypto/x509's certificate Verify.
+    """
     findings: list[Finding] = []
     if info is None:
         detail = "Go build info unreadable, check it with go version -m"
         findings.append(Finding(Level.WARN, subject, detail))
     elif info.legacy:
         detail = "found a toolchain older than Go 1.18, no fix for that branch, rebuild"
-        findings.append(Finding(Level.FAIL, subject, detail))
+        verdict = Finding(Level.FAIL, subject, detail)
+        findings.append(toolchain_finding(verdict, verifies))
     else:
         version = info.go_version[2:]
-        findings.append(judge_branched(subject, version, GO_BINARY_RULE))
+        verdict = judge_branched(subject, version, GO_BINARY_RULE)
+        findings.append(toolchain_finding(verdict, verifies))
         for module in info.modules:
             if module.path == GO_FALLBACK_MODULE:
                 finding = fallback_finding(subject.where, module.version)
@@ -134,7 +153,7 @@ class GoBinaries:
     def run(self, ctx: Context) -> Iterator[Finding]:
         found = entries(ctx, BinaryKind.GO)
         for entry in found:
-            if TOOLCHAIN_DIR in str(entry.path) or not ctx.ledger.claim(entry.file_id):
+            if TOOLCHAIN_DIR in str(entry.real) or not ctx.ledger.claim(entry.file_id):
                 continue
             subject = Subject("go binary", str(entry.path))
             data = read_or_skip(
@@ -146,9 +165,10 @@ class GoBinaries:
             try:
                 info = go_build_info(data)
                 matches = MATCHER.scan(data)
+                verifies = data.find(X509_VERIFY) >= 0
             finally:
                 release(data)
-            yield from go_binary_findings(subject, info, matches)
+            yield from go_binary_findings(subject, info, matches, verifies)
         if not found:
             detail = (
                 "no Go binaries found in the binary directories or under the scan roots"

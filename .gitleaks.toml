@@ -3,13 +3,10 @@
 path = "@global"
 
 [[allowlists]]
-description = "SEC-7: the guide pages carry the owner-authorised security-firm name and call to action"
+description = "SEC-7: the owner authorised the security-firm name anywhere in this project"
 targetRules = ["policy-sec7-term-1"]
 paths = [
-  '''^index\.html$''',
-  '''^checks\.html$''',
-  '''^references\.html$''',
-  '''^README\.md$''',
+  '''.*''',
 ]
 
 [[allowlists]]
@@ -18,4 +15,13 @@ targetRules = ["policy-sec1-mac-address"]
 regexes = [
   '''(?i)^86:A1:EC:BA:08:9C$''',
   '''(?i)^D7:A7:A0:FB:5D:7E$''',
+]
+
+[[allowlists]]
+description = "SEC-1: PROOF.md prints certificate SHA-256 fingerprints and serials, which contain MAC-shaped byte runs"
+targetRules = ["policy-sec1-mac-address"]
+paths = [
+  '''^PROOF\.md$''',
+  '''^site/proof(-[a-d])?\.md$''',
+  '''^proof(-[a-d])?\.html$''',
 ]
