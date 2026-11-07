@@ -3,4 +3,4 @@
 Finds the compromised eMudhra G3 certificates in trust stores, packages, runtimes and apps.
 """
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"

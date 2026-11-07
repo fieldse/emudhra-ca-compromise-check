@@ -37,8 +37,8 @@
 Always start the check with `python3 -I -S vuln-check-emudhra-ca-compromise.pyz`. `-I -S` keeps the scanned machine's Python settings, `site` and `.pth` files out of the check.
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/fieldse/emudhra-ca-compromise-check/v2.0.0/scripts/vuln-check-emudhra-ca-compromise.pyz
-curl -fLO https://raw.githubusercontent.com/fieldse/emudhra-ca-compromise-check/v2.0.0/scripts/vuln-check-emudhra-ca-compromise.pyz.sha256
+curl -fLO https://raw.githubusercontent.com/fieldse/emudhra-ca-compromise-check/v2.1.0/scripts/vuln-check-emudhra-ca-compromise.pyz
+curl -fLO https://raw.githubusercontent.com/fieldse/emudhra-ca-compromise-check/v2.1.0/scripts/vuln-check-emudhra-ca-compromise.pyz.sha256
 shasum -a 256 -c vuln-check-emudhra-ca-compromise.pyz.sha256
 
 python3 -I -S vuln-check-emudhra-ca-compromise.pyz -r ~ -q                      # scan home, print problems only
@@ -236,7 +236,7 @@ unzip -p vuln-check-emudhra-ca-compromise.pyz emudhra_check/cli.py | less
 
 ```bash
 git clone https://github.com/fieldse/emudhra-ca-compromise-check.git
-cd emudhra-ca-compromise-check && git checkout v2.0.0 && mkdir -p rebuild
+cd emudhra-ca-compromise-check && git checkout v2.1.0 && mkdir -p rebuild
 docker run --rm --network=none -v "$PWD":/repo:ro -v "$PWD/rebuild":/out \
   docker.io/library/python@sha256:2d97f6910b16bd338d3060f261f53f144965f755599aab1acda1e13cf1731b1b \
   python3 -I /repo/tools/build_pyz.py --out /out/check.pyz
